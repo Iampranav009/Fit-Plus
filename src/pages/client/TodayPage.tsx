@@ -719,6 +719,14 @@ export const TodayPage: React.FC = () => {
             </div>
           )}
         </section>
+
+        {/* 9. Stage 4C Growth: Referral Program */}
+        <section>
+          <ReferralCard
+            displayName={activeUser.firstName}
+            userId={activeUser.id}
+          />
+        </section>
       </div>
 
       {/* Floating Quick-Log Action Button */}
@@ -732,13 +740,6 @@ export const TodayPage: React.FC = () => {
             setQuickWeightOpen(true);
           }}
         />
-        {/* Stage 4C Growth: Referral Program */}
-        <section className="pt-2">
-          <ReferralCard
-            displayName={activeUser.firstName}
-            userId={activeUser.id}
-          />
-        </section>
       </div>
 
       {/* Quick Weight Check-in Sheet */}

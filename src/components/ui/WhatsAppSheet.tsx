@@ -57,7 +57,7 @@ export const WhatsAppSheet: React.FC<WhatsAppSheetProps> = ({
           <p className="text-[14px] text-[#F5F5F7] leading-relaxed">{message}</p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-2.5">
+        <div className="flex gap-2.5">
           {whatsappUrl ? (
             <a
               href={whatsappUrl}

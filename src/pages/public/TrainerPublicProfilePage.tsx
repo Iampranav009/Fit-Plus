@@ -653,7 +653,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
               </div>
             ) : null}
 
-            <div className="flex flex-col sm:flex-row gap-2.5">
+            <div className="flex gap-2.5">
               <GlassButton
                 fullWidth
                 disabled={checkoutBusy}

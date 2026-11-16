@@ -48,12 +48,26 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+          globIgnores: ['**/exercises/**', '**/exercise-assets/**'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api\//],
           runtimeCaching: [
             {
               urlPattern: ({ url }) => url.pathname.startsWith('/api/'),
               handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: ({ url }) =>
+                url.pathname.includes('/exercises/') ||
+                url.hostname.includes('raw.githubusercontent.com'),
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'exercise-media-cache',
+                expiration: {
+                  maxEntries: 80,
+                  maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+                },
+              },
             },
           ],
         },

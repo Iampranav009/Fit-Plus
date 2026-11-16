@@ -115,7 +115,7 @@ export const GlassModal: React.FC<GlassModalProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="overflow-y-auto px-5 sm:px-6 py-4 pb-safe">{children}</div>
+            <div className="overflow-y-auto overflow-x-hidden px-5 sm:px-6 py-4 pb-safe">{children}</div>
           </motion.div>
         </motion.div>
       ) : null}

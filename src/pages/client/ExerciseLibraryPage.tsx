@@ -1,21 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import {
-  BookOpen,
-  Dumbbell,
-  Filter,
-  Info,
-  Plus,
-  Search,
-  Sparkles,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { BookOpen, Plus, Sparkles, Trash2, X, AlertCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
-import { AnatomyMuscleSvg } from '../../components/ui/FitnessIllustrations';
-import { filterExercises, MUSCLE_LABELS } from '../../data/exerciseLibrary';
+import { filterExercises } from '../../data/exerciseLibrary';
+import { ExerciseCard } from '../../components/exercise/ExerciseCard';
+import { ExerciseFilterToolbar } from '../../components/exercise/ExerciseFilterToolbar';
+import { ExerciseDetailModal } from '../../components/exercise/ExerciseDetailModal';
 import type {
   ExerciseDefinition,
   ExerciseEnvironment,
@@ -24,18 +16,33 @@ import type {
   MuscleGroup,
 } from '../../types/domain';
 
+const PAGE_SIZE = 24;
+
 export const ExerciseLibraryPage: React.FC = () => {
   const location = useLocation();
-  const { allExercises, activeTrainer, saveCustomExercise, deleteCustomExercise } = useApp();
+  const { allExercises, activeTrainer, saveCustomExercise, deleteCustomExercise, pushToast } = useApp();
 
   const isTrainerStudio = location.pathname.startsWith('/studio');
 
   // Search & Filter state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMuscle, setSelectedMuscle] = useState<MuscleGroup | 'all'>('all');
-  const [selectedEnvironment, setSelectedEnvironment] = useState<ExerciseEnvironment | 'all'>('all');
-  const [selectedEquipment, setSelectedEquipment] = useState<ExerciseEquipment | 'all'>('all');
+  const [filters, setFilters] = useState<{
+    search: string;
+    muscle: MuscleGroup | 'all';
+    environment: ExerciseEnvironment | 'all';
+    equipment: ExerciseEquipment | 'all' | 'bodyweight' | 'equipment';
+    difficulty: ExperienceLevel | 'all';
+    category: string | 'all';
+  }>({
+    search: '',
+    muscle: 'all',
+    environment: 'all',
+    equipment: 'all',
+    difficulty: 'all',
+    category: 'all',
+  });
+
   const [selectedExercise, setSelectedExercise] = useState<ExerciseDefinition | null>(null);
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
 
   // Custom Exercise Modal State (Trainer only)
   const [customModalOpen, setCustomModalOpen] = useState(false);
@@ -51,12 +58,36 @@ export const ExerciseLibraryPage: React.FC = () => {
 
   const filtered = useMemo(() => {
     return filterExercises(allExercises, {
-      search: searchQuery,
-      muscle: selectedMuscle,
-      environment: selectedEnvironment,
-      equipment: selectedEquipment,
+      search: filters.search,
+      muscle: filters.muscle,
+      environment: filters.environment,
+      equipment: filters.equipment,
+      difficulty: filters.difficulty,
+      category: filters.category,
     });
-  }, [allExercises, searchQuery, selectedMuscle, selectedEnvironment, selectedEquipment]);
+  }, [allExercises, filters]);
+
+  // Paginated slice for optimal DOM rendering & lazy loading
+  const paginatedExercises = useMemo(() => {
+    return filtered.slice(0, visibleCount);
+  }, [filtered, visibleCount]);
+
+  const handleFilterChange = (updated: Partial<typeof filters>) => {
+    setFilters((prev) => ({ ...prev, ...updated }));
+    setVisibleCount(PAGE_SIZE); // reset pagination on filter change
+  };
+
+  const handleResetFilters = () => {
+    setFilters({
+      search: '',
+      muscle: 'all',
+      environment: 'all',
+      equipment: 'all',
+      difficulty: 'all',
+      category: 'all',
+    });
+    setVisibleCount(PAGE_SIZE);
+  };
 
   const handleSaveCustom = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,41 +121,28 @@ export const ExerciseLibraryPage: React.FC = () => {
     setCustomSafetyNotes('');
   };
 
-  const muscleFilterOptions: Array<{ key: MuscleGroup | 'all'; label: string }> = [
-    { key: 'all', label: 'All Targets' },
-    { key: 'chest', label: 'Chest' },
-    { key: 'back', label: 'Back' },
-    { key: 'shoulders', label: 'Shoulders' },
-    { key: 'biceps', label: 'Biceps' },
-    { key: 'triceps', label: 'Triceps' },
-    { key: 'core', label: 'Core' },
-    { key: 'quads', label: 'Quads' },
-    { key: 'hamstrings', label: 'Hamstrings' },
-    { key: 'glutes', label: 'Glutes' },
-  ];
-
   return (
-    <AppShell pageTitle="Exercise Library">
-      <div className="max-w-5xl mx-auto flex flex-col gap-6">
+    <AppShell pageTitle="Exercise Encyclopedia">
+      <div className="max-w-6xl mx-auto flex flex-col gap-6 pb-12">
         {/* Header & Trainer Action */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold text-[#FF803E] uppercase tracking-wider">
               <BookOpen className="w-4 h-4" />
-              <span>India-Accessible Library · 30+ Exercises</span>
+              <span>Medical-Grade Visual Encyclopedia · {allExercises.length}+ Movements</span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white mt-1">
-              {isTrainerStudio ? 'Curate & Build Exercise Catalog' : 'Exercise & Form Directory'}
+            <h1 className="text-3xl font-extrabold tracking-tight text-white mt-1">
+              {isTrainerStudio ? 'Curate & Build Exercise Catalog' : 'Exercise & Form Encyclopedia'}
             </h1>
-            <p className="text-sm text-white/60 mt-1 max-w-xl">
-              Anatomical targeting, biomechanical cues, common mistakes and certified alternatives for gym, home, and bodyweight training.
+            <p className="text-sm text-white/60 mt-1 max-w-2xl leading-relaxed">
+              Biomechanical anatomical targeting, start & end execution phases, evidence-based benefits, certified form cues, and safety limits.
             </p>
           </div>
 
           {(isTrainerStudio || activeTrainer) && (
             <GlassButton
               onClick={() => setCustomModalOpen(true)}
-              className="bg-gradient-to-r from-[#FF803E] to-[#E15A1C] text-white self-start sm:self-auto"
+              className="bg-gradient-to-r from-[#FF803E] to-[#E15A1C] text-white self-start sm:self-auto shrink-0 shadow-lg"
             >
               <Plus className="w-4 h-4 mr-1.5" />
               <span>Add Custom Exercise</span>
@@ -132,276 +150,68 @@ export const ExerciseLibraryPage: React.FC = () => {
           )}
         </div>
 
-        {/* Search & Filter Toolbar */}
-        <div className="rounded-[22px] surface-card p-4 border border-white/10 flex flex-col gap-3">
-          {/* Search Bar */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search exercise by name or muscle (e.g., Incline DB Press, Squat, Glute Bridge)..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#101218] border border-white/10 text-sm text-white placeholder-white/40 focus:border-[#FF803E] focus:outline-none"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Muscle Group Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-            {muscleFilterOptions.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => setSelectedMuscle(opt.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-colors ${
-                  selectedMuscle === opt.key
-                    ? 'bg-[#FF803E] text-white font-semibold'
-                    : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Environment & Equipment Quick Dropdowns */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-            <select
-              value={selectedEnvironment}
-              onChange={(e) => setSelectedEnvironment(e.target.value as any)}
-              className="py-1.5 px-2.5 rounded-lg bg-[#101218] border border-white/10 text-white/80 focus:border-[#FF803E] focus:outline-none"
-            >
-              <option value="all">Any Setup</option>
-              <option value="gym">Gym Equipment</option>
-              <option value="home">Home Friendly</option>
-              <option value="both">Both / Portable</option>
-            </select>
-
-            <select
-              value={selectedEquipment}
-              onChange={(e) => setSelectedEquipment(e.target.value as any)}
-              className="py-1.5 px-2.5 rounded-lg bg-[#101218] border border-white/10 text-white/80 focus:border-[#FF803E] focus:outline-none"
-            >
-              <option value="all">Any Equipment</option>
-              <option value="bodyweight">Bodyweight Only</option>
-              <option value="dumbbells">Dumbbells</option>
-              <option value="barbell">Barbell</option>
-              <option value="cable">Cable Machine</option>
-              <option value="resistance_band">Resistance Band</option>
-            </select>
-          </div>
-        </div>
+        {/* Multi-Dimensional Filter Toolbar */}
+        <ExerciseFilterToolbar
+          filters={filters}
+          onChange={handleFilterChange}
+          onReset={handleResetFilters}
+          totalResults={filtered.length}
+          totalCatalogCount={allExercises.length}
+        />
 
         {/* Exercise Card Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((exercise) => {
-            const isCustom = Boolean(exercise.isCustom);
-            return (
-              <div
+        {paginatedExercises.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+            {paginatedExercises.map((exercise) => (
+              <ExerciseCard
                 key={exercise.id}
-                onClick={() => setSelectedExercise(exercise)}
-                className="group rounded-[20px] surface-card p-4 border border-white/10 hover:border-[#FF803E]/50 transition-all cursor-pointer flex flex-col justify-between gap-3 shadow-md hover:shadow-xl"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-[11px] font-semibold text-[#FF803E] uppercase tracking-wider">
-                      {exercise.category} · {exercise.difficulty}
-                    </span>
-                    {isCustom && (
-                      <span className="px-2 py-0.5 rounded-md bg-[#FF803E]/20 text-[#FF803E] text-[10px] font-bold uppercase">
-                        Custom
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-base font-bold text-white group-hover:text-[#FF803E] transition-colors leading-snug">
-                    {exercise.name}
-                  </h3>
-                </div>
-
-                <div className="pt-2 border-t border-white/5 flex items-center justify-between text-xs text-white/60">
-                  <span className="capitalize">{exercise.equipment.replace('_', ' ')}</span>
-                  <span className="capitalize text-white/80 font-medium">
-                    {exercise.primaryMuscles.map((m) => MUSCLE_LABELS[m] || m).join(', ')}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {filtered.length === 0 && (
-          <div className="py-16 text-center space-y-3">
-            <p className="text-lg font-semibold text-white">No exercises match your search filters.</p>
-            <GlassButton
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setSearchQuery('');
-                setSelectedMuscle('all');
-                setSelectedEnvironment('all');
-                setSelectedEquipment('all');
-              }}
-            >
+                exercise={exercise}
+                onSelect={setSelectedExercise}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="py-20 text-center rounded-2xl surface-card border border-white/5 space-y-3">
+            <AlertCircle className="w-10 h-10 text-[#FF803E] mx-auto opacity-60" />
+            <p className="text-base font-semibold text-white">No exercises match your current filter parameters.</p>
+            <p className="text-xs text-white/50 max-w-sm mx-auto">
+              Try adjusting your muscle target, equipment requirements, or search keyword.
+            </p>
+            <GlassButton variant="secondary" size="sm" onClick={handleResetFilters} className="mx-auto mt-2 text-white">
               Reset Filters
             </GlassButton>
           </div>
         )}
+
+        {/* Pagination: Load More Action */}
+        {visibleCount < filtered.length && (
+          <div className="flex flex-col items-center justify-center pt-6 gap-2">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+              className="px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold text-xs transition-all shadow-md active:scale-95 hover:border-[#FF803E]/40"
+            >
+              Load More Movements ({filtered.length - visibleCount} remaining)
+            </button>
+            <span className="text-[11px] text-white/40">
+              Showing {visibleCount} of {filtered.length} exercises
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Detailed Exercise Modal */}
-      {selectedExercise && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
-          <div className="relative w-full max-w-2xl rounded-[28px] surface-card p-6 border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto space-y-5">
-            {/* Modal Header */}
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-semibold text-[#FF803E] uppercase tracking-wider">
-                  <span>{selectedExercise.category}</span>
-                  <span>·</span>
-                  <span className="capitalize">{selectedExercise.difficulty}</span>
-                  {selectedExercise.isCustom && <span>· Custom Exercise</span>}
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mt-1">
-                  {selectedExercise.name}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedExercise(null)}
-                className="p-1.5 rounded-full text-white/50 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Anatomical Targeting Visualization */}
-            <div className="p-4 rounded-2xl bg-[#14171F] border border-white/5 flex flex-col sm:flex-row items-center gap-6">
-              <AnatomyMuscleSvg
-                primaryMuscles={selectedExercise.primaryMuscles}
-                secondaryMuscles={selectedExercise.secondaryMuscles}
-                view="both"
-                size={140}
-                className="shrink-0"
-              />
-              <div className="space-y-2 text-xs text-white/70 w-full">
-                <div>
-                  <p className="text-white/40 uppercase tracking-wider font-semibold text-[11px]">Primary Muscles</p>
-                  <p className="text-[#FF803E] font-medium text-sm capitalize">
-                    {selectedExercise.primaryMuscles.map((m) => MUSCLE_LABELS[m] || m).join(', ')}
-                  </p>
-                </div>
-                {selectedExercise.secondaryMuscles.length > 0 && (
-                  <div>
-                    <p className="text-white/40 uppercase tracking-wider font-semibold text-[11px]">Secondary Support</p>
-                    <p className="text-white/90 font-medium capitalize">
-                      {selectedExercise.secondaryMuscles.map((m) => MUSCLE_LABELS[m] || m).join(', ')}
-                    </p>
-                  </div>
-                )}
-                <div className="flex gap-4 pt-1 border-t border-white/5">
-                  <div>
-                    <span className="text-white/40">Environment: </span>
-                    <span className="capitalize text-white/90">{selectedExercise.environment}</span>
-                  </div>
-                  <div>
-                    <span className="text-white/40">Equipment: </span>
-                    <span className="capitalize text-white/90">{selectedExercise.equipment.replace('_', ' ')}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Instructions */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-semibold text-white uppercase tracking-wider">
-                Execution Steps
-              </h4>
-              <ol className="space-y-1.5 list-decimal list-inside text-sm text-white/80 leading-relaxed">
-                {selectedExercise.instructions.map((step, idx) => (
-                  <li key={idx} className="pl-1">
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </div>
-
-            {/* Common Mistakes */}
-            {selectedExercise.commonMistakes.length > 0 && (
-              <div className="space-y-2 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-200/90">
-                <p className="font-semibold uppercase tracking-wider text-red-300">
-                  Common Mistakes to Avoid
-                </p>
-                <ul className="list-disc list-inside space-y-1">
-                  {selectedExercise.commonMistakes.map((m, i) => (
-                    <li key={i}>{m}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Safety Cues */}
-            {selectedExercise.safetyNotes && (
-              <div className="space-y-1 p-3.5 rounded-xl bg-[#FF803E]/10 border border-[#FF803E]/20 text-xs text-[#FFB06B]">
-                <p className="font-semibold uppercase tracking-wider">Safety Cue</p>
-                <p>{selectedExercise.safetyNotes}</p>
-              </div>
-            )}
-
-            {/* Approved Alternatives */}
-            {selectedExercise.alternativeIds.length > 0 && (
-              <div className="space-y-2 pt-2 border-t border-white/10">
-                <h4 className="text-xs font-semibold text-white/60 uppercase tracking-wider">
-                  Trainer Approved Alternatives
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {selectedExercise.alternativeIds.map((altId) => {
-                    const alt = allExercises.find((e) => e.id === altId);
-                    if (!alt) return null;
-                    return (
-                      <button
-                        key={alt.id}
-                        type="button"
-                        onClick={() => setSelectedExercise(alt)}
-                        className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-white transition-colors"
-                      >
-                        {alt.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Trainer Delete Action if Custom */}
-            {selectedExercise.isCustom && (isTrainerStudio || activeTrainer) && (
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm(`Delete custom exercise "${selectedExercise.name}"?`)) {
-                      deleteCustomExercise(selectedExercise.id);
-                      setSelectedExercise(null);
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-xl text-xs text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete Exercise</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Rich Detail Experience Modal */}
+      <ExerciseDetailModal
+        exercise={selectedExercise}
+        onClose={() => setSelectedExercise(null)}
+        catalog={allExercises}
+        onSelectAlternative={(alt) => setSelectedExercise(alt)}
+        canAddToWorkout={isTrainerStudio}
+        onAddToWorkout={(ex) => {
+          pushToast(`Added ${ex.name} to template.`);
+          setSelectedExercise(null);
+        }}
+      />
 
       {/* Trainer "Add Custom Exercise" Modal */}
       {customModalOpen && (
@@ -414,7 +224,7 @@ export const ExerciseLibraryPage: React.FC = () => {
               <div>
                 <h3 className="text-xl font-bold text-white">Create Custom Exercise</h3>
                 <p className="text-xs text-white/60">
-                  Adds to your trainer catalog for client workout programs
+                  Adds to your personal studio catalog for client workout programs
                 </p>
               </div>
               <button
@@ -451,6 +261,7 @@ export const ExerciseLibraryPage: React.FC = () => {
                   <option value="both">Both</option>
                 </select>
               </div>
+
               <div className="space-y-1">
                 <label className="font-semibold text-white">Equipment</label>
                 <select
@@ -458,59 +269,73 @@ export const ExerciseLibraryPage: React.FC = () => {
                   onChange={(e) => setCustomEquipment(e.target.value as any)}
                   className="w-full p-2 rounded-lg bg-[#101218] border border-white/10 text-white"
                 >
-                  <option value="bodyweight">Bodyweight</option>
                   <option value="dumbbells">Dumbbells</option>
                   <option value="barbell">Barbell</option>
-                  <option value="cable">Cable</option>
-                  <option value="resistance_band">Resistance Band</option>
+                  <option value="bodyweight">Bodyweight</option>
+                  <option value="cable">Cable Machine</option>
                   <option value="machine">Machine</option>
+                  <option value="resistance_band">Resistance Band</option>
                 </select>
               </div>
             </div>
 
             <div className="space-y-1 text-xs">
-              <label className="font-semibold text-white">Primary Muscle Target</label>
+              <label className="font-semibold text-white">Difficulty Level</label>
               <select
-                value={customPrimaryMuscles[0]}
-                onChange={(e) => setCustomPrimaryMuscles([e.target.value as MuscleGroup])}
-                className="w-full p-2 rounded-lg bg-[#101218] border border-white/10 text-white capitalize"
+                value={customDifficulty}
+                onChange={(e) => setCustomDifficulty(e.target.value as any)}
+                className="w-full p-2 rounded-lg bg-[#101218] border border-white/10 text-white"
               >
-                {Object.entries(MUSCLE_LABELS).map(([k, label]) => (
-                  <option key={k} value={k}>
-                    {label}
-                  </option>
-                ))}
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="experienced">Experienced</option>
               </select>
             </div>
 
-            <div className="space-y-1 text-xs">
-              <label className="font-semibold text-white">Execution Instructions (one per line)</label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-white">
+                Step-by-Step Instructions (one step per line)
+              </label>
               <textarea
                 rows={3}
+                required
                 value={customInstructions}
                 onChange={(e) => setCustomInstructions(e.target.value)}
-                placeholder="1. Set up with feet hip-width apart&#10;2. Hinge back through hips keeping lats packed&#10;3. Drive through floor to lockout"
-                className="w-full p-2.5 rounded-xl bg-[#101218] border border-white/10 text-sm text-white focus:border-[#FF803E] focus:outline-none"
+                placeholder="1. Set up with bar over mid-foot&#10;2. Hinge at hips and keep lats tight&#10;3. Drive floor away"
+                className="w-full p-2.5 rounded-xl bg-[#101218] border border-white/10 text-xs text-white focus:border-[#FF803E] focus:outline-none"
               />
             </div>
 
-            <div className="space-y-1 text-xs">
-              <label className="font-semibold text-white">Safety Notes</label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-white">
+                Common Mistakes to Avoid (one per line)
+              </label>
+              <textarea
+                rows={2}
+                value={customMistakes}
+                onChange={(e) => setCustomMistakes(e.target.value)}
+                placeholder="Rounding lower back&#10;Shooting hips up early"
+                className="w-full p-2.5 rounded-xl bg-[#101218] border border-white/10 text-xs text-white focus:border-[#FF803E] focus:outline-none"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-white">Safety Precautions</label>
               <input
                 type="text"
                 value={customSafetyNotes}
                 onChange={(e) => setCustomSafetyNotes(e.target.value)}
-                placeholder="Maintain neutral spine throughout"
-                className="w-full p-2.5 rounded-xl bg-[#101218] border border-white/10 text-sm text-white focus:border-[#FF803E] focus:outline-none"
+                placeholder="e.g., Maintain neutral spine throughout."
+                className="w-full p-2.5 rounded-xl bg-[#101218] border border-white/10 text-xs text-white focus:border-[#FF803E] focus:outline-none"
               />
             </div>
 
             <div className="pt-2 flex justify-end gap-2">
-              <GlassButton type="button" variant="secondary" onClick={() => setCustomModalOpen(false)}>
+              <GlassButton variant="secondary" size="sm" onClick={() => setCustomModalOpen(false)}>
                 Cancel
               </GlassButton>
-              <GlassButton type="submit" className="bg-gradient-to-r from-[#FF803E] to-[#E15A1C] text-white">
-                Save Exercise
+              <GlassButton type="submit" size="sm" className="bg-[#FF803E] text-white">
+                Save to Catalog
               </GlassButton>
             </div>
           </form>

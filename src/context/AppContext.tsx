@@ -597,10 +597,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         setCloudStore((prev) => {
           if (!prev) return prev;
-          const nextUser = patch.users?.[0] ?? prev.users[0];
+          const nextUsers = patch.users && patch.users.length > 0 ? patch.users : prev.users;
+          const nextUser = nextUsers?.[0] ?? prev.users[0];
           return {
             ...prev,
-            users: patch.users ?? prev.users,
+            users: nextUsers,
             trainers: patch.trainers ?? prev.trainers,
             packages: patch.packages ?? prev.packages,
             clients: patch.clients ?? prev.clients,
@@ -994,14 +995,14 @@ function purgeSensitiveLocalStorage(): void {
   }, [activeUser?.timezone]);
 
   const activeClient = useMemo(() => {
-    if (store.session.activeRole !== 'client') return undefined;
+    if (store.session.activeRole !== 'client' || !activeUser) return undefined;
     return store.clients.find((c) => c.userId === activeUser.id);
-  }, [store.clients, store.session.activeRole, activeUser.id]);
+  }, [store.clients, store.session.activeRole, activeUser?.id]);
 
   const activeTrainer = useMemo(() => {
-    if (store.session.activeRole !== 'trainer') return undefined;
+    if (store.session.activeRole !== 'trainer' || !activeUser) return undefined;
     return store.trainers.find((t) => t.userId === activeUser.id);
-  }, [store.trainers, store.session.activeRole, activeUser.id]);
+  }, [store.trainers, store.session.activeRole, activeUser?.id]);
 
   const activeRelationship = useMemo(() => {
     if (!activeClient) return undefined;
@@ -1264,7 +1265,7 @@ function purgeSensitiveLocalStorage(): void {
       setConsents((prev) => [
         {
           id: uid('cns'),
-          userId: activeUser.id,
+          userId: activeUser?.id || (firebaseUser ? firebaseUser.uid : ''),
           consentType,
           granted,
           policyVersion: fsService.CURRENT_POLICY_VERSION,
@@ -1275,7 +1276,7 @@ function purgeSensitiveLocalStorage(): void {
       ]);
       pushToast('Demo privacy preference updated.', 'info');
     },
-    [isCloudSynced, firebaseUser, persistCloudOptimistic, pushToast, activeUser.id],
+    [isCloudSynced, firebaseUser, persistCloudOptimistic, pushToast, activeUser?.id],
   );
 
   const submitVerificationRequest = useCallback(
@@ -1346,14 +1347,14 @@ function purgeSensitiveLocalStorage(): void {
     (timezone: string) => {
       persist((prev) => ({
         ...prev,
-        users: prev.users.map((u) => (u.id === activeUser.id ? { ...u, timezone } : u)),
+        users: prev.users.map((u) => (u.id === activeUser?.id ? { ...u, timezone } : u)),
       }));
       if (isCloudSynced && firebaseUser) {
         runCloudWrite(fsService.updateUserMetadata(firebaseUser.uid, { timezone }));
       }
       pushToast('Timezone updated.');
     },
-    [persist, activeUser.id, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+    [persist, activeUser?.id, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
   );
 
   const completeClientOnboarding = useCallback(
@@ -1362,7 +1363,7 @@ function purgeSensitiveLocalStorage(): void {
       const targetUserId = useCloud && firebaseUser ? firebaseUser.uid : uid('usr');
       const newClientId = uid('cl');
       const now = new Date().toISOString();
-      const today = getTodayKey(activeUser.timezone);
+      const today = getTodayKey(activeUser?.timezone || 'Asia/Kolkata');
 
       const newUser: User = {
         id: targetUserId,
@@ -1373,7 +1374,7 @@ function purgeSensitiveLocalStorage(): void {
             ? firebaseUser.email
             : `${draft.firstName.trim().toLowerCase().replace(/\s+/g, '.')}@demo.fitplus.in`,
         role: 'client',
-        timezone: activeUser.timezone || 'Asia/Kolkata',
+        timezone: activeUser?.timezone || 'Asia/Kolkata',
         locale: 'en-IN',
         isAdultConfirmed: draft.isAdultConfirmed,
         createdAt: now,
@@ -1496,7 +1497,7 @@ function purgeSensitiveLocalStorage(): void {
 
       pushToast(`Welcome to FitPlus, ${newUser.firstName}.`);
     },
-    [firebaseUser, demoPreviewOverride, activeUser.timezone, persistCloudOptimistic, persistLocal, runCloudWrite, pushToast],
+    [firebaseUser, demoPreviewOverride, activeUser?.timezone, persistCloudOptimistic, persistLocal, runCloudWrite, pushToast],
   );
 
   const completeTrainerOnboarding = useCallback(
@@ -1521,7 +1522,7 @@ function purgeSensitiveLocalStorage(): void {
         lastName,
         email: useCloud && firebaseUser?.email ? firebaseUser.email : `${slug}@demo.fitplus.in`,
         role: 'trainer',
-        timezone: activeUser.timezone || 'Asia/Kolkata',
+        timezone: activeUser?.timezone || 'Asia/Kolkata',
         locale: 'en-IN',
         isAdultConfirmed: true,
         createdAt: now,
@@ -1634,7 +1635,7 @@ function purgeSensitiveLocalStorage(): void {
         pushToast('Trainer studio ready (demo).');
       }
     },
-    [firebaseUser, demoPreviewOverride, activeUser.timezone, persistCloudOptimistic, persistLocal, runCloudWrite, pushToast],
+    [firebaseUser, demoPreviewOverride, activeUser?.timezone, persistCloudOptimistic, persistLocal, runCloudWrite, pushToast],
   );
 
   const toggleAssignmentCompletion = useCallback(
@@ -2346,7 +2347,7 @@ function purgeSensitiveLocalStorage(): void {
         users:
           updates.firstName || updates.lastName
             ? prev.users.map((u) =>
-                u.id === activeUser.id
+                u.id === activeUser?.id
                   ? {
                       ...u,
                       firstName: updates.firstName ?? u.firstName,
@@ -2369,7 +2370,7 @@ function purgeSensitiveLocalStorage(): void {
       }
       pushToast('Changes saved.');
     },
-    [activeClient, activeUser.id, persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+    [activeClient, activeUser?.id, persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
   );
 
   const createInvite = useCallback(
@@ -2998,7 +2999,7 @@ function purgeSensitiveLocalStorage(): void {
         dateKey: input.dateKey,
         startTime: input.startTime,
         endTime: input.endTime,
-        timezone: activeUser.timezone || 'Asia/Kolkata',
+        timezone: activeUser?.timezone || 'Asia/Kolkata',
         mode: input.mode,
         meetingLink: input.meetingLink?.trim() || undefined,
         status: 'available',
@@ -3015,7 +3016,7 @@ function purgeSensitiveLocalStorage(): void {
     [
       activeTrainer,
       store.consultationSlots,
-      activeUser.timezone,
+      activeUser?.timezone,
       persist,
       isCloudSynced,
       firebaseUser,
@@ -3127,18 +3128,18 @@ function purgeSensitiveLocalStorage(): void {
 
   const markAllNotificationsRead = useCallback(() => {
     const unreadIds = store.notifications
-      .filter((n) => n.recipientUserId === activeUser.id && !n.read)
+      .filter((n) => n.recipientUserId === activeUser?.id && !n.read)
       .map((n) => n.id);
     persist((prev) => ({
       ...prev,
       notifications: prev.notifications.map((n) =>
-        n.recipientUserId === activeUser.id ? { ...n, read: true } : n,
+        n.recipientUserId === activeUser?.id ? { ...n, read: true } : n,
       ),
     }));
     if (isCloudSynced && firebaseUser && unreadIds.length > 0) {
       runCloudWrite(fsService.markAllNotificationsReadBatch(unreadIds));
     }
-  }, [store.notifications, activeUser.id, persist, isCloudSynced, firebaseUser, runCloudWrite]);
+  }, [store.notifications, activeUser?.id, persist, isCloudSynced, firebaseUser, runCloudWrite]);
 
   const reviews = useMemo(() => {
     if (!isCloudSynced) {
@@ -3301,7 +3302,7 @@ function purgeSensitiveLocalStorage(): void {
         id: existing?.id || uid('rev'),
         trainerId: params.trainerId,
         clientId: activeClient.id,
-        clientUserId: activeUser.id,
+        clientUserId: activeUser?.id || (firebaseUser ? firebaseUser.uid : ''),
         relationshipId: existing?.relationshipId || eligibleRel.id,
         authorName: `${activeClient.firstName}${activeClient.lastName ? ` ${activeClient.lastName[0]}.` : ''}`.trim() || 'FitPlus Member',
         rating: Math.min(5, Math.max(1, Math.round(params.rating))),
@@ -3337,7 +3338,7 @@ function purgeSensitiveLocalStorage(): void {
       pushToast(existing ? 'Review updated (demo).' : 'Review added (demo).');
       return { ok: true };
     },
-    [activeClient, activeUser.id, store.relationships, reviews, isCloudSynced, firebaseUser, pushToast],
+    [activeClient, activeUser?.id, store.relationships, reviews, isCloudSynced, firebaseUser, pushToast],
   );
 
   const deleteTrainerReview = useCallback(
@@ -3519,7 +3520,7 @@ function purgeSensitiveLocalStorage(): void {
         ...sessionInput,
         id,
         clientId: activeClient.id,
-        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id,
+        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : (activeUser?.id || ''),
         trainerUserId,
         createdAt: now,
         updatedAt: now,
@@ -3570,7 +3571,7 @@ function purgeSensitiveLocalStorage(): void {
       });
 
       if (evalResult.newlyUnlocked.length > 0) {
-        const clientUid = isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id;
+        const clientUid = isCloudSynced && firebaseUser ? firebaseUser.uid : (activeUser?.id || '');
         const newUnlocksToPersist: AchievementUnlock[] = evalResult.newlyUnlocked.map((u) => ({
           ...u,
           clientUserId: clientUid,
@@ -3595,7 +3596,7 @@ function purgeSensitiveLocalStorage(): void {
     [
       activeClient,
       activeCoach,
-      activeUser.id,
+      activeUser?.id,
       isCloudSynced,
       firebaseUser,
       persist,
@@ -3623,7 +3624,7 @@ function purgeSensitiveLocalStorage(): void {
         ...entryInput,
         id,
         clientId: entryInput.clientId || activeClient.id,
-        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id,
+        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : (activeUser?.id || ''),
         trainerUserId,
         updatedAt: now,
       };
@@ -3651,7 +3652,7 @@ function purgeSensitiveLocalStorage(): void {
       }
       pushToast('Nutrition diary saved.');
     },
-    [activeClient, activeCoach, activeUser.id, isCloudSynced, firebaseUser, persist, todayKey, setTodayHydrationGlasses, runCloudWrite, pushToast],
+    [activeClient, activeCoach, activeUser?.id, isCloudSynced, firebaseUser, persist, todayKey, setTodayHydrationGlasses, runCloudWrite, pushToast],
   );
 
   const saveNutritionTrainerFeedback = useCallback(
@@ -3704,7 +3705,7 @@ function purgeSensitiveLocalStorage(): void {
         ...checkInInput,
         id,
         clientId: checkInInput.clientId || activeClient.id,
-        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id,
+        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : (activeUser?.id || ''),
         trainerUserId,
         photoPath,
         createdAt: now,
@@ -3729,7 +3730,7 @@ function purgeSensitiveLocalStorage(): void {
       }
       pushToast('Weekly check-in submitted to your coach.');
     },
-    [activeClient, activeCoach, activeUser.id, isCloudSynced, firebaseUser, persist, runCloudWrite, pushToast],
+    [activeClient, activeCoach, activeUser?.id, isCloudSynced, firebaseUser, persist, runCloudWrite, pushToast],
   );
 
   const saveWeeklyCheckInTrainerFeedback = useCallback(

@@ -28,6 +28,7 @@ const TrainerOnboardingPage = React.lazy(() => import('./pages/onboarding/Traine
 const TodayPage = React.lazy(() => import('./pages/client/TodayPage').then((m) => ({ default: m.TodayPage })));
 const LiveWorkoutPage = React.lazy(() => import('./pages/client/LiveWorkoutPage').then((m) => ({ default: m.LiveWorkoutPage })));
 const ExerciseLibraryPage = React.lazy(() => import('./pages/client/ExerciseLibraryPage').then((m) => ({ default: m.ExerciseLibraryPage })));
+const ExerciseDetailPage = React.lazy(() => import('./pages/client/ExerciseDetailPage').then((m) => ({ default: m.ExerciseDetailPage })));
 const NutritionDiaryPage = React.lazy(() => import('./pages/client/NutritionDiaryPage').then((m) => ({ default: m.NutritionDiaryPage })));
 const WeeklyCheckInPage = React.lazy(() => import('./pages/client/WeeklyCheckInPage').then((m) => ({ default: m.WeeklyCheckInPage })));
 const WrappedPage = React.lazy(() => import('./pages/client/WrappedPage').then((m) => ({ default: m.WrappedPage })));
@@ -373,6 +374,14 @@ export default function App() {
               }
             />
             <Route
+              path="/app/exercises/:exerciseId"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ExerciseDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/app/nutrition"
               element={
                 <ProtectedRoute allowedRoles={['client']}>
@@ -548,6 +557,14 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['trainer']}>
                   <ExerciseLibraryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/exercises/:exerciseId"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <ExerciseDetailPage />
                 </ProtectedRoute>
               }
             />

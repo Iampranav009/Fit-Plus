@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
 import type { AchievementBadgeId, MuscleGroup } from '../../types/domain';
+import { resolveAnatomicalHighlights } from '../anatomy/muscleMapping';
+import { AnatomyMuscleOverlay } from '../anatomy/AnatomyMuscleOverlay';
 
 export const StreakFlameSvg: React.FC<{
   size?: number;
@@ -250,211 +252,20 @@ export const AnatomyMuscleSvg: React.FC<{
   className?: string;
   size?: number;
 }> = ({ primaryMuscles = [], secondaryMuscles = [], view = 'both', className = '', size = 180 }) => {
-  const isPrimary = (m: MuscleGroup) => primaryMuscles.includes(m) || primaryMuscles.includes('full_body');
-  const isSecondary = (m: MuscleGroup) =>
-    !isPrimary(m) && (secondaryMuscles.includes(m) || secondaryMuscles.includes('full_body'));
-
-  const getFill = (m: MuscleGroup) => {
-    if (isPrimary(m)) return '#FF803E';
-    if (isSecondary(m)) return 'rgba(255, 176, 107, 0.7)';
-    return '#2C3240';
-  };
-
-  const getOpacity = (m: MuscleGroup) => {
-    if (isPrimary(m)) return 1;
-    if (isSecondary(m)) return 0.85;
-    return 0.45;
-  };
-
-  const renderFront = () => (
-    <svg viewBox="0 0 100 200" className="w-full h-full" fill="none">
-      {/* Head & Neck */}
-      <circle cx="50" cy="20" r="11" fill="#353B4B" />
-      <path d="M46 31H54V38H46V31Z" fill="#353B4B" />
-
-      {/* Shoulders (Deltoids) */}
-      <path
-        d="M33 38C30 42 27 49 28 54C30 54 34 50 36 43L33 38Z"
-        fill={getFill('shoulders')}
-        fillOpacity={getOpacity('shoulders')}
-      />
-      <path
-        d="M67 38C70 42 73 49 72 54C70 54 66 50 64 43L67 38Z"
-        fill={getFill('shoulders')}
-        fillOpacity={getOpacity('shoulders')}
-      />
-
-      {/* Chest (Pectoralis) */}
-      <path
-        d="M37 42H48V56C44 57 38 55 35 52C34 46 36 43 37 42Z"
-        fill={getFill('chest')}
-        fillOpacity={getOpacity('chest')}
-      />
-      <path
-        d="M63 42H52V56C56 57 62 55 65 52C66 46 64 43 63 42Z"
-        fill={getFill('chest')}
-        fillOpacity={getOpacity('chest')}
-      />
-
-      {/* Biceps */}
-      <path
-        d="M26 55C24 61 24 69 26 73C28 73 30 67 30 60C30 56 28 55 26 55Z"
-        fill={getFill('biceps')}
-        fillOpacity={getOpacity('biceps')}
-      />
-      <path
-        d="M74 55C76 61 76 69 74 73C72 73 70 67 70 60C70 56 72 55 74 55Z"
-        fill={getFill('biceps')}
-        fillOpacity={getOpacity('biceps')}
-      />
-
-      {/* Forearms */}
-      <path d="M24 74C21 82 20 90 22 95C24 95 27 88 28 80L24 74Z" fill="#353B4B" />
-      <path d="M76 74C79 82 80 90 78 95C76 95 73 88 72 80L76 74Z" fill="#353B4B" />
-
-      {/* Core (Abs) */}
-      <path
-        d="M42 58H49V76H42V58ZM51 58H58V76H51V58Z"
-        fill={getFill('core')}
-        fillOpacity={getOpacity('core')}
-      />
-      {/* Obliques */}
-      <path
-        d="M36 58C36 65 37 72 39 77H41V58H36ZM64 58C64 65 63 72 61 77H59V58H64Z"
-        fill={getFill('core')}
-        fillOpacity={getOpacity('core') * 0.8}
-      />
-
-      {/* Hips/Pelvis */}
-      <path d="M38 78H62L60 90H40L38 78Z" fill="#353B4B" />
-
-      {/* Quads */}
-      <path
-        d="M38 92C37 106 36 122 39 135C43 135 47 122 48 108C49 98 48 92 48 92H38Z"
-        fill={getFill('quads')}
-        fillOpacity={getOpacity('quads')}
-      />
-      <path
-        d="M62 92C63 106 64 122 61 135C57 135 53 122 52 108C51 98 52 92 52 92H62Z"
-        fill={getFill('quads')}
-        fillOpacity={getOpacity('quads')}
-      />
-
-      {/* Knees */}
-      <circle cx="43" cy="140" r="3.5" fill="#353B4B" />
-      <circle cx="57" cy="140" r="3.5" fill="#353B4B" />
-
-      {/* Calves (Front/Shins) */}
-      <path
-        d="M40 145C39 155 40 168 41 180H46C46 168 47 155 46 145H40Z"
-        fill={getFill('calves')}
-        fillOpacity={getOpacity('calves')}
-      />
-      <path
-        d="M60 145C61 155 60 168 59 180H54C54 168 53 155 54 145H60Z"
-        fill={getFill('calves')}
-        fillOpacity={getOpacity('calves')}
-      />
-    </svg>
-  );
-
-  const renderBack = () => (
-    <svg viewBox="0 0 100 200" className="w-full h-full" fill="none">
-      {/* Head & Neck (Back) */}
-      <circle cx="50" cy="20" r="11" fill="#353B4B" />
-      <path d="M46 31H54V38H46V31Z" fill="#353B4B" />
-
-      {/* Rear Delts */}
-      <path
-        d="M33 38C30 42 27 49 28 54C30 54 34 50 36 43L33 38Z"
-        fill={getFill('shoulders')}
-        fillOpacity={getOpacity('shoulders')}
-      />
-      <path
-        d="M67 38C70 42 73 49 72 54C70 54 66 50 64 43L67 38Z"
-        fill={getFill('shoulders')}
-        fillOpacity={getOpacity('shoulders')}
-      />
-
-      {/* Upper Back & Lats (Traps/Lats) */}
-      <path
-        d="M42 36L50 46L58 36H42Z"
-        fill={getFill('back')}
-        fillOpacity={getOpacity('back')}
-      />
-      <path
-        d="M36 44C36 55 38 68 43 74H57C62 68 64 55 64 44L50 56L36 44Z"
-        fill={getFill('back')}
-        fillOpacity={getOpacity('back')}
-      />
-
-      {/* Triceps */}
-      <path
-        d="M26 55C24 61 24 69 26 73C28 73 30 67 30 60C30 56 28 55 26 55Z"
-        fill={getFill('triceps')}
-        fillOpacity={getOpacity('triceps')}
-      />
-      <path
-        d="M74 55C76 61 76 69 74 73C72 73 70 67 70 60C70 56 72 55 74 55Z"
-        fill={getFill('triceps')}
-        fillOpacity={getOpacity('triceps')}
-      />
-
-      {/* Forearms (Back) */}
-      <path d="M24 74C21 82 20 90 22 95C24 95 27 88 28 80L24 74Z" fill="#353B4B" />
-      <path d="M76 74C79 82 80 90 78 95C76 95 73 88 72 80L76 74Z" fill="#353B4B" />
-
-      {/* Lower Back */}
-      <path d="M43 75H57V84H43V75Z" fill={getFill('back')} fillOpacity={getOpacity('back') * 0.8} />
-
-      {/* Glutes */}
-      <path
-        d="M37 86C37 96 41 104 49 104V86H37Z"
-        fill={getFill('glutes')}
-        fillOpacity={getOpacity('glutes')}
-      />
-      <path
-        d="M63 86C63 96 59 104 51 104V86H63Z"
-        fill={getFill('glutes')}
-        fillOpacity={getOpacity('glutes')}
-      />
-
-      {/* Hamstrings */}
-      <path
-        d="M38 106C37 118 38 128 41 137C44 137 47 126 48 116C49 109 49 106 49 106H38Z"
-        fill={getFill('hamstrings')}
-        fillOpacity={getOpacity('hamstrings')}
-      />
-      <path
-        d="M62 106C63 118 62 128 59 137C56 137 53 126 52 116C51 109 51 106 51 106H62Z"
-        fill={getFill('hamstrings')}
-        fillOpacity={getOpacity('hamstrings')}
-      />
-
-      {/* Knee Backs */}
-      <circle cx="44" cy="140" r="3" fill="#353B4B" />
-      <circle cx="56" cy="140" r="3" fill="#353B4B" />
-
-      {/* Calves (Gastrocnemius Posterior) */}
-      <path
-        d="M39 144C37 154 38 165 41 180H46C48 168 49 154 47 144H39Z"
-        fill={getFill('calves')}
-        fillOpacity={getOpacity('calves')}
-      />
-      <path
-        d="M61 144C63 154 62 165 59 180H54C52 168 51 154 53 144H61Z"
-        fill={getFill('calves')}
-        fillOpacity={getOpacity('calves')}
-      />
-    </svg>
-  );
+  const { primaryIds, secondaryIds } = useMemo(() => {
+    return resolveAnatomicalHighlights(primaryMuscles, secondaryMuscles);
+  }, [primaryMuscles, secondaryMuscles]);
 
   return (
     <div className={`flex items-center justify-center gap-3 ${className}`} style={{ height: size }}>
       {(view === 'front' || view === 'both') && (
         <div className="flex flex-col items-center h-full">
           <div className="h-full aspect-[1/2] p-1 bg-[#1C2029]/80 rounded-xl border border-white/5 shadow-inner">
-            {renderFront()}
+            <AnatomyMuscleOverlay
+              view="anterior"
+              primaryIds={primaryIds}
+              secondaryIds={secondaryIds}
+            />
           </div>
           <span className="text-[10px] text-white/40 font-medium uppercase tracking-wider mt-1">Anterior</span>
         </div>
@@ -462,7 +273,11 @@ export const AnatomyMuscleSvg: React.FC<{
       {(view === 'back' || view === 'both') && (
         <div className="flex flex-col items-center h-full">
           <div className="h-full aspect-[1/2] p-1 bg-[#1C2029]/80 rounded-xl border border-white/5 shadow-inner">
-            {renderBack()}
+            <AnatomyMuscleOverlay
+              view="posterior"
+              primaryIds={primaryIds}
+              secondaryIds={secondaryIds}
+            />
           </div>
           <span className="text-[10px] text-white/40 font-medium uppercase tracking-wider mt-1">Posterior</span>
         </div>

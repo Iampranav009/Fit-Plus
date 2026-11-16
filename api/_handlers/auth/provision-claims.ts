@@ -1,5 +1,6 @@
 ﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getFirestoreAdminContext, isFirebaseAdminConfigured } from '../../_lib/firestoreAdmin.js';
+import { verifyFirebaseIdToken } from '../../_lib/firebaseAuth.js';
 import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../../_lib/supabaseAdmin.js';
 import { applySecurityHeaders } from '../../_lib/security.js';
 
@@ -33,22 +34,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ ok: false, error: 'Empty token.' });
   }
 
-  if (!isFirebaseAdminConfigured()) {
-    return res.status(503).json({ ok: false, error: 'Authentication service unavailable.' });
-  }
-
   try {
-    const { app, db } = getFirestoreAdminContext();
-    const { getAuth } = await import('firebase-admin/auth');
-    const authAdmin = getAuth(app);
+    let decoded;
+    let authAdmin: any = null;
+    let existingClaims: Record<string, unknown> = {};
 
-    const decoded = await authAdmin.verifyIdToken(idToken, true);
+    if (isFirebaseAdminConfigured()) {
+      const { app } = getFirestoreAdminContext();
+      const { getAuth } = await import('firebase-admin/auth');
+      authAdmin = getAuth(app);
+      decoded = await authAdmin.verifyIdToken(idToken, true);
+      try {
+        const userRecord = await authAdmin.getUser(decoded.uid);
+        existingClaims = userRecord.customClaims || {};
+      } catch {
+        // proceed with empty existing claims
+      }
+    } else {
+      decoded = await verifyFirebaseIdToken(idToken);
+    }
+
     const uid = decoded.uid;
     const email = (decoded.email || '').toLowerCase();
-
-    // Fetch existing custom claims
-    const userRecord = await authAdmin.getUser(uid);
-    const existingClaims = userRecord.customClaims || {};
 
     // Authoritative resolution of role & admin status from Supabase
     const bootstrapAdminEmail = (
@@ -77,14 +84,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Fallback to Firestore if Supabase did not find the user
-    if (!storedRole && db) {
+    if (!storedRole && isFirebaseAdminConfigured()) {
       try {
-        const [userSnap, adminSnap] = await Promise.all([
-          db.collection('users').doc(uid).get(),
-          db.collection('admins').doc(uid).get(),
-        ]);
-        storedRole = userSnap.data()?.role;
-        if (adminSnap.exists) isAdmin = true;
+        const { db } = getFirestoreAdminContext();
+        if (db) {
+          const [userSnap, adminSnap] = await Promise.all([
+            db.collection('users').doc(uid).get(),
+            db.collection('admins').doc(uid).get(),
+          ]);
+          storedRole = userSnap.data()?.role;
+          if (adminSnap.exists) isAdmin = true;
+        }
       } catch {
         // Fallback gracefully
       }
@@ -97,38 +107,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? 'trainer'
         : 'client';
 
-    // Check if claims already match
-    const alreadyCurrent =
-      existingClaims.role === 'authenticated' &&
-      Boolean(existingClaims.is_trainer) === isTrainer &&
-      Boolean(existingClaims.is_admin) === isAdmin &&
-      existingClaims.user_role === userRole;
+    // If Firebase Admin is available to set custom claims on the user account
+    if (authAdmin) {
+      const alreadyCurrent =
+        existingClaims.role === 'authenticated' &&
+        Boolean(existingClaims.is_trainer) === isTrainer &&
+        Boolean(existingClaims.is_admin) === isAdmin &&
+        existingClaims.user_role === userRole;
 
-    if (!alreadyCurrent) {
-      const updatedClaims = {
-        ...existingClaims,
-        role: 'authenticated', // Required for Supabase PostgreSQL RLS
-        is_trainer: isTrainer,
-        is_admin: isAdmin,
-        user_role: userRole,
-      };
+      if (!alreadyCurrent) {
+        const updatedClaims = {
+          ...existingClaims,
+          role: 'authenticated', // Required for Supabase PostgreSQL RLS
+          is_trainer: isTrainer,
+          is_admin: isAdmin,
+          user_role: userRole,
+        };
 
-      await authAdmin.setCustomUserClaims(uid, updatedClaims);
+        await authAdmin.setCustomUserClaims(uid, updatedClaims);
+
+        return res.status(200).json({
+          ok: true,
+          success: true,
+          claimsUpdated: true,
+          claims: {
+            role: 'authenticated',
+            is_trainer: isTrainer,
+            is_admin: isAdmin,
+            user_role: userRole,
+          },
+          message: 'Successfully provisioned custom claims.',
+        });
+      }
 
       return res.status(200).json({
         ok: true,
         success: true,
-        claimsUpdated: true,
+        claimsUpdated: false,
         claims: {
           role: 'authenticated',
           is_trainer: isTrainer,
           is_admin: isAdmin,
           user_role: userRole,
         },
-        message: 'Successfully provisioned custom claims.',
+        message: 'Claims already up to date.',
       });
     }
 
+    // Return authoritative role resolved from Supabase
     return res.status(200).json({
       ok: true,
       success: true,
@@ -139,7 +165,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         is_admin: isAdmin,
         user_role: userRole,
       },
-      message: 'Claims already up to date.',
+      message: 'Authoritative role resolved from Supabase.',
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Failed to provision claims';

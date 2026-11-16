@@ -232,7 +232,7 @@ export const CoachPage: React.FC = () => {
         title={COPY.client.disconnectTitle}
         description={COPY.client.disconnectBody}
       >
-        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+        <div className="flex gap-2.5 pt-2">
           <GlassButton variant="secondary" fullWidth onClick={() => setDisconnectOpen(false)}>
             {COPY.client.keepCoaching}
           </GlassButton>

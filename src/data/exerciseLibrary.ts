@@ -1,6 +1,7 @@
-import type { ExerciseDefinition, ExerciseEnvironment, ExerciseEquipment, MuscleGroup } from '../types/domain';
+import type { ExerciseDefinition, ExerciseEnvironment, ExerciseEquipment, ExperienceLevel, MuscleGroup } from '../types/domain';
+import { ENCYCLOPEDIA_EXERCISES } from './exerciseEncyclopedia';
 
-export const BUILTIN_EXERCISES: ExerciseDefinition[] = [
+const RAW_BUILTIN_EXERCISES: ExerciseDefinition[] = [
   {
     id: 'ex_incline_db_press',
     name: 'Incline Dumbbell Press',
@@ -524,6 +525,29 @@ export const BUILTIN_EXERCISES: ExerciseDefinition[] = [
   },
 ];
 
+// Build merged comprehensive catalog: anchor with RAW_BUILTIN_EXERCISES, enriched by ENCYCLOPEDIA_EXERCISES
+const builtinMap = new Map<string, ExerciseDefinition>();
+// 1. Add all original 30 exercises first to maintain exact ordering and identity
+for (const ex of RAW_BUILTIN_EXERCISES) {
+  builtinMap.set(ex.id, ex);
+}
+// 2. Merge encyclopedia exercises (enrich existing, add new)
+for (const ex of ENCYCLOPEDIA_EXERCISES) {
+  if (builtinMap.has(ex.id)) {
+    const existing = builtinMap.get(ex.id)!;
+    builtinMap.set(ex.id, {
+      ...existing,
+      ...ex,
+      // preserve any specific instructions/cues if present
+      instructions: existing.instructions.length >= 2 ? existing.instructions : ex.instructions,
+    });
+  } else {
+    builtinMap.set(ex.id, ex);
+  }
+}
+
+export const BUILTIN_EXERCISES: ExerciseDefinition[] = Array.from(builtinMap.values());
+
 export function mergeExerciseCatalog(customExercises: ExerciseDefinition[] = []): ExerciseDefinition[] {
   const map = new Map<string, ExerciseDefinition>();
   for (const ex of BUILTIN_EXERCISES) {
@@ -541,14 +565,22 @@ export function findExerciseByNameOrId(
 ): ExerciseDefinition | undefined {
   const normalized = nameOrId.trim().toLowerCase();
   if (!normalized) return undefined;
+  // 1. Exact ID or Exact Name
   const exact = catalog.find(
     (ex) => ex.id.toLowerCase() === normalized || ex.name.toLowerCase() === normalized,
   );
   if (exact) return exact;
+  // 2. Exact Alias match
+  const aliasMatch = catalog.find((ex) =>
+    (ex.aliases || []).some((a) => a.toLowerCase() === normalized),
+  );
+  if (aliasMatch) return aliasMatch;
+  // 3. Substring match
   return catalog.find(
     (ex) =>
       ex.name.toLowerCase().includes(normalized) ||
-      normalized.includes(ex.name.toLowerCase().split('(')[0].trim()),
+      normalized.includes(ex.name.toLowerCase().split('(')[0].trim()) ||
+      (ex.aliases || []).some((a) => a.toLowerCase().includes(normalized)),
   );
 }
 
@@ -559,12 +591,16 @@ export function filterExercises(
     environment?: 'all' | ExerciseEnvironment;
     equipment?: 'all' | 'bodyweight' | 'equipment' | ExerciseEquipment;
     muscle?: 'all' | MuscleGroup;
+    difficulty?: 'all' | ExperienceLevel;
+    category?: 'all' | string;
   },
 ): ExerciseDefinition[] {
   const q = (filters.search || '').trim().toLowerCase();
   return catalog.filter((ex) => {
     if (q) {
-      const hay = `${ex.name} ${ex.equipment} ${ex.primaryMuscles.join(' ')} ${ex.category}`.toLowerCase();
+      const aliases = (ex.aliases || []).join(' ');
+      const benefits = (ex.benefits || []).join(' ');
+      const hay = `${ex.name} ${aliases} ${ex.equipment} ${ex.primaryMuscles.join(' ')} ${ex.category} ${benefits}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     if (filters.environment && filters.environment !== 'all') {
@@ -589,6 +625,12 @@ export function filterExercises(
       ) {
         return false;
       }
+    }
+    if (filters.difficulty && filters.difficulty !== 'all') {
+      if (ex.difficulty !== filters.difficulty) return false;
+    }
+    if (filters.category && filters.category !== 'all') {
+      if (ex.category !== filters.category) return false;
     }
     return true;
   });

@@ -142,11 +142,11 @@ export const SocialShareCardModal: React.FC<SocialShareCardModalProps> = ({
         {/* Actions */}
         <div className="mt-4 pt-4 border-t border-white/10 flex flex-col gap-2.5">
           <div className="grid grid-cols-2 gap-2">
-            <GlassButton variant="primary" onClick={handleWebShare} disabled={isSharing}>
+            <GlassButton variant="primary" fullWidth onClick={handleWebShare} disabled={isSharing}>
               <Share2 className="w-4 h-4 mr-1.5" />
               {isSharing ? 'Preparing...' : 'Share Card'}
             </GlassButton>
-            <GlassButton variant="glass" onClick={handleDownload}>
+            <GlassButton variant="glass" fullWidth onClick={handleDownload}>
               <Download className="w-4 h-4 mr-1.5" />
               Download PNG
             </GlassButton>

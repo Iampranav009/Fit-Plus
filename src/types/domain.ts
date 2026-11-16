@@ -645,9 +645,17 @@ export type ExerciseEquipment =
   | 'resistance_band'
   | 'pullup_bar';
 
+export interface ExerciseMovementPhase {
+  phase: 'start' | 'inflection' | 'end';
+  title: string;
+  imageUrl: string;
+  cues: string[];
+}
+
 export interface ExerciseDefinition {
   id: string;
   name: string;
+  aliases?: string[];
   category: 'strength' | 'mobility' | 'conditioning' | 'recovery';
   environment: ExerciseEnvironment;
   equipment: ExerciseEquipment;
@@ -658,6 +666,13 @@ export interface ExerciseDefinition {
   commonMistakes: string[];
   safetyNotes: string;
   alternativeIds: string[];
+  benefits?: string[];
+  startImageUrl?: string;
+  endImageUrl?: string;
+  thumbnailUrl?: string;
+  animationUrl?: string;
+  movementPhases?: ExerciseMovementPhase[];
+  isVerified?: boolean;
   isCustom?: boolean;
   trainerId?: string;
   trainerUserId?: string;

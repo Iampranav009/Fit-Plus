@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabase';
+import { supabase, markThirdPartyAuthFailed } from '../lib/supabase';
 import { uploadToStorage, getStorageSignedUrl, STORAGE_BUCKETS, type StorageBucketName } from '../lib/supabaseStorage';
 import type { Database, Json } from '../types/database.types';
 import type { User as FirebaseAuthUser } from 'firebase/auth';
@@ -731,47 +731,87 @@ export async function ensureUserDocument(
   }
 
   // Check admin
-  const adminRes = await supabase.from('platform_admins').select('firebase_uid').eq('firebase_uid', uid).maybeSingle();
-  const isPlatformAdmin = Boolean(adminRes.data) || fbUser.email?.toLowerCase() === 'pranavshindeji5001@gmail.com';
+  let isPlatformAdmin = fbUser.email?.toLowerCase() === 'pranavshindeji5001@gmail.com';
+  let userRow: Database['public']['Tables']['app_users']['Row'] | null = null;
 
-  const userRes = await supabase.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle();
+  try {
+    const adminRes = await supabase.from('platform_admins').select('firebase_uid').eq('firebase_uid', uid).maybeSingle();
+    if (adminRes.data) isPlatformAdmin = true;
+    if (adminRes.error && (adminRes.error.code === 'PGRST301' || adminRes.error.message?.includes('JWT'))) {
+      markThirdPartyAuthFailed();
+    }
+  } catch {
+    // proceed
+  }
 
-  if (userRes.data) {
-    const row = userRes.data;
+  try {
+    const userRes = await supabase.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle();
+    if (userRes.data) {
+      userRow = userRes.data;
+    }
+    if (userRes.error && (userRes.error.code === 'PGRST301' || userRes.error.message?.includes('JWT'))) {
+      markThirdPartyAuthFailed();
+    }
+  } catch {
+    // proceed
+  }
+
+  if (userRow) {
     return {
-      user: mapUser(row),
-      onboardingCompleted: row.onboarding_completed,
-      celebratedDateKeys: row.celebrated_date_keys || [],
+      user: mapUser(userRow),
+      onboardingCompleted: userRow.onboarding_completed,
+      celebratedDateKeys: userRow.celebrated_date_keys || [],
       emailVerified: true,
       isPlatformAdmin,
-      pendingInviteToken: row.pending_invite_token || undefined,
+      pendingInviteToken: userRow.pending_invite_token || undefined,
     };
   }
 
-  // Insert user into Supabase
-  const newUser = {
-    firebase_uid: uid,
-    first_name: fallbackFirstName,
-    last_name: fallbackLastName,
-    email: fallbackEmail,
-    role: 'client' as const,
-    timezone: 'Asia/Kolkata',
-    locale: 'en-IN',
-    is_adult_confirmed: false,
-    privacy_consent_accepted: false,
-    onboarding_completed: false,
-    celebrated_date_keys: [],
-  };
+  // Attempt backend claims and role coordination via /api/auth/provision-claims
+  try {
+    const idToken = await fbUser.getIdToken();
+    const provRes = await fetch('/api/auth/provision-claims', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+      },
+    });
+    if (provRes.ok) {
+      const provData = await provRes.json();
+      if (provData.claims?.is_admin) isPlatformAdmin = true;
+      const resolvedRole = (provData.claims?.user_role || (isPlatformAdmin ? 'admin' : (overrides?.role || 'client'))) as UserRole;
+      return {
+        user: {
+          id: uid,
+          firstName: fallbackFirstName,
+          lastName: fallbackLastName,
+          email: fallbackEmail,
+          role: resolvedRole,
+          timezone: 'Asia/Kolkata',
+          locale: 'en-IN',
+          isAdultConfirmed: false,
+          privacyConsentAccepted: false,
+          createdAt: new Date().toISOString(),
+        },
+        onboardingCompleted: false,
+        celebratedDateKeys: [],
+        emailVerified: true,
+        isPlatformAdmin,
+      };
+    }
+  } catch {
+    // fallback below
+  }
 
-  await supabase.from('app_users').insert(newUser);
-
+  // Fallback user object
   return {
     user: {
       id: uid,
       firstName: fallbackFirstName,
       lastName: fallbackLastName,
       email: fallbackEmail,
-      role: 'client',
+      role: isPlatformAdmin ? 'admin' : (overrides?.role || 'client'),
       timezone: 'Asia/Kolkata',
       locale: 'en-IN',
       isAdultConfirmed: false,
@@ -938,8 +978,11 @@ export function subscribeAuthenticatedWorkspace(
     scheduledRemindersRes,
   ]) => {
     const userRow = userRes.data;
+    if (userRes.error && (userRes.error.code === 'PGRST301' || userRes.error.message?.includes('JWT'))) {
+      markThirdPartyAuthFailed();
+    }
     onUpdate({
-      users: userRow ? [mapUser(userRow)] : [],
+      users: userRow ? [mapUser(userRow)] : undefined,
       trainers: (trainersRes.data || []).map(mapTrainer),
       packages: (packagesRes.data || []).map(mapPackage),
       clients: (clientsRes.data || []).map(mapClient),
