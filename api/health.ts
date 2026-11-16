@@ -34,14 +34,22 @@ function checkCashfreeConfig(): {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD');
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
   try {
-    if (req.query.inspect) {
-      const results: Record<string, unknown> = {};
+    const isInspect = Boolean(
+      (req.query && (req.query.inspect !== undefined || req.query['inspect'] !== undefined)) ||
+      (req.url && req.url.includes('inspect'))
+    );
+
+    if (isInspect) {
+      const results: Record<string, unknown> = {
+        reqUrl: req.url,
+        reqQuery: req.query,
+      };
       try {
         const adminMod = await import('./_lib/firebaseAdmin.js');
         results.firebaseAdminImport = 'ok';
