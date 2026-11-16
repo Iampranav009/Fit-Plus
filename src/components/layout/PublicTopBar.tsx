@@ -1,8 +1,19 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useApp } from '../../context/AppContext';
 import { BrandMark } from '../ui/BrandMark';
+import { PWAInstallButton } from '../ui/PWAInstallButton';
 
 export const PublicTopBar: React.FC = () => {
+  const { firebaseUser, isEmailVerified, isCloudSynced, store } = useApp();
+  const isVerifiedUser = Boolean(firebaseUser && isEmailVerified);
+  const workspaceTo =
+    store.session.onboardingCompleted && isCloudSynced
+      ? store.session.activeRole === 'trainer'
+        ? '/studio/overview'
+        : '/app/home'
+      : '/auth';
+
   return (
     <header className="sticky top-0 z-30 px-3 sm:px-6 lg:px-8 pt-2.5 pt-safe">
       <div className="glass-nav max-w-[1280px] mx-auto h-15 rounded-[18px] px-4 sm:px-6 flex items-center justify-between gap-6">
@@ -18,28 +29,30 @@ export const PublicTopBar: React.FC = () => {
             Find a trainer
           </Link>
           <Link to="/welcome" className="hover:text-[#F5F5F7] transition-colors whitespace-nowrap shrink-0">
-            Welcome
+            How it works
           </Link>
           <Link
-            to="/join/FIT-ARJUN-2026"
+            to="/demo"
             className="hover:text-[#F5F5F7] transition-colors whitespace-nowrap shrink-0"
           >
-            Sample invite
+            Interactive demo
           </Link>
           <Link to="/auth" className="hover:text-[#F5F5F7] transition-colors whitespace-nowrap shrink-0">
-            Demo access
+            {isVerifiedUser ? 'Account' : 'Sign in'}
           </Link>
         </nav>
 
-        <div className="flex items-center shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <PWAInstallButton compact />
           <Link
-            to="/auth"
+            to={isVerifiedUser ? workspaceTo : '/auth'}
             className="inline-flex items-center justify-center min-h-[40px] px-4 py-2 rounded-[12px] bg-[#FF803E] text-[#101218] text-[14px] font-semibold hover:bg-[#FF9259] transition-colors shadow-[0_8px_20px_-6px_rgba(255,128,62,0.55)] whitespace-nowrap shrink-0"
           >
-            Get started
+            {isVerifiedUser ? 'Open FitPlus' : 'Get started'}
           </Link>
         </div>
       </div>
     </header>
   );
 };
+

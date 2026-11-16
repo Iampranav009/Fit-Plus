@@ -1,0 +1,66 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Default deny everything
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidImageUpload() {
+      return request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|jpg|png|webp)');
+    }
+
+    // Public trainer storefront avatars & cover photos
+    match /public/trainers/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if isVerified()
+        && request.auth.uid == userId
+        && isValidImageUpload();
+      allow delete: if isVerified() && request.auth.uid == userId;
+    }
+
+    // Private client progress photographs (STRICTLY private unless client explicitly sets sharedWithTrainer == 'true' & trainerUid matches)
+    match /private/clients/{userId}/progress/{fileName} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (
+          resource != null &&
+          resource.metadata != null &&
+          resource.metadata.sharedWithTrainer == 'true' &&
+          resource.metadata.authorizedTrainerUid == request.auth.uid
+        )
+      );
+      allow write: if isVerified()
+        && request.auth.uid == userId
+        && isValidImageUpload();
+      allow delete: if isVerified() && request.auth.uid == userId;
+    }
+
+    // Trainer credential documents for admin verification review
+    match /private/trainers/{userId}/credentials/{fileName} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isVerified()
+        && request.auth.uid == userId
+        && request.resource != null
+        && request.resource.size > 0
+        && request.resource.size <= 8 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/(jpeg|jpg|png|webp)') ||
+          request.resource.contentType == 'application/pdf'
+        );
+      allow delete: if isVerified() && request.auth.uid == userId;
+    }
+  }
+}

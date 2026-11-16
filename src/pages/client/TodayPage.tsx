@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Calendar, ChevronRight, Droplets, Plus, Sparkles } from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
@@ -30,10 +30,14 @@ export const TodayPage: React.FC = () => {
     activeUser,
     activeClient,
     activeCoach,
+    isCloudSynced,
+    todayHydrationGlasses,
+    setTodayHydrationGlasses,
     celebrateStreakToday,
     dismissStreakCelebration,
     toggleAssignmentCompletion,
     addProgressMeasurement,
+    getClientApprovedRecoveryDates,
   } = useApp();
   const navigate = useNavigate();
 
@@ -46,28 +50,8 @@ export const TodayPage: React.FC = () => {
   const [quickNote, setQuickNote] = useState('');
   const [quickError, setQuickError] = useState('');
 
-  const hydrationStorageKey = activeClient ? `fitplus_hydration_${activeClient.id}_${todayKey}` : '';
-  const [waterGlasses, setWaterGlasses] = useState<number>(() => {
-    if (!hydrationStorageKey || typeof window === 'undefined') return 5;
-    const saved = window.localStorage.getItem(hydrationStorageKey);
-    const parsed = saved ? Number(saved) : NaN;
-    return Number.isFinite(parsed) ? Math.max(0, Math.min(12, parsed)) : 5;
-  });
-
-  useEffect(() => {
-    if (!hydrationStorageKey || typeof window === 'undefined') return;
-    const saved = window.localStorage.getItem(hydrationStorageKey);
-    const parsed = saved ? Number(saved) : NaN;
-    setWaterGlasses(Number.isFinite(parsed) ? Math.max(0, Math.min(12, parsed)) : 5);
-  }, [hydrationStorageKey]);
-
-  const updateWater = (next: number) => {
-    const clamped = Math.max(0, Math.min(12, next));
-    setWaterGlasses(clamped);
-    if (hydrationStorageKey && typeof window !== 'undefined') {
-      window.localStorage.setItem(hydrationStorageKey, String(clamped));
-    }
-  };
+  const waterGlasses = todayHydrationGlasses;
+  const updateWater = setTodayHydrationGlasses;
 
   const clientAssignments = useMemo(() => {
     if (!activeClient) return [];
@@ -79,14 +63,26 @@ export const TodayPage: React.FC = () => {
     return store.completions.filter((c) => c.clientId === activeClient.id);
   }, [store.completions, activeClient]);
 
+  const approvedRecoveryDates = useMemo(() => {
+    if (!activeClient) return [];
+    return getClientApprovedRecoveryDates(activeClient.id);
+  }, [activeClient, getClientApprovedRecoveryDates]);
+
   const todayTasks = useMemo(
     () => clientAssignments.filter((a) => a.scheduledDates.includes(todayKey)),
     [clientAssignments, todayKey],
   );
 
   const todaySummary = useMemo(
-    () => computeDayConsistency(todayKey, clientAssignments, clientCompletions, todayKey),
-    [todayKey, clientAssignments, clientCompletions],
+    () =>
+      computeDayConsistency(
+        todayKey,
+        clientAssignments,
+        clientCompletions,
+        todayKey,
+        approvedRecoveryDates,
+      ),
+    [todayKey, clientAssignments, clientCompletions, approvedRecoveryDates],
   );
 
   const yesterdaySummary = useMemo(
@@ -96,18 +92,32 @@ export const TodayPage: React.FC = () => {
         clientAssignments,
         clientCompletions,
         todayKey,
+        approvedRecoveryDates,
       ),
-    [todayKey, clientAssignments, clientCompletions],
+    [todayKey, clientAssignments, clientCompletions, approvedRecoveryDates],
   );
 
   const streak = useMemo(
-    () => computeStreakSummary(clientAssignments, clientCompletions, todayKey),
-    [clientAssignments, clientCompletions, todayKey],
+    () =>
+      computeStreakSummary(
+        clientAssignments,
+        clientCompletions,
+        todayKey,
+        120,
+        approvedRecoveryDates,
+      ),
+    [clientAssignments, clientCompletions, todayKey, approvedRecoveryDates],
   );
 
   const weeklyStrip = useMemo(
-    () => computeWeeklyStrip(todayKey, clientAssignments, clientCompletions),
-    [todayKey, clientAssignments, clientCompletions],
+    () =>
+      computeWeeklyStrip(
+        todayKey,
+        clientAssignments,
+        clientCompletions,
+        approvedRecoveryDates,
+      ),
+    [todayKey, clientAssignments, clientCompletions, approvedRecoveryDates],
   );
 
   const mealPlan = useMemo(
@@ -432,7 +442,7 @@ export const TodayPage: React.FC = () => {
                   {waterGlasses} / 8 glasses
                 </p>
                 <p className="text-[12px] text-[#7C8393] tabular-nums">
-                  {waterGlasses * 250} ml logged on this device
+                  {waterGlasses * 250} ml · {isCloudSynced ? 'Synced to your FitPlus account' : 'Saved in demo preview'}
                 </p>
               </div>
             </div>

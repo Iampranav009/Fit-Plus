@@ -1,47 +1,164 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, LogOut, Mail } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  KeyRound,
+  LogOut,
+  Mail,
+  RefreshCw,
+  ShieldCheck,
+} from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { BrandMark } from '../../components/ui/BrandMark';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField } from '../../components/ui/InputField';
 
+type EmailAuthMode = 'signin' | 'signup' | 'reset';
+
+function getSafeRedirect(raw: string | null): string | null {
+  if (!raw) return null;
+  if (raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/auth')) {
+    return raw;
+  }
+  return null;
+}
+
 export const AuthPage: React.FC = () => {
   const {
     store,
     firebaseUser,
+    isEmailVerified,
+    isPlatformAdmin,
     isCloudSynced,
     authBusy,
     signInWithGoogle,
+    signUpWithEmail,
+    signInWithEmail,
+    resendVerificationEmail,
+    refreshVerificationState,
+    sendPasswordReset,
     signOutGoogle,
     startDemoAsRole,
-    pushToast,
   } = useApp();
   const navigate = useNavigate();
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [sampleEmail, setSampleEmail] = useState('sample.user@demo.fitplus.in');
-  const [emailError, setEmailError] = useState('');
+  const [searchParams] = useSearchParams();
+  const redirectTarget = useMemo(() => getSafeRedirect(searchParams.get('redirect')), [searchParams]);
+
+  const [emailMode, setEmailMode] = useState<EmailAuthMode>('signin');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+
+  const navigateAfterAuth = (params: {
+    onboardingCompleted?: boolean;
+    role?: string;
+    isAdmin?: boolean;
+  }) => {
+    if (redirectTarget) {
+      if (params.onboardingCompleted || redirectTarget.startsWith('/join/')) {
+        navigate(redirectTarget, { replace: true });
+        return;
+      }
+    }
+    if (store.session.pendingInviteToken && params.onboardingCompleted) {
+      navigate(`/join/${store.session.pendingInviteToken}`, { replace: true });
+      return;
+    }
+    if (!params.onboardingCompleted) {
+      navigate('/onboarding/role', { replace: true });
+      return;
+    }
+    if (params.isAdmin || params.role === 'admin') {
+      navigate('/admin', { replace: true });
+      return;
+    }
+    navigate(params.role === 'trainer' ? '/studio/overview' : '/app/home', { replace: true });
+  };
 
   const handleGoogleSignIn = async () => {
+    setFormError('');
     const res = await signInWithGoogle();
-    if (!res.ok) return;
-    if (res.onboardingCompleted) {
-      navigate(res.role === 'trainer' ? '/studio/overview' : '/app/home');
-    } else {
-      navigate('/onboarding/role');
+    if (!res.ok) {
+      if (res.error) setFormError(res.error);
+      return;
+    }
+    if (res.emailVerified === false) return;
+    navigateAfterAuth({
+      onboardingCompleted: res.onboardingCompleted,
+      role: res.role,
+      isAdmin: res.isPlatformAdmin,
+    });
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+    setResetSent(false);
+
+    if (!email.trim() || !email.includes('@')) {
+      setFormError('Enter a valid email address.');
+      return;
+    }
+
+    if (emailMode === 'reset') {
+      const res = await sendPasswordReset(email);
+      if (res.ok) {
+        setResetSent(true);
+      } else {
+        setFormError(res.error || 'Could not send reset email.');
+      }
+      return;
+    }
+
+    if (password.length < 8) {
+      setFormError('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (emailMode === 'signup') {
+      if (!fullName.trim()) {
+        setFormError('Enter your full name to create your account.');
+        return;
+      }
+      if (!consentAccepted) {
+        setFormError('Please confirm you are 18+ and accept FitPlus Terms & Privacy Policy.');
+        return;
+      }
+      const res = await signUpWithEmail({ email, password, fullName });
+      if (!res.ok && res.error) {
+        setFormError(res.error);
+      }
+      return;
+    }
+
+    const res = await signInWithEmail(email, password);
+    if (!res.ok) {
+      setFormError(res.error || 'Invalid email or password.');
+      return;
+    }
+    if (res.emailVerified) {
+      navigateAfterAuth({
+        onboardingCompleted: res.onboardingCompleted,
+        role: res.role,
+        isAdmin: res.isPlatformAdmin,
+      });
     }
   };
 
-  const handleEmailContinue = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!sampleEmail.trim() || !sampleEmail.includes('@')) {
-      setEmailError('Enter a sample email format to continue.');
-      return;
+  const handleCheckVerification = async () => {
+    const res = await refreshVerificationState();
+    if (res.ok && res.emailVerified) {
+      navigateAfterAuth({
+        onboardingCompleted: res.onboardingCompleted,
+        role: res.role,
+        isAdmin: res.isPlatformAdmin,
+      });
     }
-    setEmailError('');
-    pushToast('Offline demo email step complete (no real account created).', 'info');
-    navigate('/onboarding/role');
   };
 
   return (
@@ -63,50 +180,124 @@ export const AuthPage: React.FC = () => {
 
       <main className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-md rounded-[28px] surface-card p-6 sm:p-8 flex flex-col gap-6">
-          <div>
-            <p className="text-[12px] font-medium text-[#FFB06B]">
-              {firebaseUser ? 'Google account connected' : 'Sign in or preview FitPlus'}
-            </p>
-            <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-              {COPY.public.authTitle}
-            </h1>
-            <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-              {firebaseUser
-                ? `Signed in as ${firebaseUser.email || firebaseUser.displayName || 'Google user'}. Your workouts, plans, and bookings sync to Firestore.`
-                : 'Sign in with Google to save your profile and coaching data in Firestore, or explore offline demo personas below.'}
-            </p>
-          </div>
+          {firebaseUser && !isEmailVerified ? (
+            <>
+              <div>
+                <p className="text-[12px] font-medium text-[#FFB06B] inline-flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5" aria-hidden="true" />
+                  Email verification required
+                </p>
+                <h1 className="mt-2 text-[26px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
+                  Verify your inbox to continue
+                </h1>
+                <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
+                  We sent a verification link to{' '}
+                  <span className="text-[#F5F5F7] font-medium">{firebaseUser.email}</span>. Click
+                  the link in that email, then tap below to unlock your FitPlus workspace.
+                </p>
+              </div>
 
-          {firebaseUser ? (
-            <div className="flex flex-col gap-3">
-              <GlassButton
-                fullWidth
-                onClick={() => {
-                  if (!store.session.onboardingCompleted) {
-                    navigate('/onboarding/role');
-                  } else {
-                    navigate(
-                      store.session.activeRole === 'trainer' ? '/studio/overview' : '/app/home',
-                    );
+              <div className="flex flex-col gap-3">
+                <GlassButton
+                  fullWidth
+                  disabled={authBusy}
+                  onClick={() => void handleCheckVerification()}
+                >
+                  <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
+                  {authBusy ? 'Checking status…' : "I've verified — continue"}
+                </GlassButton>
+                <GlassButton
+                  variant="glass"
+                  fullWidth
+                  disabled={authBusy}
+                  onClick={() => void resendVerificationEmail()}
+                >
+                  <RefreshCw className="w-4 h-4" aria-hidden="true" />
+                  Resend verification email
+                </GlassButton>
+                <GlassButton
+                  variant="tertiary"
+                  fullWidth
+                  disabled={authBusy}
+                  onClick={() => void signOutGoogle()}
+                >
+                  <LogOut className="w-4 h-4" aria-hidden="true" />
+                  Sign out
+                </GlassButton>
+              </div>
+            </>
+          ) : firebaseUser && isEmailVerified ? (
+            <>
+              <div>
+                <p className="text-[12px] font-medium text-[#B8E66C] inline-flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" aria-hidden="true" />
+                  Verified FitPlus account
+                </p>
+                <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
+                  Welcome back
+                </h1>
+                <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
+                  Signed in as{' '}
+                  <span className="text-[#F5F5F7] font-medium">
+                    {firebaseUser.email || firebaseUser.displayName}
+                  </span>
+                  . Your workouts, plans, and coaching records sync securely to Firestore.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <GlassButton
+                  fullWidth
+                  onClick={() =>
+                    navigateAfterAuth({
+                      onboardingCompleted: store.session.onboardingCompleted,
+                      role: store.session.activeRole,
+                      isAdmin: isPlatformAdmin,
+                    })
                   }
-                }}
-              >
-                {store.session.onboardingCompleted && isCloudSynced
-                  ? `Continue to ${store.session.activeRole === 'trainer' ? 'Trainer Studio' : 'FitPlus'}`
-                  : 'Complete onboarding'}
-              </GlassButton>
-              <GlassButton
-                variant="glass"
-                fullWidth
-                disabled={authBusy}
-                onClick={() => void signOutGoogle()}
-              >
-                <LogOut className="w-4 h-4" aria-hidden="true" />
-                Sign out of Google
-              </GlassButton>
-            </div>
-          ) : !showEmailForm ? (
-            <div className="flex flex-col gap-3">
+                >
+                  {store.session.onboardingCompleted && isCloudSynced
+                    ? `Continue to ${
+                        isPlatformAdmin
+                          ? 'Admin Console'
+                          : store.session.activeRole === 'trainer'
+                            ? 'Trainer Studio'
+                            : 'FitPlus'
+                      }`
+                    : 'Complete onboarding'}
+                </GlassButton>
+                {isPlatformAdmin ? (
+                  <GlassButton variant="secondary" fullWidth onClick={() => navigate('/admin')}>
+                    Open Admin Moderation Console
+                  </GlassButton>
+                ) : null}
+                <GlassButton
+                  variant="glass"
+                  fullWidth
+                  disabled={authBusy}
+                  onClick={() => void signOutGoogle()}
+                >
+                  <LogOut className="w-4 h-4" aria-hidden="true" />
+                  Sign out
+                </GlassButton>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <p className="text-[12px] font-medium text-[#FFB06B]">
+                  {store.session.pendingInviteToken
+                    ? `Invitation ${store.session.pendingInviteToken} ready`
+                    : 'Personal coaching account'}
+                </p>
+                <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
+                  {COPY.public.authTitle}
+                </h1>
+                <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
+                  Sign in with Google or email & password to sync your coaching workspace across devices.
+                </p>
+              </div>
+
               <GlassButton
                 variant="primary"
                 fullWidth
@@ -131,74 +322,196 @@ export const AuthPage: React.FC = () => {
                     d="M12 6c1.5 0 2.8.5 3.9 1.5l2.9-2.9C17 2.9 14.7 2 12 2 8.1 2 4.7 4.2 3 7.6l3.3 2.6C7.1 7.8 9.3 6 12 6z"
                   />
                 </svg>
-                {authBusy ? 'Signing in…' : COPY.public.continueGoogle}
+                {authBusy ? 'Connecting…' : COPY.public.continueGoogle}
               </GlassButton>
 
-              <GlassButton
-                variant="glass"
-                fullWidth
-                onClick={() => setShowEmailForm(true)}
+              <div className="flex items-center gap-3 text-[12px] text-[#7C8393]">
+                <span className="h-px flex-1 bg-white/[0.08]" />
+                <span>or with email</span>
+                <span className="h-px flex-1 bg-white/[0.08]" />
+              </div>
+
+              <div
+                role="tablist"
+                aria-label="Email authentication mode"
+                className="grid grid-cols-2 p-1 rounded-[14px] bg-[#101218] border border-white/[0.08]"
               >
-                <Mail className="w-4 h-4" aria-hidden="true" />
-                {COPY.public.continueEmail} (offline demo)
-              </GlassButton>
-            </div>
-          ) : (
-            <form onSubmit={handleEmailContinue} className="flex flex-col gap-4">
-              <InputField
-                label="Sample email address"
-                type="email"
-                value={sampleEmail}
-                onChange={(e) => setSampleEmail(e.target.value)}
-                error={emailError}
-                helper="Offline demo only — no password required and no account created."
-              />
-              <div className="flex gap-2.5">
-                <GlassButton type="button" variant="secondary" onClick={() => setShowEmailForm(false)}>
-                  Back
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={emailMode === 'signin' || emailMode === 'reset'}
+                  onClick={() => {
+                    setEmailMode('signin');
+                    setFormError('');
+                    setResetSent(false);
+                  }}
+                  className={`min-h-[40px] rounded-[10px] text-[13px] font-medium transition-colors cursor-pointer ${
+                    emailMode === 'signin' || emailMode === 'reset'
+                      ? 'bg-[#252A35] text-[#F5F5F7]'
+                      : 'text-[#A2A8B5] hover:text-[#F5F5F7]'
+                  }`}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={emailMode === 'signup'}
+                  onClick={() => {
+                    setEmailMode('signup');
+                    setFormError('');
+                    setResetSent(false);
+                  }}
+                  className={`min-h-[40px] rounded-[10px] text-[13px] font-medium transition-colors cursor-pointer ${
+                    emailMode === 'signup'
+                      ? 'bg-[#252A35] text-[#F5F5F7]'
+                      : 'text-[#A2A8B5] hover:text-[#F5F5F7]'
+                  }`}
+                >
+                  Create account
+                </button>
+              </div>
+
+              <form onSubmit={(e) => void handleEmailSubmit(e)} className="flex flex-col gap-3.5">
+                {emailMode === 'signup' ? (
+                  <InputField
+                    label="Full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g., Rohan Kulkarni"
+                    autoComplete="name"
+                  />
+                ) : null}
+
+                <InputField
+                  label="Email address"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                />
+
+                {emailMode !== 'reset' ? (
+                  <InputField
+                    label="Password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={emailMode === 'signup' ? 'Minimum 8 characters' : 'Enter your password'}
+                    autoComplete={emailMode === 'signup' ? 'new-password' : 'current-password'}
+                  />
+                ) : null}
+
+                {emailMode === 'signup' ? (
+                  <label className="flex items-start gap-2.5 rounded-[14px] surface-elevated p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={consentAccepted}
+                      onChange={(e) => setConsentAccepted(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-[#FF803E]"
+                    />
+                    <span className="text-[12px] text-[#A2A8B5] leading-relaxed">
+                      I confirm I am 18+ and agree to FitPlus Terms of Use & Privacy Policy.
+                    </span>
+                  </label>
+                ) : null}
+
+                {formError ? (
+                  <p role="alert" className="text-[13px] text-[#FF6B70]">
+                    {formError}
+                  </p>
+                ) : null}
+
+                {resetSent ? (
+                  <p role="status" className="text-[13px] text-[#B8E66C]">
+                    Password reset link sent to {email}. Check your inbox.
+                  </p>
+                ) : null}
+
+                <GlassButton type="submit" variant="glass" fullWidth disabled={authBusy}>
+                  {emailMode === 'reset' ? (
+                    <>
+                      <KeyRound className="w-4 h-4" aria-hidden="true" />
+                      {authBusy ? 'Sending…' : 'Send password reset link'}
+                    </>
+                  ) : emailMode === 'signup' ? (
+                    authBusy ? 'Creating account…' : 'Create verified account'
+                  ) : authBusy ? (
+                    'Signing in…'
+                  ) : (
+                    'Sign in with email'
+                  )}
                 </GlassButton>
-                <GlassButton type="submit" fullWidth>
-                  Continue (demo)
+
+                {emailMode === 'signin' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailMode('reset');
+                      setFormError('');
+                    }}
+                    className="self-end text-[12px] text-[#FFB06B] hover:text-[#FF803E] cursor-pointer py-1"
+                  >
+                    Forgot password?
+                  </button>
+                ) : emailMode === 'reset' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmailMode('signin');
+                      setFormError('');
+                      setResetSent(false);
+                    }}
+                    className="self-end text-[12px] text-[#A2A8B5] hover:text-[#F5F5F7] cursor-pointer py-1"
+                  >
+                    Back to password sign-in
+                  </button>
+                ) : null}
+              </form>
+
+              <div className="pt-4 border-t border-white/[0.08] flex flex-col gap-2.5">
+                <p className="text-[13px] font-medium text-[#F5F5F7]">
+                  Interactive Demo Sandbox (offline sample data)
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <GlassButton
+                    variant="secondary"
+                    size="sm"
+                    fullWidth
+                    onClick={() => {
+                      startDemoAsRole('client', 'usr_client_aarav');
+                      navigate('/app/home');
+                    }}
+                  >
+                    Demo: Client (Aarav)
+                  </GlassButton>
+                  <GlassButton
+                    variant="secondary"
+                    size="sm"
+                    fullWidth
+                    onClick={() => {
+                      startDemoAsRole('trainer', 'usr_trainer_arjun');
+                      navigate('/studio/overview');
+                    }}
+                  >
+                    Demo: Coach (Arjun)
+                  </GlassButton>
+                </div>
+                <GlassButton
+                  variant="tertiary"
+                  size="sm"
+                  fullWidth
+                  onClick={() => {
+                    startDemoAsRole('client', 'usr_client_kavya');
+                    navigate('/app/home');
+                  }}
+                >
+                  Demo: Independent Client (Kavya)
                 </GlassButton>
               </div>
-            </form>
+            </>
           )}
-
-          <div className="pt-4 border-t border-white/[0.08] flex flex-col gap-2.5">
-            <p className="text-[13px] font-medium text-[#F5F5F7]">
-              {COPY.public.exploreDemo}
-            </p>
-            <GlassButton
-              variant="secondary"
-              fullWidth
-              onClick={() => {
-                startDemoAsRole('client', 'usr_client_aarav');
-                navigate('/app/home');
-              }}
-            >
-              Quick preview: Client (Aarav)
-            </GlassButton>
-            <GlassButton
-              variant="secondary"
-              fullWidth
-              onClick={() => {
-                startDemoAsRole('trainer', 'usr_trainer_arjun');
-                navigate('/studio/overview');
-              }}
-            >
-              Quick preview: Trainer Studio (Arjun)
-            </GlassButton>
-            <GlassButton
-              variant="tertiary"
-              fullWidth
-              onClick={() => {
-                startDemoAsRole('client', 'usr_client_kavya');
-                navigate('/app/home');
-              }}
-            >
-              Quick preview: Independent Client (Kavya)
-            </GlassButton>
-          </div>
         </div>
       </main>
     </div>

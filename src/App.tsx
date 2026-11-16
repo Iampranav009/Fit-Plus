@@ -1,11 +1,13 @@
-import React from 'react';
-import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { AppProvider, useApp } from './context/AppContext';
 import type { UserRole } from './types/domain';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { GlassButton } from './components/ui/GlassButton';
 import { BrandMark } from './components/ui/BrandMark';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { OfflineIndicator } from './components/ui/OfflineIndicator';
 
 // Public pages
 import { LandingPage } from './pages/public/LandingPage';
@@ -30,6 +32,7 @@ import { ConsultationsPage } from './pages/client/ConsultationsPage';
 import { ProfilePage } from './pages/client/ProfilePage';
 import { SettingsPage } from './pages/client/SettingsPage';
 import { NotificationsPage } from './pages/client/NotificationsPage';
+import { ClientPaymentsPage } from './pages/client/ClientPaymentsPage';
 
 // Trainer Studio pages
 import { StudioOverviewPage } from './pages/trainer/StudioOverviewPage';
@@ -44,24 +47,112 @@ import { StudioStorefrontPage } from './pages/trainer/StudioStorefrontPage';
 import { StudioSettingsPage } from './pages/trainer/StudioSettingsPage';
 import { StudioNotificationsPage } from './pages/trainer/StudioNotificationsPage';
 
-/**
- * STAGE 1 DEMO ROUTE GUARD ONLY.
- * IMPORTANT: This client-side guard separates client and trainer demo views in Stage 1
- * and is NOT real authentication or authorization. Real server-side auth, tenant isolation,
- * and RBAC enforcement belong in Stage 2.
- */
-const DemoRoleGuard: React.FC<{
-  requiredRole: UserRole;
+// Admin page
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+
+const AuthLoadingSplash: React.FC = () => (
+  <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6 gap-4">
+    <BrandMark />
+    <p className="text-[14px] text-[#A2A8B5]">Preparing your FitPlus workspace…</p>
+  </div>
+);
+
+const ProtectedRoute: React.FC<{
+  allowedRoles: UserRole[];
+  requireAdmin?: boolean;
   children: React.ReactNode;
-}> = ({ requiredRole, children }) => {
-  const { store, startDemoAsRole } = useApp();
+}> = ({ allowedRoles, requireAdmin = false, children }) => {
+  const {
+    store,
+    activeUser,
+    isAuthReady,
+    firebaseUser,
+    isEmailVerified,
+    isPlatformAdmin,
+    isCloudSynced,
+    isDemoSandbox,
+    startDemoAsRole,
+  } = useApp();
+  const location = useLocation();
   const navigate = useNavigate();
 
-  if (!store.session.isAuthenticated) {
-    return <Navigate to="/auth" replace />;
+  if (!isAuthReady) {
+    return <AuthLoadingSplash />;
   }
 
-  if (store.session.activeRole !== requiredRole) {
+  const redirectPath = `${location.pathname}${location.search}`;
+
+  if (!firebaseUser && !isDemoSandbox) {
+    return <Navigate to={`/auth?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+  }
+
+  if (firebaseUser && !isEmailVerified && !isDemoSandbox) {
+    return <Navigate to={`/auth?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+  }
+
+  if (requireAdmin) {
+    if (!isCloudSynced || !isPlatformAdmin) {
+      return (
+        <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6">
+          <div className="max-w-md w-full rounded-[24px] surface-card p-6 sm:p-7 text-center space-y-4">
+            <div className="flex justify-center">
+              <BrandMark />
+            </div>
+            <h1 className="text-[22px] font-semibold">Admin access required</h1>
+            <p className="text-[14px] text-[#A2A8B5]">
+              This moderation console is restricted to authorized FitPlus platform administrators.
+            </p>
+            <GlassButton
+              fullWidth
+              onClick={() =>
+                navigate(activeUser.role === 'trainer' ? '/studio/overview' : '/app/home')
+              }
+            >
+              Return to your workspace
+            </GlassButton>
+          </div>
+        </div>
+      );
+    }
+    return <>{children}</>;
+  }
+
+  if (isCloudSynced && !store.session.onboardingCompleted) {
+    return <Navigate to="/onboarding/role" replace />;
+  }
+
+  const currentRole = isCloudSynced ? activeUser.role : store.session.activeRole;
+
+  if (!allowedRoles.includes(currentRole)) {
+    if (isCloudSynced) {
+      return (
+        <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6">
+          <div className="max-w-md w-full rounded-[24px] surface-card p-6 sm:p-7 text-center space-y-4">
+            <div className="flex justify-center">
+              <BrandMark />
+            </div>
+            <h1 className="text-[22px] font-semibold">
+              {allowedRoles.includes('trainer') ? 'Trainer Studio access' : 'Client App access'}
+            </h1>
+            <p className="text-[14px] text-[#A2A8B5]">
+              Your account is configured as a{' '}
+              <span className="text-[#F5F5F7] font-medium">{currentRole}</span>. Return to your
+              authorized FitPlus workspace.
+            </p>
+            <GlassButton
+              fullWidth
+              onClick={() =>
+                navigate(currentRole === 'trainer' ? '/studio/overview' : '/app/home')
+              }
+            >
+              Open {currentRole === 'trainer' ? 'Trainer Studio' : 'Client App'}
+            </GlassButton>
+          </div>
+        </div>
+      );
+    }
+
+    const demoTargetRole = allowedRoles[0] || 'client';
     return (
       <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6">
         <div className="max-w-md w-full rounded-[24px] surface-card p-6 sm:p-7 text-center space-y-4">
@@ -69,31 +160,30 @@ const DemoRoleGuard: React.FC<{
             <BrandMark />
           </div>
           <h1 className="text-[22px] font-semibold">
-            {requiredRole === 'trainer' ? 'Trainer Studio demo route' : 'Client App demo route'}
+            {demoTargetRole === 'trainer' ? 'Trainer Studio demo route' : 'Client App demo route'}
           </h1>
           <p className="text-[14px] text-[#A2A8B5]">
             You are currently previewing the{' '}
-            <span className="text-[#F5F5F7] font-medium">{store.session.activeRole}</span> demo.
-            Switch your demo preview role below to enter this workspace.
+            <span className="text-[#F5F5F7] font-medium">{currentRole}</span> demo sandbox.
           </p>
           <div className="flex flex-col gap-2.5 pt-2">
             <GlassButton
               fullWidth
               onClick={() => {
-                startDemoAsRole(requiredRole);
-                navigate(requiredRole === 'trainer' ? '/studio/overview' : '/app/home');
+                startDemoAsRole(demoTargetRole);
+                navigate(demoTargetRole === 'trainer' ? '/studio/overview' : '/app/home');
               }}
             >
-              Switch to {requiredRole === 'trainer' ? 'Trainer Studio' : 'Client'} demo
+              Switch to {demoTargetRole === 'trainer' ? 'Trainer Studio' : 'Client'} demo
             </GlassButton>
             <GlassButton
               variant="secondary"
               fullWidth
               onClick={() =>
-                navigate(store.session.activeRole === 'trainer' ? '/studio/overview' : '/app/home')
+                navigate(currentRole === 'trainer' ? '/studio/overview' : '/app/home')
               }
             >
-              Return to {store.session.activeRole} workspace
+              Return to {currentRole} workspace
             </GlassButton>
           </div>
         </div>
@@ -104,25 +194,73 @@ const DemoRoleGuard: React.FC<{
   return <>{children}</>;
 };
 
+const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthReady, firebaseUser, isEmailVerified, isDemoSandbox } = useApp();
+  const location = useLocation();
+
+  if (!isAuthReady) {
+    return <AuthLoadingSplash />;
+  }
+
+  if (!firebaseUser && !isDemoSandbox) {
+    return (
+      <Navigate
+        to={`/auth?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`}
+        replace
+      />
+    );
+  }
+
+  if (firebaseUser && !isEmailVerified && !isDemoSandbox) {
+    return (
+      <Navigate
+        to={`/auth?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`}
+        replace
+      />
+    );
+  }
+
+  return <>{children}</>;
+};
+
+const DemoEntryPage: React.FC = () => {
+  const { startDemoAsRole } = useApp();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    startDemoAsRole('client', 'usr_client_aarav');
+    navigate('/app/home', { replace: true });
+  }, [startDemoAsRole, navigate]);
+
+  return <AuthLoadingSplash />;
+};
+
 const NotFoundPage: React.FC = () => (
   <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6 text-center gap-4">
     <BrandMark />
-    <h1 className="text-[28px] font-semibold">Page not found</h1>
+    <p className="text-[13px] font-semibold tracking-wider uppercase text-[#FF803E]">404</p>
+    <h1 className="text-[30px] font-semibold tracking-[-0.02em]">Page not found</h1>
     <p className="text-[14px] text-[#A2A8B5] max-w-md">
-      The FitPlus demo route you requested does not exist.
+      The FitPlus page you requested does not exist or may have moved.
     </p>
-    <div className="flex flex-wrap gap-3">
+    <div className="flex flex-wrap justify-center gap-3 pt-1">
       <Link
         to="/"
         className="min-h-[44px] px-5 py-2 rounded-[14px] bg-[#FF803E] text-[#101218] text-[14px] font-semibold inline-flex items-center hover:bg-[#FF9259] transition-colors"
       >
-        Landing page
+        Go to FitPlus home
       </Link>
       <Link
-        to="/app/home"
+        to="/discover"
         className="min-h-[44px] px-5 py-2 rounded-[14px] glass-control text-[#F5F5F7] text-[14px] font-medium inline-flex items-center hover:border-white/20 transition-colors"
       >
-        Client Today
+        Browse coaches
+      </Link>
+      <Link
+        to="/auth"
+        className="min-h-[44px] px-5 py-2 rounded-[14px] glass-control text-[#F5F5F7] text-[14px] font-medium inline-flex items-center hover:border-white/20 transition-colors"
+      >
+        Sign in
       </Link>
     </div>
   </div>
@@ -130,197 +268,240 @@ const NotFoundPage: React.FC = () => (
 
 export default function App() {
   return (
-    <MotionConfig reducedMotion="user">
-      <AppProvider>
-        <BrowserRouter>
-          <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/welcome" element={<WelcomePage />} />
-          <Route path="/auth" element={<AuthPage />} />
-          <Route path="/join/:token" element={<InvitePage />} />
-          <Route path="/discover" element={<DiscoverPage />} />
-          <Route path="/trainers/:slug" element={<TrainerPublicProfilePage />} />
+    <ErrorBoundary>
+      <MotionConfig reducedMotion="user">
+        <AppProvider>
+          <BrowserRouter>
+            <OfflineIndicator />
+            <Routes>
+            {/* Public Routes */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/welcome" element={<WelcomePage />} />
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/demo" element={<DemoEntryPage />} />
+            <Route path="/join/:token" element={<InvitePage />} />
+            <Route path="/discover" element={<DiscoverPage />} />
+            <Route path="/trainers/:slug" element={<TrainerPublicProfilePage />} />
 
-          {/* Onboarding Routes */}
-          <Route path="/onboarding/role" element={<RoleSelectPage />} />
-          <Route path="/onboarding/client" element={<Navigate to="/onboarding/client/basics" replace />} />
-          <Route path="/onboarding/client/:step" element={<ClientOnboardingPage />} />
-          <Route path="/onboarding/trainer" element={<Navigate to="/onboarding/trainer/profile" replace />} />
-          <Route path="/onboarding/trainer/:step" element={<TrainerOnboardingPage />} />
-          <Route path="/onboarding/review" element={<Navigate to="/onboarding/client/review" replace />} />
+            {/* Onboarding Routes */}
+            <Route
+              path="/onboarding/role"
+              element={
+                <OnboardingGuard>
+                  <RoleSelectPage />
+                </OnboardingGuard>
+              }
+            />
+            <Route path="/onboarding/client" element={<Navigate to="/onboarding/client/basics" replace />} />
+            <Route
+              path="/onboarding/client/:step"
+              element={
+                <OnboardingGuard>
+                  <ClientOnboardingPage />
+                </OnboardingGuard>
+              }
+            />
+            <Route path="/onboarding/trainer" element={<Navigate to="/onboarding/trainer/profile" replace />} />
+            <Route
+              path="/onboarding/trainer/:step"
+              element={
+                <OnboardingGuard>
+                  <TrainerOnboardingPage />
+                </OnboardingGuard>
+              }
+            />
+            <Route path="/onboarding/review" element={<Navigate to="/onboarding/client/review" replace />} />
 
-          {/* Client Routes */}
-          <Route path="/app" element={<Navigate to="/app/home" replace />} />
-          <Route
-            path="/app/home"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <TodayPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/plan"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <PlanPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/tasks/:id"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <TaskDetailPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/progress"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <ProgressPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/coach"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <CoachPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/consultations"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <ConsultationsPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/profile"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <ProfilePage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/settings"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <SettingsPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/app/notifications"
-            element={
-              <DemoRoleGuard requiredRole="client">
-                <NotificationsPage />
-              </DemoRoleGuard>
-            }
-          />
+            {/* Client Routes */}
+            <Route path="/app" element={<Navigate to="/app/home" replace />} />
+            <Route
+              path="/app/home"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <TodayPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/plan"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <PlanPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/tasks/:id"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <TaskDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/progress"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ProgressPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/coach"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <CoachPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/consultations"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ConsultationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/profile"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/settings"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <SettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/notifications"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <NotificationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/payments"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ClientPaymentsPage />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Trainer Studio Routes */}
-          <Route path="/studio" element={<Navigate to="/studio/overview" replace />} />
-          <Route
-            path="/studio/overview"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioOverviewPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/clients"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioClientsPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/clients/:id"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioClientDetailPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/assign"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioAssignPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/templates"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioTemplatesPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/ai-builder"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioAIBuilderPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/packages"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioPackagesPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/consultations"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioConsultationsPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/storefront"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioStorefrontPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/settings"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioSettingsPage />
-              </DemoRoleGuard>
-            }
-          />
-          <Route
-            path="/studio/notifications"
-            element={
-              <DemoRoleGuard requiredRole="trainer">
-                <StudioNotificationsPage />
-              </DemoRoleGuard>
-            }
-          />
+            {/* Trainer Studio Routes */}
+            <Route path="/studio" element={<Navigate to="/studio/overview" replace />} />
+            <Route
+              path="/studio/overview"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioOverviewPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/clients"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioClientsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/clients/:id"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioClientDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/assign"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioAssignPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/templates"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioTemplatesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/ai-builder"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioAIBuilderPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/packages"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioPackagesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/consultations"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioConsultationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/storefront"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioStorefrontPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/settings"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioSettingsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/notifications"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioNotificationsPage />
+                </ProtectedRoute>
+              }
+            />
 
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-        <ToastContainer />
-      </BrowserRouter>
-    </AppProvider>
-  </MotionConfig>
+            {/* Admin Route */}
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute allowedRoles={['admin', 'client', 'trainer']} requireAdmin>
+                  <AdminDashboardPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+          <ToastContainer />
+        </BrowserRouter>
+      </AppProvider>
+    </MotionConfig>
+    </ErrorBoundary>
   );
 }

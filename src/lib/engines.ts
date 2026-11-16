@@ -22,6 +22,25 @@ export function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36).slice(-4)}`;
 }
 
+const INVITE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function generateCryptoInviteToken(prefix = 'FIT'): string {
+  const bytes = new Uint8Array(8);
+  if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  let code = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    code += INVITE_ALPHABET[bytes[i] % INVITE_ALPHABET.length];
+  }
+  const cleanPrefix = prefix.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8) || 'FIT';
+  return `${cleanPrefix}-${code.slice(0, 4)}-${code.slice(4, 8)}`;
+}
+
 export interface BulkAssignInput {
   trainerId: string;
   clientIds: string[];
@@ -361,6 +380,67 @@ export function generateDeterministicPlanDraft(params: {
     status: 'draft',
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+export function sanitizeAIPlanDraftPayload(raw: {
+  title?: unknown;
+  summary?: unknown;
+  workoutDays?: unknown;
+  nutritionOutline?: unknown;
+  habitCommitments?: unknown;
+}): Pick<AIPlanDraft, 'title' | 'summary' | 'workoutDays' | 'nutritionOutline' | 'habitCommitments'> {
+  const safeStr = (val: unknown, maxLen: number, fallback = ''): string => {
+    const s = typeof val === 'string' ? val.trim() : '';
+    return (s || fallback).slice(0, maxLen);
+  };
+
+  const title = safeStr(raw.title, 140, 'Custom Coaching Plan Draft');
+  const summary = safeStr(
+    raw.summary,
+    800,
+    'Structured India-first coaching draft ready for trainer review and customization.',
+  );
+
+  const rawDays = Array.isArray(raw.workoutDays) ? raw.workoutDays : [];
+  const workoutDays = rawDays
+    .slice(0, 7)
+    .map((entry, idx) => {
+      const obj = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>;
+      return {
+        dayLabel: safeStr(obj.dayLabel, 40, `Day ${idx + 1}`),
+        focus: safeStr(obj.focus, 120, 'Balanced Training'),
+        sampleSession: safeStr(obj.sampleSession, 240, '40 min coached movement & mobility'),
+      };
+    });
+
+  const rawNutrition = Array.isArray(raw.nutritionOutline) ? raw.nutritionOutline : [];
+  const nutritionOutline = rawNutrition
+    .map((item) => safeStr(item, 240))
+    .filter(Boolean)
+    .slice(0, 10);
+
+  const rawHabits = Array.isArray(raw.habitCommitments) ? raw.habitCommitments : [];
+  const habitCommitments = rawHabits
+    .map((item) => safeStr(item, 240))
+    .filter(Boolean)
+    .slice(0, 10);
+
+  return {
+    title,
+    summary,
+    workoutDays:
+      workoutDays.length > 0
+        ? workoutDays
+        : [{ dayLabel: 'Mon', focus: 'Foundation Movement', sampleSession: '35 min guided full-body flow' }],
+    nutritionOutline:
+      nutritionOutline.length > 0
+        ? nutritionOutline
+        : ['Balanced Indian home meals anchored around protein, dal/curd, sabzi, and hydration.'],
+    habitCommitments:
+      habitCommitments.length > 0
+        ? habitCommitments
+        : ['8,000 daily steps across work breaks', '2.5L water intake daily'],
   };
 }
 

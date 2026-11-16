@@ -1,4 +1,4 @@
-export type UserRole = 'client' | 'trainer';
+export type UserRole = 'client' | 'trainer' | 'admin';
 
 export type LocaleCode = 'en-IN';
 
@@ -35,6 +35,7 @@ export interface User {
   timezone: string;
   locale: LocaleCode;
   isAdultConfirmed: boolean;
+  privacyConsentAccepted?: boolean;
   createdAt: string;
 }
 
@@ -50,13 +51,18 @@ export interface TrainerProfile {
   coachingMode: CoachingMode;
   specialties: string[];
   languages: string[];
+  certifications?: string[];
   experienceYears: number;
   avatarKey: string;
   coverKey: string;
+  photoUrl?: string;
+  whatsappBusinessE164?: string;
+  verificationStatus?: 'unverified' | 'pending' | 'verified';
   isDemoVerified: boolean;
   demoVerificationNote: string;
   demoPhoneLabel: string;
   acceptingClients: boolean;
+  isPublished?: boolean;
   createdAt: string;
 }
 
@@ -65,6 +71,7 @@ export interface ClientProfile {
   userId: string;
   firstName: string;
   lastName: string;
+  age?: number;
   heightCm?: number;
   weightKg?: number;
   targetWeightKg?: number;
@@ -75,6 +82,10 @@ export interface ClientProfile {
   equipment: string[];
   dietaryPreference: DietaryPreference;
   dietaryNotes?: string;
+  foodAllergies?: string;
+  healthLimitations?: string;
+  preferredLanguage?: string;
+  coachingPreferences?: string;
   coachNotes?: string;
   scenarioTag?: string;
   renewalDueDate?: string;
@@ -129,6 +140,8 @@ export interface Package {
   summary: string;
   priceInr: number;
   cadence: BillingCadence;
+  durationDays?: number;
+  consultationsIncluded?: number;
   features: string[];
   status: 'active' | 'paused';
   isDemoSample: boolean;
@@ -140,8 +153,9 @@ export interface Enrollment {
   clientId: string;
   trainerId: string;
   packageId: string;
+  subscriptionId?: string;
   status: 'active' | 'ended';
-  isDemoCheckout: true;
+  isDemoCheckout: boolean;
   enrolledAt: string;
   endedAt?: string;
 }
@@ -246,11 +260,13 @@ export interface ProgressEvent {
   id: string;
   clientId: string;
   dateKey: string;
-  metricType: 'weight' | 'strength' | 'waist' | 'steps';
+  metricType: 'weight' | 'strength' | 'waist' | 'steps' | 'checkin';
   label: string;
   value: number;
   unit: string;
   note?: string;
+  photoPath?: string;
+  shareWithTrainer?: boolean;
   createdAt: string;
 }
 
@@ -262,6 +278,7 @@ export interface ConsultationSlot {
   endTime: string;
   timezone: string;
   mode: 'online' | 'in_person';
+  meetingLink?: string;
   status: 'available' | 'booked' | 'blocked';
 }
 
@@ -277,6 +294,7 @@ export interface Booking {
   endTime: string;
   timezone: string;
   topic: string;
+  meetingLink?: string;
   status: BookingStatus;
   createdAt: string;
   updatedAt: string;
@@ -308,6 +326,8 @@ export interface AIPlanDraft {
   nutritionOutline: string[];
   habitCommitments: string[];
   status: 'draft' | 'approved' | 'saved';
+  model?: string;
+  generationId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -374,3 +394,173 @@ export interface StreakSummary {
   lastEligibleDateKey?: string;
   countedLabel: string;
 }
+
+export type ConsentType = 'terms_privacy' | 'health_data' | 'ai_coaching' | 'notifications';
+
+export interface ConsentRecord {
+  id: string;
+  userId: string;
+  consentType: ConsentType;
+  granted: boolean;
+  policyVersion: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DailyActivity {
+  id: string;
+  clientId: string;
+  clientUserId: string;
+  trainerUserId: string;
+  dateKey: string;
+  hydrationGlasses: number;
+  steps?: number;
+  sleepHours?: number;
+  recoveryApproved?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrainerVerificationRequest {
+  id: string;
+  trainerId: string;
+  trainerUserId: string;
+  qualificationTitle: string;
+  issuingBody: string;
+  credentialRef?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewNote?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorUserId: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  summary: string;
+  createdAt: string;
+}
+
+export interface ClientGroup {
+  id: string;
+  trainerId: string;
+  trainerUserId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClientGroupMember {
+  groupId: string;
+  clientId: string;
+  clientUserId: string;
+  trainerUserId: string;
+  addedAt: string;
+}
+
+export interface StreakRecord {
+  id: string;
+  clientId: string;
+  clientUserId: string;
+  trainerUserId: string;
+  currentStreak: number;
+  longestStreak: number;
+  lastEligibleDateKey?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationPrefs {
+  assignmentReminders: boolean;
+  consultationAlerts: boolean;
+  streakMilestones: boolean;
+  billingReceipts: boolean;
+  browserPushEnabled: boolean;
+  updatedAt?: string;
+}
+
+export interface TrainerReview {
+  id: string;
+  trainerId: string;
+  clientId: string;
+  clientUserId: string;
+  relationshipId: string;
+  authorName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Subscription {
+  id: string;
+  clientId: string;
+  clientUserId: string;
+  trainerId: string;
+  trainerUserId: string;
+  packageId: string;
+  packageName: string;
+  priceInr: number;
+  cadence: BillingCadence;
+  durationDays: number;
+  consultationsIncluded: number;
+  status: 'active' | 'canceled' | 'expired';
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  razorpayOrderId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentRecord {
+  id: string;
+  subscriptionId?: string;
+  clientId: string;
+  clientUserId: string;
+  trainerId: string;
+  trainerUserId: string;
+  packageId: string;
+  packageName: string;
+  invoiceNumber: string;
+  amountPaise: number;
+  amountInr: number;
+  currency: 'INR';
+  status: 'created' | 'captured' | 'failed' | 'refunded';
+  provider: 'razorpay' | 'free_tier';
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  paidAt?: string;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminOverviewStats {
+  totalUsers: number;
+  totalTrainers: number;
+  publishedTrainers: number;
+  verifiedTrainers: number;
+  totalClients: number;
+  activeRelationships: number;
+  activeSubscriptions: number;
+  capturedRevenueInr: number;
+  capturedPaymentsCount: number;
+  pendingVerifications: number;
+  totalReviews: number;
+  trainersSummary: Array<{
+    id: string;
+    userId: string;
+    displayName: string;
+    city: string;
+    verificationStatus: 'unverified' | 'pending' | 'verified';
+    isPublished: boolean;
+    activeClientsCount: number;
+  }>;
+  recentReviews: TrainerReview[];
+}
+
+

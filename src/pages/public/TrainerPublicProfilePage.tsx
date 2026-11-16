@@ -1,15 +1,31 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BadgeCheck, Calendar, Check, MapPin, MessageCircle } from 'lucide-react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Calendar,
+  Check,
+  CreditCard,
+  MapPin,
+  MessageCircle,
+  Star,
+  Trash2,
+} from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import type { Package } from '../../types/domain';
+import {
+  computePackageDurationDays,
+  computeReviewStats,
+  findEligibleReviewRelationship,
+} from '../../lib/commerce';
 import { formatIndiaDate, formatINR } from '../../lib/date';
+import { openRazorpayCheckout } from '../../lib/razorpay';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
 import { GlassSheet } from '../../components/ui/GlassSheet';
-import { InputField } from '../../components/ui/InputField';
+import { InputField, TextAreaField } from '../../components/ui/InputField';
 import { WhatsAppSheet } from '../../components/ui/WhatsAppSheet';
 
 export const TrainerPublicProfilePage: React.FC = () => {
@@ -19,21 +35,53 @@ export const TrainerPublicProfilePage: React.FC = () => {
     activeUser,
     activeClient,
     activeCoach,
+    reviews,
+    isCloudSynced,
+    isDemoSandbox,
+    publicDirectory,
     enrollWithCoachPackage,
+    requestCoachConnection,
+    createPackageOrder,
+    verifyPackageOrder,
+    submitTrainerReview,
+    deleteTrainerReview,
     bookSlot,
-    startDemoAsRole,
+    pushToast,
   } = useApp();
   const navigate = useNavigate();
 
+  const trainersSource = isCloudSynced || isDemoSandbox ? store.trainers : publicDirectory.trainers;
+  const packagesSource = isCloudSynced || isDemoSandbox ? store.packages : publicDirectory.packages;
+
   const trainer = useMemo(
-    () => store.trainers.find((t) => t.slug === slug),
-    [store.trainers, slug],
+    () => trainersSource.find((t) => t.slug === slug),
+    [trainersSource, slug],
   );
 
   const trainerPackages = useMemo(() => {
     if (!trainer) return [];
-    return store.packages.filter((p) => p.trainerId === trainer.id && p.status === 'active');
-  }, [trainer, store.packages]);
+    return packagesSource.filter((p) => p.trainerId === trainer.id && p.status === 'active');
+  }, [trainer, packagesSource]);
+
+  const trainerReviews = useMemo(() => {
+    if (!trainer) return [];
+    return reviews.filter((r) => r.trainerId === trainer.id);
+  }, [trainer, reviews]);
+
+  const reviewStats = useMemo(() => computeReviewStats(trainerReviews), [trainerReviews]);
+
+  const eligibleRelationship = useMemo(
+    () => (trainer ? findEligibleReviewRelationship(activeClient?.id, trainer.id, store.relationships) : undefined),
+    [trainer, activeClient?.id, store.relationships],
+  );
+
+  const existingClientReview = useMemo(
+    () =>
+      activeClient && trainer
+        ? trainerReviews.find((r) => r.clientId === activeClient.id)
+        : undefined,
+    [activeClient, trainer, trainerReviews],
+  );
 
   const availableSlots = useMemo(() => {
     if (!trainer) return [];
@@ -43,11 +91,55 @@ export const TrainerPublicProfilePage: React.FC = () => {
   }, [trainer, store.consultationSlots]);
 
   const [checkoutPkg, setCheckoutPkg] = useState<Package | null>(null);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
   const [consultOpen, setConsultOpen] = useState(false);
   const [selectedSlotId, setSelectedSlotId] = useState<string>('');
   const [topic, setTopic] = useState('Goal discussion & routine fit');
   const [slotError, setSlotError] = useState('');
   const [whatsAppOpen, setWhatsAppOpen] = useState(false);
+  const [requestBusy, setRequestBusy] = useState(false);
+
+  const [reviewRating, setReviewRating] = useState<number>(existingClientReview?.rating ?? 5);
+  const [reviewComment, setReviewComment] = useState<string>(existingClientReview?.comment ?? '');
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+
+  useEffect(() => {
+    if (existingClientReview) {
+      setReviewRating(existingClientReview.rating);
+      setReviewComment(existingClientReview.comment);
+    }
+  }, [existingClientReview]);
+
+  useEffect(() => {
+    if (!trainer) return;
+    const prevTitle = document.title;
+    document.title = `${trainer.displayName} — FitPlus Coach (${trainer.city})`;
+    return () => {
+      document.title = prevTitle;
+    };
+  }, [trainer]);
+
+  const jsonLd = useMemo(() => {
+    if (!trainer) return null;
+    const base: Record<string, unknown> = {
+      '@context': 'https://schema.org',
+      '@type': 'ProfessionalService',
+      name: trainer.displayName,
+      description: trainer.headline || trainer.bio,
+      areaServed: trainer.city,
+      url: typeof window !== 'undefined' ? window.location.href : `https://fitplus-kappa.vercel.app/trainers/${trainer.slug}`,
+    };
+    if (reviewStats.count > 0) {
+      base.aggregateRating = {
+        '@type': 'AggregateRating',
+        ratingValue: reviewStats.averageRating,
+        reviewCount: reviewStats.count,
+      };
+    }
+    return JSON.stringify(base);
+  }, [trainer, reviewStats]);
 
   if (!trainer) {
     return (
@@ -56,7 +148,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
         <main className="max-w-xl mx-auto px-4 py-16 text-center space-y-4">
           <h1 className="text-[26px] font-semibold">Trainer profile not found</h1>
           <p className="text-[14px] text-[#A2A8B5]">
-            This demo coach profile is unavailable. Explore active demo coaches instead.
+            This coach profile is unavailable or has not been published yet.
           </p>
           <GlassButton onClick={() => navigate('/discover')}>Find a trainer</GlassButton>
         </main>
@@ -65,25 +157,114 @@ export const TrainerPublicProfilePage: React.FC = () => {
   }
 
   const isCurrentCoach = activeCoach?.id === trainer.id;
+  const isPendingRequest = Boolean(
+    activeClient &&
+      store.relationships.some(
+        (r) =>
+          r.clientId === activeClient.id &&
+          r.trainerId === trainer.id &&
+          r.status === 'pending',
+      ),
+  );
+  const isVerifiedBadge =
+    trainer.verificationStatus === 'verified' || (isDemoSandbox && trainer.isDemoVerified);
 
-  const handleConfirmEnrollment = () => {
+  const handleRequestCoaching = async () => {
+    if (!activeClient) {
+      navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
+      return;
+    }
+    setRequestBusy(true);
+    try {
+      await requestCoachConnection(trainer.id, trainerPackages[0]?.id);
+    } finally {
+      setRequestBusy(false);
+    }
+  };
+
+  const handleConfirmEnrollment = async () => {
     if (!checkoutPkg) return;
     if (!activeClient) {
-      startDemoAsRole('client', 'usr_client_kavya');
+      setCheckoutPkg(null);
+      navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
+      return;
     }
-    enrollWithCoachPackage(trainer.id, checkoutPkg);
-    setCheckoutPkg(null);
-    navigate('/app/coach');
+
+    if (!isCloudSynced) {
+      enrollWithCoachPackage(trainer.id, checkoutPkg);
+      setCheckoutPkg(null);
+      navigate('/app/coach');
+      return;
+    }
+
+    setCheckoutBusy(true);
+    setCheckoutError('');
+    try {
+      const orderRes = await createPackageOrder({
+        trainerId: trainer.id,
+        packageId: checkoutPkg.id,
+      });
+
+      if (!orderRes.ok) {
+        setCheckoutError(orderRes.error || 'Could not start package checkout.');
+        return;
+      }
+
+      if (orderRes.mode === 'free_enrolled') {
+        pushToast(`Enrolled in ${checkoutPkg.name} (${orderRes.invoiceNumber || 'Free plan'}).`);
+        setCheckoutPkg(null);
+        navigate('/app/coach');
+        return;
+      }
+
+      if (!orderRes.keyId || !orderRes.orderId || !orderRes.paymentId) {
+        setCheckoutError('Incomplete payment order response from server.');
+        return;
+      }
+
+      const rzpRes = await openRazorpayCheckout({
+        keyId: orderRes.keyId,
+        orderId: orderRes.orderId,
+        amountPaise: orderRes.amountPaise || checkoutPkg.priceInr * 100,
+        packageName: orderRes.packageName || checkoutPkg.name,
+        trainerName: orderRes.trainerName || trainer.displayName,
+        customerName: `${activeUser.firstName} ${activeUser.lastName}`.trim(),
+        customerEmail: activeUser.email,
+      });
+
+      if (!rzpRes.ok) {
+        setCheckoutError('error' in rzpRes ? rzpRes.error : 'Checkout window was closed.');
+        return;
+      }
+
+      const verifyRes = await verifyPackageOrder({
+        paymentId: orderRes.paymentId,
+        razorpayOrderId: rzpRes.razorpayOrderId,
+        razorpayPaymentId: rzpRes.razorpayPaymentId,
+        razorpaySignature: rzpRes.razorpaySignature,
+      });
+
+      if (!verifyRes.ok) {
+        setCheckoutError(verifyRes.error || 'Payment verification failed.');
+        return;
+      }
+
+      setCheckoutPkg(null);
+      navigate('/app/coach');
+    } finally {
+      setCheckoutBusy(false);
+    }
   };
 
   const handleConfirmBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSlotId) {
-      setSlotError('Select an available consultation time.');
+    if (!activeClient) {
+      setConsultOpen(false);
+      navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
       return;
     }
-    if (!activeClient) {
-      setSlotError('Switch to a Client demo profile in Demo Auth to book.');
+    if (!selectedSlotId) {
+      setSlotError('Select an available consultation time.');
       return;
     }
     const res = bookSlot(selectedSlotId, topic);
@@ -96,8 +277,29 @@ export const TrainerPublicProfilePage: React.FC = () => {
     navigate('/app/consultations');
   };
 
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setReviewError('');
+    setReviewBusy(true);
+    try {
+      const res = await submitTrainerReview({
+        trainerId: trainer.id,
+        rating: reviewRating,
+        comment: reviewComment,
+      });
+      if (!res.ok) {
+        setReviewError(res.error || 'Could not publish review.');
+      }
+    } finally {
+      setReviewBusy(false);
+    }
+  };
+
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
+      {jsonLd ? (
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
+      ) : null}
       <PublicTopBar />
 
       <main className="flex-1 max-w-[1080px] w-full mx-auto px-4 sm:px-6 py-6 pb-16">
@@ -106,7 +308,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
           className="inline-flex items-center gap-1.5 text-[14px] text-[#A2A8B5] hover:text-[#F5F5F7] mb-4 min-h-[44px]"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          All demo coaches
+          All coaches
         </Link>
 
         {/* Cover & Profile Header */}
@@ -123,24 +325,45 @@ export const TrainerPublicProfilePage: React.FC = () => {
           <div className="px-5 sm:px-8 pb-8 -mt-12 relative">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div className="flex items-end gap-4">
-                <MediaImage
-                  assetKey={trainer.avatarKey}
-                  alt={trainer.displayName}
-                  aspectClass="w-24 h-24 rounded-[20px] border-4 border-[#1C2029] shrink-0"
-                />
+                {trainer.photoUrl ? (
+                  <img
+                    src={trainer.photoUrl}
+                    alt={trainer.displayName}
+                    className="w-24 h-24 rounded-[20px] border-4 border-[#1C2029] object-cover shrink-0 bg-[#1C2029]"
+                  />
+                ) : (
+                  <MediaImage
+                    assetKey={trainer.avatarKey}
+                    alt={trainer.displayName}
+                    aspectClass="w-24 h-24 rounded-[20px] border-4 border-[#1C2029] shrink-0"
+                  />
+                )}
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h1 className="text-[26px] sm:text-[32px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
                       {trainer.displayName}
                     </h1>
-                    {trainer.isDemoVerified ? (
+                    {isVerifiedBadge ? (
                       <span className="inline-flex items-center gap-1 text-[12px] text-[#FFB06B]">
                         <BadgeCheck className="w-4 h-4" aria-hidden="true" />
-                        Demo verified
+                        {isDemoSandbox ? 'Demo verified' : 'Verified coach'}
                       </span>
                     ) : (
-                      <span className="text-[12px] text-[#7C8393]">Demo profile</span>
+                      <span className="text-[12px] text-[#7C8393]">
+                        {isDemoSandbox
+                          ? 'Demo profile'
+                          : trainer.verificationStatus === 'pending'
+                            ? 'Verification pending'
+                            : 'Independent coach'}
+                      </span>
                     )}
+                    {reviewStats.count > 0 ? (
+                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[#FFB06B]">
+                        <Star className="w-3.5 h-3.5 fill-[#FFB06B]" aria-hidden="true" />
+                        {reviewStats.averageRating} ({reviewStats.count}{' '}
+                        {reviewStats.count === 1 ? 'review' : 'reviews'})
+                      </span>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-[14px] text-[#A2A8B5]">{trainer.headline}</p>
                   <p className="mt-1.5 text-[12px] text-[#7C8393] flex flex-wrap items-center gap-x-2 tabular-nums">
@@ -157,13 +380,27 @@ export const TrainerPublicProfilePage: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap gap-2.5">
+                {!isCurrentCoach ? (
+                  <GlassButton
+                    variant="secondary"
+                    size="sm"
+                    disabled={isPendingRequest || requestBusy}
+                    onClick={() => void handleRequestCoaching()}
+                  >
+                    {isPendingRequest
+                      ? 'Request pending'
+                      : requestBusy
+                        ? 'Sending...'
+                        : 'Request coaching'}
+                  </GlassButton>
+                ) : null}
                 <GlassButton
                   variant="glass"
                   size="sm"
                   onClick={() => setWhatsAppOpen(true)}
                 >
                   <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                  WhatsApp (demo)
+                  {isDemoSandbox ? 'WhatsApp (demo)' : 'Message on WhatsApp'}
                 </GlassButton>
                 <GlassButton
                   size="sm"
@@ -183,6 +420,18 @@ export const TrainerPublicProfilePage: React.FC = () => {
               <div>
                 <h2 className="text-[17px] font-semibold text-[#F5F5F7]">About</h2>
                 <p className="mt-2 text-[15px] text-[#A2A8B5] leading-relaxed">{trainer.bio}</p>
+                {trainer.certifications && trainer.certifications.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {trainer.certifications.map((cert) => (
+                      <span
+                        key={cert}
+                        className="px-2.5 py-1 rounded-[8px] bg-[#252A35] border border-white/[0.08] text-[12px] text-[#A2A8B5]"
+                      >
+                        {cert}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <div>
                 <h2 className="text-[17px] font-semibold text-[#F5F5F7]">Coaching style</h2>
@@ -203,60 +452,199 @@ export const TrainerPublicProfilePage: React.FC = () => {
             <div>
               <h2 className="text-[22px] font-semibold text-[#F5F5F7]">Coaching packages</h2>
               <p className="text-[13px] text-[#7C8393]">
-                Example INR packages for demo preview · No real payment processed
+                {isDemoSandbox
+                  ? 'Example INR packages for demo preview · No real payment processed'
+                  : 'Transparent INR packages · Instant enrollment via Razorpay or free tier'}
               </p>
             </div>
             {isCurrentCoach ? (
               <span className="text-[13px] font-medium text-[#B8E66C]">
-                Active coach in your demo
+                Your active coach
               </span>
             ) : null}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {trainerPackages.map((pkg) => (
-              <div
-                key={pkg.id}
-                className="rounded-[22px] surface-card p-5 flex flex-col justify-between gap-5"
-              >
-                <div>
-                  <h3 className="text-[18px] font-semibold text-[#F5F5F7]">{pkg.name}</h3>
-                  <p className="mt-2 text-[28px] font-semibold text-[#F5F5F7] tabular-nums">
-                    {formatINR(pkg.priceInr)}
-                    <span className="text-[14px] font-normal text-[#7C8393]">
-                      /{pkg.cadence === 'monthly' ? 'month' : pkg.cadence}
-                    </span>
-                  </p>
-                  <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">{pkg.summary}</p>
-                  <ul className="mt-4 space-y-2 text-[13px] text-[#A2A8B5]">
-                    {pkg.features.map((feat) => (
-                      <li key={feat} className="flex items-start gap-2">
-                        <Check className="w-4 h-4 text-[#FF803E] shrink-0 mt-0.5" aria-hidden="true" />
-                        <span>{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <GlassButton
-                  fullWidth
-                  variant={isCurrentCoach ? 'secondary' : 'primary'}
-                  onClick={() => setCheckoutPkg(pkg)}
+            {trainerPackages.map((pkg) => {
+              const durationDays = computePackageDurationDays(pkg);
+              const consultCount = pkg.consultationsIncluded ?? 2;
+              return (
+                <div
+                  key={pkg.id}
+                  className="rounded-[22px] surface-card p-5 flex flex-col justify-between gap-5"
                 >
-                  {isCurrentCoach ? 'Switch demo package' : 'Select package (demo)'}
-                </GlassButton>
-              </div>
-            ))}
+                  <div>
+                    <h3 className="text-[18px] font-semibold text-[#F5F5F7]">{pkg.name}</h3>
+                    <p className="mt-2 text-[28px] font-semibold text-[#F5F5F7] tabular-nums">
+                      {pkg.priceInr === 0 ? 'Free' : formatINR(pkg.priceInr)}
+                      <span className="text-[14px] font-normal text-[#7C8393]">
+                        {pkg.priceInr === 0
+                          ? ` · ${durationDays}d`
+                          : `/${pkg.cadence === 'monthly' ? 'month' : pkg.cadence === 'quarterly' ? 'quarter' : `${durationDays}d`}`}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-[12px] text-[#7C8393] tabular-nums">
+                      {durationDays} days · {consultCount} check-in {consultCount === 1 ? 'call' : 'calls'} included
+                    </p>
+                    <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">{pkg.summary}</p>
+                    <ul className="mt-4 space-y-2 text-[13px] text-[#A2A8B5]">
+                      {pkg.features.map((feat) => (
+                        <li key={feat} className="flex items-start gap-2">
+                          <Check className="w-4 h-4 text-[#FF803E] shrink-0 mt-0.5" aria-hidden="true" />
+                          <span>{feat}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <GlassButton
+                    fullWidth
+                    variant={isCurrentCoach ? 'secondary' : 'primary'}
+                    onClick={() => {
+                      setCheckoutError('');
+                      setCheckoutPkg(pkg);
+                    }}
+                  >
+                    {isCurrentCoach
+                      ? 'Switch package'
+                      : isDemoSandbox
+                        ? 'Select package (demo)'
+                        : pkg.priceInr === 0
+                          ? 'Start free plan'
+                          : `Enroll · ${formatINR(pkg.priceInr)}`}
+                  </GlassButton>
+                </div>
+              );
+            })}
           </div>
+        </section>
+
+        {/* Verified Client Reviews */}
+        <section className="mt-8 rounded-[26px] surface-card p-5 sm:p-7 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-[20px] font-semibold text-[#F5F5F7]">Verified client reviews</h2>
+              <p className="text-[13px] text-[#A2A8B5]">
+                Reviews come strictly from clients with a confirmed FitPlus coaching relationship.
+              </p>
+            </div>
+            {reviewStats.count > 0 ? (
+              <div className="flex items-center gap-2 rounded-[14px] bg-[#101218] border border-white/[0.08] px-3.5 py-2">
+                <Star className="w-4 h-4 text-[#FFB06B] fill-[#FFB06B]" aria-hidden="true" />
+                <span className="text-[16px] font-semibold text-[#F5F5F7] tabular-nums">
+                  {reviewStats.averageRating}
+                </span>
+                <span className="text-[12px] text-[#7C8393]">({reviewStats.count})</span>
+              </div>
+            ) : null}
+          </div>
+
+          {trainerReviews.length === 0 ? (
+            <p className="text-[14px] text-[#7C8393]">
+              No reviews posted yet for {trainer.displayName}.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {trainerReviews.map((rev) => {
+                const isOwn = activeClient && rev.clientId === activeClient.id;
+                return (
+                  <article
+                    key={rev.id}
+                    className="rounded-[18px] bg-[#101218] border border-white/[0.08] p-4 space-y-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[14px] font-semibold text-[#F5F5F7]">{rev.authorName}</p>
+                        <p className="text-[11px] text-[#7C8393]">
+                          Verified client · {formatIndiaDate(rev.createdAt.slice(0, 10), 'short')}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-0.5 text-[#FFB06B] text-[13px] font-semibold tabular-nums">
+                          <Star className="w-3.5 h-3.5 fill-[#FFB06B]" aria-hidden="true" />
+                          {rev.rating}.0
+                        </span>
+                        {isOwn ? (
+                          <button
+                            type="button"
+                            onClick={() => void deleteTrainerReview(rev.id)}
+                            aria-label="Delete your review"
+                            className="p-1.5 rounded-lg text-[#7C8393] hover:text-[#FF6B70] cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className="text-[14px] text-[#A2A8B5] leading-relaxed">{rev.comment}</p>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          {eligibleRelationship ? (
+            <form
+              onSubmit={(e) => void handleReviewSubmit(e)}
+              className="pt-4 border-t border-white/[0.08] space-y-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[14px] font-semibold text-[#F5F5F7]">
+                  {existingClientReview ? 'Update your verified review' : `Share feedback on ${trainer.displayName}`}
+                </p>
+                <div className="flex items-center gap-1" role="group" aria-label="Rating out of 5">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      aria-label={`Rate ${star} out of 5`}
+                      className="p-1.5 cursor-pointer"
+                    >
+                      <Star
+                        className={`w-5 h-5 ${
+                          star <= reviewRating
+                            ? 'text-[#FFB06B] fill-[#FFB06B]'
+                            : 'text-[#7C8393]'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <TextAreaField
+                label="Your experience"
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                rows={2}
+                placeholder="How has coaching structure, adherence, and support felt?"
+              />
+              {reviewError ? <p className="text-[12px] text-[#FF6B70]">{reviewError}</p> : null}
+              <GlassButton type="submit" size="sm" disabled={reviewBusy}>
+                {reviewBusy
+                  ? 'Saving…'
+                  : existingClientReview
+                    ? 'Update review'
+                    : 'Publish verified review'}
+              </GlassButton>
+            </form>
+          ) : null}
         </section>
       </main>
 
-      {/* Mock Checkout Sheet */}
+      {/* Enrollment & Razorpay Checkout Sheet */}
       <GlassSheet
         open={Boolean(checkoutPkg)}
-        onClose={() => setCheckoutPkg(null)}
-        title={COPY.discovery.checkoutTitle}
-        description={COPY.discovery.checkoutNotice}
+        onClose={() => !checkoutBusy && setCheckoutPkg(null)}
+        title={isCloudSynced ? 'Coaching enrollment & checkout' : COPY.discovery.checkoutTitle}
+        description={
+          isCloudSynced
+            ? checkoutPkg?.priceInr === 0
+              ? 'Activate your free coaching tier immediately.'
+              : 'Secure INR payment processed via Razorpay. Your relationship activates immediately upon verification.'
+            : COPY.discovery.checkoutNotice
+        }
       >
         {checkoutPkg ? (
           <div className="flex flex-col gap-5">
@@ -264,24 +652,56 @@ export const TrainerPublicProfilePage: React.FC = () => {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[16px] font-semibold text-[#F5F5F7]">{checkoutPkg.name}</span>
                 <span className="text-[16px] font-semibold text-[#FF803E] tabular-nums">
-                  {formatINR(checkoutPkg.priceInr)}/mo
+                  {checkoutPkg.priceInr === 0 ? 'Free' : formatINR(checkoutPkg.priceInr)}
                 </span>
               </div>
-              <p className="text-[13px] text-[#A2A8B5]">Coach: {trainer.displayName}</p>
+              <p className="text-[13px] text-[#A2A8B5]">
+                Coach: {trainer.displayName} · {computePackageDurationDays(checkoutPkg)} days
+              </p>
               <p className="text-[13px] text-[#A2A8B5]">{checkoutPkg.summary}</p>
             </div>
 
             {!activeClient ? (
               <p className="text-[13px] text-[#FFB06B]">
-                Confirming will preview the connected Client experience using a demo client profile.
+                Sign in with a FitPlus client account to enroll with {trainer.displayName}.
               </p>
             ) : null}
 
+            {checkoutError ? (
+              <div className="rounded-[14px] bg-[#FF6B70]/12 border border-[#FF6B70]/35 p-3.5 text-[13px] text-[#FFB5B8]">
+                <p>{checkoutError}</p>
+              </div>
+            ) : null}
+
             <div className="flex flex-col sm:flex-row gap-2.5">
-              <GlassButton fullWidth onClick={handleConfirmEnrollment}>
-                {COPY.discovery.confirmEnrollment}
+              <GlassButton
+                fullWidth
+                disabled={checkoutBusy}
+                onClick={() => void handleConfirmEnrollment()}
+              >
+                {!activeClient ? (
+                  'Sign in & enroll'
+                ) : checkoutBusy ? (
+                  'Opening checkout…'
+                ) : isCloudSynced ? (
+                  checkoutPkg.priceInr === 0 ? (
+                    'Activate free plan'
+                  ) : (
+                    <>
+                      <CreditCard className="w-4 h-4" aria-hidden="true" />
+                      Pay {formatINR(checkoutPkg.priceInr)} via Razorpay
+                    </>
+                  )
+                ) : (
+                  COPY.discovery.confirmEnrollment
+                )}
               </GlassButton>
-              <GlassButton variant="secondary" fullWidth onClick={() => setCheckoutPkg(null)}>
+              <GlassButton
+                variant="secondary"
+                fullWidth
+                disabled={checkoutBusy}
+                onClick={() => setCheckoutPkg(null)}
+              >
                 Cancel
               </GlassButton>
             </div>
@@ -303,7 +723,9 @@ export const TrainerPublicProfilePage: React.FC = () => {
             <p className="text-[13px] font-medium text-[#F5F5F7]">Select a time</p>
             {availableSlots.length === 0 ? (
               <p className="text-[14px] text-[#A2A8B5]">
-                No open sample slots right now. Add slots in Trainer Studio Schedule to test more.
+                {!activeClient
+                  ? 'Sign in as a client to view and book live consultation slots.'
+                  : 'No open consultation slots right now.'}
               </p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -351,9 +773,22 @@ export const TrainerPublicProfilePage: React.FC = () => {
             <GlassButton type="button" variant="secondary" fullWidth onClick={() => setConsultOpen(false)}>
               Cancel
             </GlassButton>
-            <GlassButton type="submit" fullWidth disabled={availableSlots.length === 0}>
-              {COPY.discovery.confirmBooking}
-            </GlassButton>
+            {!activeClient ? (
+              <GlassButton
+                type="button"
+                fullWidth
+                onClick={() => {
+                  setConsultOpen(false);
+                  navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
+                }}
+              >
+                Sign in to book
+              </GlassButton>
+            ) : (
+              <GlassButton type="submit" fullWidth disabled={availableSlots.length === 0}>
+                {COPY.discovery.confirmBooking}
+              </GlassButton>
+            )}
           </div>
         </form>
       </GlassSheet>
@@ -362,6 +797,8 @@ export const TrainerPublicProfilePage: React.FC = () => {
         open={whatsAppOpen}
         onClose={() => setWhatsAppOpen(false)}
         coachName={trainer.displayName}
+        whatsappE164={trainer.whatsappBusinessE164}
+        isDemoSandbox={isDemoSandbox}
       />
     </div>
   );

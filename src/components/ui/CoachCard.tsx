@@ -1,19 +1,30 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeCheck, MapPin } from 'lucide-react';
-import type { Package, TrainerProfile } from '../../types/domain';
+import { BadgeCheck, MapPin, Star } from 'lucide-react';
+import type { Package, TrainerProfile, TrainerReview } from '../../types/domain';
+import { computeReviewStats } from '../../lib/commerce';
 import { formatINR } from '../../lib/date';
 import { MediaImage } from './MediaImage';
 
 interface CoachCardProps {
   trainer: TrainerProfile;
   packages: Package[];
+  reviews?: TrainerReview[];
+  isDemoMode?: boolean;
 }
 
-export const CoachCard: React.FC<CoachCardProps> = ({ trainer, packages }) => {
+export const CoachCard: React.FC<CoachCardProps> = ({
+  trainer,
+  packages,
+  reviews = [],
+  isDemoMode = false,
+}) => {
   const activePackages = packages.filter((p) => p.trainerId === trainer.id && p.status === 'active');
   const lowestPrice =
     activePackages.length > 0 ? Math.min(...activePackages.map((p) => p.priceInr)) : undefined;
+
+  const trainerReviews = reviews.filter((r) => r.trainerId === trainer.id);
+  const { averageRating, count } = computeReviewStats(trainerReviews);
 
   const modeLabel =
     trainer.coachingMode === 'hybrid'
@@ -22,28 +33,45 @@ export const CoachCard: React.FC<CoachCardProps> = ({ trainer, packages }) => {
         ? 'In person'
         : 'Online';
 
+  const isVerified = trainer.verificationStatus === 'verified' || (isDemoMode && trainer.isDemoVerified);
+
   return (
     <article className="surface-card rounded-[22px] p-5 flex flex-col gap-4 transition-colors hover:border-white/[0.14]">
       <div className="flex items-start gap-4">
-        <MediaImage
-          assetKey={trainer.avatarKey}
-          alt={trainer.displayName}
-          aspectClass="w-16 h-16 shrink-0 rounded-[16px] ring-1 ring-white/10"
-          lazy
-        />
+        {trainer.photoUrl ? (
+          <img
+            src={trainer.photoUrl}
+            alt={trainer.displayName}
+            loading="lazy"
+            className="w-16 h-16 shrink-0 rounded-[16px] object-cover ring-1 ring-white/10"
+          />
+        ) : (
+          <MediaImage
+            assetKey={trainer.avatarKey}
+            alt={trainer.displayName}
+            aspectClass="w-16 h-16 shrink-0 rounded-[16px] ring-1 ring-white/10"
+            lazy
+          />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-[17px] font-semibold text-[#F5F5F7]">{trainer.displayName}</h3>
-            {trainer.isDemoVerified ? (
+            {isVerified ? (
               <span
                 title={trainer.demoVerificationNote}
                 className="inline-flex items-center gap-1 text-[12px] text-[#FF803E]"
               >
                 <BadgeCheck className="w-4 h-4" aria-hidden="true" />
-                <span>Demo verified</span>
+                <span>{isDemoMode ? 'Demo verified' : 'Verified coach'}</span>
               </span>
             ) : (
-              <span className="text-[12px] text-[#7C8393]">Demo profile</span>
+              <span className="text-[12px] text-[#7C8393]">
+                {isDemoMode
+                  ? 'Demo profile'
+                  : trainer.verificationStatus === 'pending'
+                    ? 'Verification pending'
+                    : 'Independent coach'}
+              </span>
             )}
           </div>
 
@@ -57,7 +85,16 @@ export const CoachCard: React.FC<CoachCardProps> = ({ trainer, packages }) => {
             <span aria-hidden="true">·</span>
             <span>{modeLabel}</span>
             <span aria-hidden="true">·</span>
-            <span>{trainer.experienceYears} years experience</span>
+            <span>{trainer.experienceYears} years exp.</span>
+            {count > 0 ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="inline-flex items-center gap-1 text-[#FFB06B] font-medium">
+                  <Star className="w-3.5 h-3.5 fill-[#FFB06B]" aria-hidden="true" />
+                  {averageRating} ({count})
+                </span>
+              </>
+            ) : null}
           </p>
         </div>
       </div>
@@ -67,7 +104,8 @@ export const CoachCard: React.FC<CoachCardProps> = ({ trainer, packages }) => {
           <span>{trainer.specialties.slice(0, 2).join(' · ')}</span>
           {lowestPrice !== undefined ? (
             <span className="block text-[12px] text-[#7C8393] tabular-nums mt-0.5">
-              Sample plans from {formatINR(lowestPrice)}/mo
+              {isDemoMode ? 'Sample plans from' : 'Plans from'}{' '}
+              {lowestPrice === 0 ? 'Free' : `${formatINR(lowestPrice)}/mo`}
             </span>
           ) : null}
         </div>

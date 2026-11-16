@@ -16,7 +16,12 @@ export const StudioOverviewPage: React.FC = () => {
     store,
     todayKey,
     activeTrainer,
+    subscriptions,
+    payments,
+    isCloudSynced,
     linkedClientsForActiveTrainer,
+    pendingRelationshipsForActiveTrainer,
+    getClientApprovedRecoveryDates,
   } = useApp();
   const navigate = useNavigate();
 
@@ -28,10 +33,17 @@ export const StudioOverviewPage: React.FC = () => {
         store.completions,
         todayKey,
         7,
+        getClientApprovedRecoveryDates(client.id),
       );
       return { client, adherence };
     });
-  }, [linkedClientsForActiveTrainer, store.assignments, store.completions, todayKey]);
+  }, [
+    linkedClientsForActiveTrainer,
+    store.assignments,
+    store.completions,
+    todayKey,
+    getClientApprovedRecoveryDates,
+  ]);
 
   const avgAdherence = useMemo(() => {
     if (clientMetrics.length === 0) return 0;
@@ -50,6 +62,18 @@ export const StudioOverviewPage: React.FC = () => {
       )
       .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
   }, [store.bookings, activeTrainer, todayKey]);
+
+  const trainerActiveSubscriptions = useMemo(() => {
+    if (!activeTrainer) return [];
+    return subscriptions.filter((s) => s.trainerId === activeTrainer.id && s.status === 'active');
+  }, [subscriptions, activeTrainer]);
+
+  const capturedRevenueInr = useMemo(() => {
+    if (!activeTrainer) return 0;
+    return payments
+      .filter((p) => p.trainerId === activeTrainer.id && p.status === 'captured')
+      .reduce((sum, p) => sum + p.amountInr, 0);
+  }, [payments, activeTrainer]);
 
   const demoPackageValue = useMemo(() => {
     if (!activeTrainer) return 0;
@@ -80,6 +104,11 @@ export const StudioOverviewPage: React.FC = () => {
           <div>
             <p className="text-[13px] text-[#7C8393]">
               {activeTrainer?.displayName} · Trainer Studio
+              {pendingRelationshipsForActiveTrainer.length > 0
+                ? ` · ${pendingRelationshipsForActiveTrainer.length} pending request${
+                    pendingRelationshipsForActiveTrainer.length === 1 ? '' : 's'
+                  }`
+                : ''}
             </p>
             <h1 className="mt-1 text-[30px] sm:text-[34px] font-semibold tracking-[-0.025em] text-[#F5F5F7]">
               {COPY.trainer.overviewTitle}
@@ -129,9 +158,13 @@ export const StudioOverviewPage: React.FC = () => {
             subtitle="Scheduled ahead"
           />
           <MetricCard
-            label="Demo package value"
-            value={formatINR(demoPackageValue)}
-            subtitle="Example monthly total"
+            label={isCloudSynced ? 'Captured INR revenue' : 'Demo package value'}
+            value={formatINR(isCloudSynced ? capturedRevenueInr : demoPackageValue)}
+            subtitle={
+              isCloudSynced
+                ? `${trainerActiveSubscriptions.length} active subscription${trainerActiveSubscriptions.length === 1 ? '' : 's'}`
+                : 'Example monthly total'
+            }
           />
         </section>
 
@@ -139,7 +172,11 @@ export const StudioOverviewPage: React.FC = () => {
           <EmptyState
             artwork="clients"
             title={COPY.trainer.emptyClientsTitle}
-            description="Generate a demo invitation link so clients can review your packages and join."
+            description={
+              isCloudSynced
+                ? 'Generate an invitation link so clients can review your packages and join.'
+                : 'Generate a demo invitation link so clients can review your packages and join.'
+            }
             actionLabel="Create an invite"
             onAction={() => navigate('/studio/clients')}
           />

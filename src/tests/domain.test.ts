@@ -1,15 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeDayConsistency, computeStreakSummary } from '../lib/streak';
+import crypto from 'node:crypto';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import {
+  computeClientAdherencePercent,
+  computeDayConsistency,
+  computeStreakSummary,
+  computeWeeklyStrip,
+} from '../lib/streak';
 import {
   attemptBookConsultationSlot,
   buildBulkAssignments,
   createDemoEnrollmentState,
+  generateCryptoInviteToken,
   generateDeterministicPlanDraft,
+  sanitizeAIPlanDraftPayload,
   validateInvite,
 } from '../lib/engines';
+import {
+  buildWhatsAppChatUrl,
+  computeAuthoritativeOrderAmountPaise,
+  computePackageDurationDays,
+  computeReviewStats,
+  findEligibleReviewRelationship,
+  isValidHttpMeetingLink,
+} from '../lib/commerce';
 import { createSeedSnapshot } from '../data/demo/fixtures';
-import type { Assignment, CompletionEvent } from '../types/domain';
+import type { Assignment, CompletionEvent, TrainerReview } from '../types/domain';
+import generatePlanHandler from '../../api/ai/generate-plan';
+import recalculateStreakHandler from '../../api/streaks/recalculate';
+import respondRelationshipHandler from '../../api/relationships/respond';
+import createOrderHandler from '../../api/payments/create-order';
+import verifyPaymentHandler from '../../api/payments/verify';
+import webhookHandler from '../../api/payments/webhook';
+import adminOverviewHandler from '../../api/admin/overview';
+import monitoringErrorHandler from '../../api/monitoring/error';
+import {
+  computeAuthoritativePackageDetails,
+  verifyRazorpayCheckoutSignature,
+  verifyRazorpayWebhookSignature,
+} from '../../api/_lib/payments';
 
 test('Streak engine: counts recovery days, treats unscheduled/future days as neutral, and recalculates on undo', () => {
   const today = '2026-11-15';
@@ -190,3 +220,295 @@ test('Deterministic AI plan drafter produces reviewable draft without live API c
   assert.equal(draft.workoutDays.length, 7);
   assert.ok(draft.nutritionOutline.length >= 3);
 });
+
+test('Stage 3B: generateCryptoInviteToken creates unique Firestore-safe uppercase tokens', () => {
+  const token1 = generateCryptoInviteToken('FIT');
+  const token2 = generateCryptoInviteToken('FIT');
+  assert.match(token1, /^FIT-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
+  assert.match(token1, /^[a-zA-Z0-9_\-]+$/);
+  assert.notEqual(token1, token2);
+});
+
+test('Stage 3B: trainer-approved recovery dates preserve streaks and adherence without penalty', () => {
+  const today = '2026-11-15';
+  const assignments: Assignment[] = [
+    {
+      id: 'a_req',
+      clientId: 'c1',
+      title: 'Strength workout',
+      category: 'workout',
+      instructions: 'Lift',
+      durationMinutes: 40,
+      dueTime: '8:00 PM',
+      completionType: 'checkbox',
+      scheduledDates: ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15'],
+      isOptional: false,
+      isRecovery: false,
+      hasCustomOverride: false,
+      createdAt: '2026-11-01T00:00:00Z',
+    },
+  ];
+  const completions: CompletionEvent[] = [
+    { id: 'c1', assignmentId: 'a_req', clientId: 'c1', dateKey: '2026-11-12', completedAt: '2026-11-12T10:00:00Z' },
+    { id: 'c2', assignmentId: 'a_req', clientId: 'c1', dateKey: '2026-11-14', completedAt: '2026-11-14T10:00:00Z' },
+    { id: 'c3', assignmentId: 'a_req', clientId: 'c1', dateKey: '2026-11-15', completedAt: '2026-11-15T10:00:00Z' },
+  ];
+
+  // Without approved recovery on Nov 13, streak is broken to 2 (Nov 14 + Nov 15)
+  const withoutRecovery = computeStreakSummary(assignments, completions, today, 10);
+  assert.equal(withoutRecovery.currentStreak, 2);
+
+  // With trainer-approved recovery on Nov 13, status becomes recovery_completed and streak bridges to 4
+  const approved = ['2026-11-13'];
+  const day13 = computeDayConsistency('2026-11-13', assignments, completions, today, approved);
+  assert.equal(day13.status, 'recovery_completed');
+
+  const withRecovery = computeStreakSummary(assignments, completions, today, 10, approved);
+  assert.equal(withRecovery.currentStreak, 4);
+
+  const strip = computeWeeklyStrip(today, assignments, completions, approved);
+  const nov13Strip = strip.find((d) => d.dateKey === '2026-11-13');
+  assert.equal(nov13Strip?.status, 'recovery_completed');
+
+  const adherence = computeClientAdherencePercent('c1', assignments, completions, today, 4, approved);
+  assert.equal(adherence, 100);
+});
+
+test('Stage 3B: sanitizeAIPlanDraftPayload clamps oversized output and provides safe defaults', () => {
+  const sanitized = sanitizeAIPlanDraftPayload({
+    title: 'X'.repeat(300),
+    summary: 'Y'.repeat(1200),
+    workoutDays: Array.from({ length: 12 }, (_, idx) => ({
+      dayLabel: `Day ${idx + 1}`,
+      focus: 'F'.repeat(200),
+      sampleSession: 'S'.repeat(400),
+    })),
+    nutritionOutline: Array.from({ length: 15 }, (_, idx) => `Meal ${idx + 1}`),
+    habitCommitments: Array.from({ length: 15 }, (_, idx) => `Habit ${idx + 1}`),
+  });
+
+  assert.equal(sanitized.title.length, 140);
+  assert.equal(sanitized.summary.length, 800);
+  assert.equal(sanitized.workoutDays.length, 7);
+  assert.equal(sanitized.workoutDays[0].focus.length, 120);
+  assert.equal(sanitized.workoutDays[0].sampleSession.length, 240);
+  assert.equal(sanitized.nutritionOutline.length, 10);
+  assert.equal(sanitized.habitCommitments.length, 10);
+
+  const emptyFallback = sanitizeAIPlanDraftPayload({});
+  assert.ok(emptyFallback.title.length > 0);
+  assert.ok(emptyFallback.workoutDays.length >= 1);
+  assert.ok(emptyFallback.nutritionOutline.length >= 1);
+  assert.ok(emptyFallback.habitCommitments.length >= 1);
+});
+
+function createMockRes() {
+  const headers: Record<string, string> = {};
+  const result = {
+    statusCode: 200,
+    body: undefined as unknown,
+    headers,
+  };
+  const res = {
+    setHeader(name: string, value: string) {
+      headers[name.toLowerCase()] = value;
+      return res;
+    },
+    status(code: number) {
+      result.statusCode = code;
+      return res;
+    },
+    json(payload: unknown) {
+      result.body = payload;
+      return res;
+    },
+  };
+  return { res: res as unknown as VercelResponse, result };
+}
+
+test('Stage 3B API handlers enforce 405 on GET and 401 without Bearer Firebase token', async () => {
+  const handlers = [
+    generatePlanHandler,
+    recalculateStreakHandler,
+    respondRelationshipHandler,
+  ];
+
+  for (const handler of handlers) {
+    const getMock = createMockRes();
+    await handler(
+      { method: 'GET', headers: {}, body: {} } as unknown as VercelRequest,
+      getMock.res,
+    );
+    assert.equal(getMock.result.statusCode, 405);
+    assert.equal(getMock.result.headers.allow, 'POST');
+
+    const unauthMock = createMockRes();
+    await handler(
+      { method: 'POST', headers: {}, body: {} } as unknown as VercelRequest,
+      unauthMock.res,
+    );
+    assert.equal(unauthMock.result.statusCode, 401);
+  }
+});
+
+test('Stage 3C commerce helpers: WhatsApp URL, authoritative pricing, review eligibility, and meeting link validation', () => {
+  const waUrl = buildWhatsAppChatUrl('+91 98200 11223', 'Hi Arjun, checking my plan!');
+  assert.equal(
+    waUrl,
+    'https://wa.me/919820011223?text=Hi%20Arjun%2C%20checking%20my%20plan!',
+  );
+  assert.equal(buildWhatsAppChatUrl('9820011223', 'No plus'), null);
+
+  assert.equal(computePackageDurationDays({ cadence: 'monthly' }), 30);
+  assert.equal(computePackageDurationDays({ cadence: 'quarterly' }), 90);
+  assert.equal(computePackageDurationDays({ cadence: 'monthly', durationDays: 45 }), 45);
+  assert.equal(computeAuthoritativeOrderAmountPaise({ priceInr: 2499, cadence: 'monthly' }), 249900);
+  assert.equal(computeAuthoritativeOrderAmountPaise({ priceInr: 2499, cadence: 'free' }), 0);
+
+  const serverPkg = computeAuthoritativePackageDetails({
+    name: 'Strength Quarterly',
+    cadence: 'quarterly',
+    priceInr: 5999,
+    consultationsIncluded: 6,
+  });
+  assert.equal(serverPkg.amountPaise, 599900);
+  assert.equal(serverPkg.durationDays, 90);
+  assert.equal(serverPkg.consultationsIncluded, 6);
+
+  const reviews: TrainerReview[] = [
+    {
+      id: 'r1',
+      trainerId: 't1',
+      clientId: 'c1',
+      clientUserId: 'u1',
+      relationshipId: 'rel1',
+      authorName: 'Riya S.',
+      rating: 5,
+      comment: 'Great coaching',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+    },
+    {
+      id: 'r2',
+      trainerId: 't1',
+      clientId: 'c2',
+      clientUserId: 'u2',
+      relationshipId: 'rel2',
+      authorName: 'Dev M.',
+      rating: 4,
+      comment: 'Consistent check-ins',
+      createdAt: '2026-01-02T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+    },
+  ];
+  const stats = computeReviewStats(reviews);
+  assert.equal(stats.averageRating, 4.5);
+  assert.equal(stats.count, 2);
+
+  const seed = createSeedSnapshot(new Date('2026-11-15T12:00:00Z'));
+  assert.ok(findEligibleReviewRelationship('cl_aarav', 'trn_arjun', seed.relationships));
+  assert.equal(findEligibleReviewRelationship('cl_kavya', 'trn_arjun', seed.relationships), undefined);
+
+  assert.equal(isValidHttpMeetingLink('https://meet.google.com/abc-defg-hij'), true);
+  assert.equal(isValidHttpMeetingLink('javascript:alert(1)'), false);
+});
+
+test('Stage 3C Razorpay HMAC checkout & webhook signature verification', () => {
+  const secret = 'test_rzp_secret_123';
+  const orderId = 'order_Test123';
+  const paymentId = 'pay_Test456';
+  const expectedCheckoutSig = crypto
+    .createHmac('sha256', secret)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+
+  assert.equal(
+    verifyRazorpayCheckoutSignature(orderId, paymentId, expectedCheckoutSig, secret),
+    true,
+  );
+  assert.equal(
+    verifyRazorpayCheckoutSignature(orderId, paymentId, '0'.repeat(64), secret),
+    false,
+  );
+
+  const webhookSecret = 'whsec_test_999';
+  const rawPayload = Buffer.from(JSON.stringify({ event: 'payment.captured' }), 'utf8');
+  const expectedWebhookSig = crypto
+    .createHmac('sha256', webhookSecret)
+    .update(rawPayload)
+    .digest('hex');
+
+  assert.equal(
+    verifyRazorpayWebhookSignature(rawPayload, expectedWebhookSig, webhookSecret),
+    true,
+  );
+  assert.equal(
+    verifyRazorpayWebhookSignature(rawPayload, 'tampered', webhookSecret),
+    false,
+  );
+});
+
+test('Stage 3C API handlers enforce HTTP methods, auth, webhook config, and error monitoring sanitization', async () => {
+  for (const handler of [createOrderHandler, verifyPaymentHandler]) {
+    const getMock = createMockRes();
+    await handler(
+      { method: 'GET', headers: {}, body: {} } as unknown as VercelRequest,
+      getMock.res,
+    );
+    assert.equal(getMock.result.statusCode, 405);
+
+    const unauthMock = createMockRes();
+    await handler(
+      { method: 'POST', headers: {}, body: {} } as unknown as VercelRequest,
+      unauthMock.res,
+    );
+    assert.equal(unauthMock.result.statusCode, 401);
+  }
+
+  const webhookGet = createMockRes();
+  await webhookHandler(
+    { method: 'GET', headers: {}, body: {} } as unknown as VercelRequest,
+    webhookGet.res,
+  );
+  assert.equal(webhookGet.result.statusCode, 405);
+
+  const webhookUnconfigured = createMockRes();
+  await webhookHandler(
+    { method: 'POST', headers: {}, body: {} } as unknown as VercelRequest,
+    webhookUnconfigured.res,
+  );
+  assert.equal(webhookUnconfigured.result.statusCode, 503);
+
+  const adminDelete = createMockRes();
+  await adminOverviewHandler(
+    { method: 'DELETE', headers: {}, body: {} } as unknown as VercelRequest,
+    adminDelete.res,
+  );
+  assert.equal(adminDelete.result.statusCode, 405);
+
+  const adminUnauth = createMockRes();
+  await adminOverviewHandler(
+    { method: 'GET', headers: {}, body: {} } as unknown as VercelRequest,
+    adminUnauth.res,
+  );
+  assert.equal(adminUnauth.result.statusCode, 401);
+
+  const monInvalid = createMockRes();
+  await monitoringErrorHandler(
+    { method: 'POST', headers: {}, body: {} } as unknown as VercelRequest,
+    monInvalid.res,
+  );
+  assert.equal(monInvalid.result.statusCode, 400);
+
+  const monValid = createMockRes();
+  await monitoringErrorHandler(
+    {
+      method: 'POST',
+      headers: {},
+      body: { name: 'TypeError', message: 'Render fail for user@example.com', route: '/discover' },
+    } as unknown as VercelRequest,
+    monValid.res,
+  );
+  assert.equal(monValid.result.statusCode, 200);
+});
+

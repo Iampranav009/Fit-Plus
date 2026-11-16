@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, CheckCircle2, Clock, ExternalLink, Video } from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { formatIndiaDate } from '../../lib/date';
+import { isValidHttpMeetingLink } from '../../lib/commerce';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { GlassSheet } from '../../components/ui/GlassSheet';
@@ -16,6 +17,9 @@ export const ConsultationsPage: React.FC = () => {
     activeUser,
     activeClient,
     activeCoach,
+    activeRelationship,
+    subscriptions,
+    isCloudSynced,
     bookSlot,
     rescheduleBooking,
     cancelBooking,
@@ -33,6 +37,26 @@ export const ConsultationsPage: React.FC = () => {
       .filter((b) => b.clientId === activeClient.id)
       .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
   }, [store.bookings, activeClient]);
+
+  const activeSubscription = useMemo(() => {
+    if (!activeClient) return undefined;
+    return subscriptions.find((s) => s.clientId === activeClient.id && s.status === 'active');
+  }, [subscriptions, activeClient]);
+
+  const activePackage = useMemo(() => {
+    const pkgId = activeSubscription?.packageId || activeRelationship?.packageId;
+    if (!pkgId) return undefined;
+    return store.packages.find((p) => p.id === pkgId);
+  }, [activeSubscription, activeRelationship, store.packages]);
+
+  const includedConsults = activeSubscription?.consultationsIncluded ?? activePackage?.consultationsIncluded ?? 0;
+  const usedConsultsCount = useMemo(() => {
+    return clientBookings.filter(
+      (b) =>
+        (b.status === 'booked' || b.status === 'rescheduled' || b.status === 'completed') &&
+        (!activeSubscription || b.createdAt >= activeSubscription.currentPeriodStart),
+    ).length;
+  }, [clientBookings, activeSubscription]);
 
   const targetCoach = activeCoach ?? store.trainers[0];
 
@@ -94,7 +118,7 @@ export const ConsultationsPage: React.FC = () => {
               setBookOpen(true);
             }}
           >
-            Book demo slot
+            {isCloudSynced ? 'Book consultation' : 'Book demo slot'}
           </GlassButton>
         </div>
 
@@ -108,13 +132,18 @@ export const ConsultationsPage: React.FC = () => {
             />
           </div>
           <div className="sm:col-span-7 p-5 flex flex-col justify-center gap-2">
-            <p className="text-[12px] font-medium text-[#FFB06B]">1-on-1 check-ins (demo)</p>
+            <p className="text-[12px] font-medium text-[#FFB06B]">
+              {isCloudSynced ? '1-on-1 check-ins' : '1-on-1 check-ins (demo)'}
+            </p>
             <h2 className="text-[19px] font-semibold text-[#F5F5F7]">
               {COPY.discovery.consultTitle}
             </h2>
             <p className="text-[14px] text-[#A2A8B5] leading-relaxed">
               Review training adherence, meal swaps, and upcoming schedule blocks with{' '}
-              {targetCoach?.displayName}. Duplicate slot bookings are blocked locally.
+              {targetCoach?.displayName || 'your coach'}.
+              {includedConsults > 0
+                ? ` Plan allowance: ${Math.max(0, includedConsults - usedConsultsCount)} of ${includedConsults} consultations remaining.`
+                : ''}
             </p>
             <Link
               to="/app/settings"
@@ -146,13 +175,16 @@ export const ConsultationsPage: React.FC = () => {
               {clientBookings.map((booking) => {
                 const trainer = store.trainers.find((t) => t.id === booking.trainerId);
                 const isActive = booking.status === 'booked' || booking.status === 'rescheduled';
+                const hasJoinLink =
+                  Boolean(booking.meetingLink?.trim()) &&
+                  isValidHttpMeetingLink(booking.meetingLink || '');
                 return (
                   <div
                     key={booking.id}
                     className="rounded-[20px] surface-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-[13px] text-[#7C8393] tabular-nums">
+                      <div className="flex flex-wrap items-center gap-2 text-[13px] text-[#7C8393] tabular-nums">
                         <Calendar className="w-4 h-4 text-[#FF803E]" aria-hidden="true" />
                         <span className="text-[#F5F5F7] font-medium">
                           {formatIndiaDate(booking.dateKey, 'short')}
@@ -162,24 +194,54 @@ export const ConsultationsPage: React.FC = () => {
                           {booking.startTime}–{booking.endTime}
                         </span>
                         <span aria-hidden="true">·</span>
-                        <span className="capitalize">
-                          {booking.status === 'canceled'
-                            ? 'Canceled'
-                            : booking.status === 'completed'
-                              ? 'Completed'
+                        {booking.status === 'completed' ? (
+                          <span className="inline-flex items-center gap-1 text-[#B8E66C] font-medium">
+                            <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="capitalize">
+                            {booking.status === 'canceled'
+                              ? 'Canceled'
                               : booking.status === 'rescheduled'
                                 ? 'Rescheduled'
-                                : 'Confirmed (demo)'}
-                        </span>
+                                : isCloudSynced
+                                  ? 'Confirmed'
+                                  : 'Confirmed (demo)'}
+                          </span>
+                        )}
                       </div>
                       <p className="text-[16px] font-semibold text-[#F5F5F7]">{booking.topic}</p>
                       <p className="text-[13px] text-[#A2A8B5]">
                         With {trainer?.displayName || 'Coach'} · {booking.timezone}
                       </p>
+                      {hasJoinLink && isActive ? (
+                        <a
+                          href={booking.meetingLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#FFB06B] hover:text-[#FF803E] pt-1"
+                        >
+                          <Video className="w-3.5 h-3.5" aria-hidden="true" />
+                          Join session
+                          <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                        </a>
+                      ) : null}
                     </div>
 
                     {isActive ? (
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {hasJoinLink ? (
+                          <a
+                            href={booking.meetingLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-h-[36px] px-3.5 rounded-[12px] bg-[#FF803E] text-[#101218] text-[13px] font-semibold inline-flex items-center gap-1.5 hover:bg-[#FF9259] transition-colors"
+                          >
+                            <Video className="w-3.5 h-3.5" aria-hidden="true" />
+                            Join session
+                          </a>
+                        ) : null}
                         <GlassButton
                           variant="secondary"
                           size="sm"

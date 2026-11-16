@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /app/
+Disallow: /studio/
+Disallow: /onboarding/
+Disallow: /admin
+
+Sitemap: https://fitplus-kappa.vercel.app/sitemap.xml

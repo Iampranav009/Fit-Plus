@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Copy, Plus, UserPlus } from 'lucide-react';
+import { Check, Copy, FolderPlus, Plus, Trash2, UserCheck, UserPlus, X } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import type { GoalFocus } from '../../types/domain';
@@ -26,23 +26,53 @@ export const StudioClientsPage: React.FC = () => {
     store,
     todayKey,
     activeTrainer,
+    isCloudSynced,
     linkedClientsForActiveTrainer,
+    pendingRelationshipsForActiveTrainer,
+    clientGroups,
+    clientGroupMembers,
+    getClientApprovedRecoveryDates,
+    createClientGroup,
+    deleteClientGroup,
+    respondPendingRelationship,
     createInvite,
     revokeInvite,
   } = useApp();
   const navigate = useNavigate();
 
+  const trainerPackages = useMemo(
+    () => store.packages.filter((p) => p.trainerId === activeTrainer?.id && p.status === 'active'),
+    [store.packages, activeTrainer?.id],
+  );
+
   const [query, setQuery] = useState('');
   const [goalFilter, setGoalFilter] = useState<'all' | GoalFocus>('all');
+  const [groupFilter, setGroupFilter] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
   const [inviteLabel, setInviteLabel] = useState('');
-  const [suggestedPkgId, setSuggestedPkgId] = useState('pkg_arjun_weight');
+  const [suggestedPkgId, setSuggestedPkgId] = useState('');
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [respondingRelId, setRespondingRelId] = useState<string | null>(null);
+
+  const resolvedPkgId = suggestedPkgId || trainerPackages[0]?.id || '';
 
   const filteredClients = useMemo(() => {
+    const groupMemberIds =
+      groupFilter === 'all'
+        ? null
+        : new Set(
+            clientGroupMembers
+              .filter((m) => m.groupId === groupFilter)
+              .map((m) => m.clientId),
+          );
+
     return linkedClientsForActiveTrainer.filter((c) => {
       if (goalFilter !== 'all' && c.primaryGoal !== goalFilter) return false;
+      if (groupMemberIds && !groupMemberIds.has(c.id)) return false;
       const q = query.trim().toLowerCase();
       if (q) {
         const hay = `${c.firstName} ${c.lastName} ${c.primaryGoal} ${c.environment}`.toLowerCase();
@@ -50,16 +80,11 @@ export const StudioClientsPage: React.FC = () => {
       }
       return true;
     });
-  }, [linkedClientsForActiveTrainer, goalFilter, query]);
+  }, [linkedClientsForActiveTrainer, goalFilter, groupFilter, clientGroupMembers, query]);
 
   const trainerInvites = useMemo(
     () => store.invites.filter((i) => i.trainerId === activeTrainer?.id),
     [store.invites, activeTrainer?.id],
-  );
-
-  const trainerPackages = useMemo(
-    () => store.packages.filter((p) => p.trainerId === activeTrainer?.id && p.status === 'active'),
-    [store.packages, activeTrainer?.id],
   );
 
   const toggleSelect = (id: string) => {
@@ -84,8 +109,25 @@ export const StudioClientsPage: React.FC = () => {
 
   const handleCreateInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    createInvite(inviteLabel, suggestedPkgId || undefined);
+    createInvite(inviteLabel, resolvedPkgId || undefined);
     setInviteLabel('');
+  };
+
+  const handleCreateGroup = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGroupName.trim()) return;
+    createClientGroup({ name: newGroupName, description: newGroupDesc });
+    setNewGroupName('');
+    setNewGroupDesc('');
+  };
+
+  const handleRespondPending = async (relationshipId: string, action: 'accept' | 'decline') => {
+    setRespondingRelId(relationshipId);
+    try {
+      await respondPendingRelationship(relationshipId, action);
+    } finally {
+      setRespondingRelId(null);
+    }
   };
 
   const copyInviteLink = async (token: string) => {
@@ -113,6 +155,10 @@ export const StudioClientsPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap gap-2.5">
+            <GlassButton variant="glass" size="sm" onClick={() => setGroupModalOpen(true)}>
+              <FolderPlus className="w-4 h-4" aria-hidden="true" />
+              Groups ({clientGroups.length})
+            </GlassButton>
             <GlassButton variant="glass" size="sm" onClick={() => setInviteModalOpen(true)}>
               <UserPlus className="w-4 h-4" aria-hidden="true" />
               Invite client
@@ -125,6 +171,70 @@ export const StudioClientsPage: React.FC = () => {
             </GlassButton>
           </div>
         </div>
+
+        {/* Pending Coaching Requests Queue */}
+        {pendingRelationshipsForActiveTrainer.length > 0 ? (
+          <section
+            aria-label="Pending coaching requests"
+            className="surface-card rounded-[22px] border-[#FF803E]/35 p-4 sm:p-5 flex flex-col gap-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-[#FF803E]" aria-hidden="true" />
+                <h2 className="text-[16px] font-semibold text-[#F5F5F7]">
+                  Pending coaching requests ({pendingRelationshipsForActiveTrainer.length})
+                </h2>
+              </div>
+              <span className="text-[12px] text-[#7C8393]">Requires your approval</span>
+            </div>
+            <div className="divide-y divide-white/[0.08]">
+              {pendingRelationshipsForActiveTrainer.map((rel) => {
+                const reqClient = store.clients.find((c) => c.id === rel.clientId);
+                const reqPkg = store.packages.find((p) => p.id === rel.packageId);
+                const busy = respondingRelId === rel.id;
+                return (
+                  <div
+                    key={rel.id}
+                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div>
+                      <p className="text-[15px] font-semibold text-[#F5F5F7]">
+                        {reqClient
+                          ? `${reqClient.firstName} ${reqClient.lastName}`
+                          : `Client ${rel.clientId.slice(0, 8)}`}
+                      </p>
+                      <p className="text-[12px] text-[#A2A8B5] capitalize">
+                        {reqClient
+                          ? `${reqClient.primaryGoal.replaceAll('_', ' ')} · ${reqClient.environment}`
+                          : 'Incoming request'}
+                        {reqPkg ? ` · Package: ${reqPkg.name}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <GlassButton
+                        size="sm"
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() => void handleRespondPending(rel.id, 'decline')}
+                      >
+                        <X className="w-3.5 h-3.5" aria-hidden="true" />
+                        Decline
+                      </GlassButton>
+                      <GlassButton
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void handleRespondPending(rel.id, 'accept')}
+                      >
+                        <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                        {busy ? 'Saving...' : 'Accept client'}
+                      </GlassButton>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
 
         {/* Search & Group Filter */}
         <div className="surface-card rounded-[22px] p-4 flex flex-col gap-3">
@@ -152,18 +262,69 @@ export const StudioClientsPage: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {clientGroups.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-white/[0.06]" role="group" aria-label="Filter by custom client group">
+              <span className="text-[12px] text-[#7C8393] mr-1">Custom groups:</span>
+              <button
+                type="button"
+                onClick={() => setGroupFilter('all')}
+                aria-pressed={groupFilter === 'all'}
+                className={`min-h-[34px] px-3 rounded-[10px] text-[12px] font-medium border cursor-pointer transition-colors ${
+                  groupFilter === 'all'
+                    ? 'bg-white/12 border-white/25 text-[#F5F5F7]'
+                    : 'bg-[#101218] border-white/[0.08] text-[#A2A8B5]'
+                }`}
+              >
+                Any group
+              </button>
+              {clientGroups.map((grp) => {
+                const count = clientGroupMembers.filter((m) => m.groupId === grp.id).length;
+                return (
+                  <button
+                    key={grp.id}
+                    type="button"
+                    onClick={() => setGroupFilter(grp.id)}
+                    aria-pressed={groupFilter === grp.id}
+                    className={`min-h-[34px] px-3 rounded-[10px] text-[12px] font-medium border cursor-pointer transition-colors tabular-nums ${
+                      groupFilter === grp.id
+                        ? 'bg-[#FF803E]/20 border-[#FF803E] text-[#FFB06B]'
+                        : 'bg-[#101218] border-white/[0.08] text-[#A2A8B5] hover:text-[#F5F5F7]'
+                    }`}
+                  >
+                    {grp.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         {/* Client Roster List */}
         {filteredClients.length === 0 ? (
           <EmptyState
             artwork="clients"
-            title="No clients match this filter"
-            description="Clear your search or filter to see all linked demo clients."
-            actionLabel="Show all clients"
+            title={
+              linkedClientsForActiveTrainer.length === 0
+                ? 'No linked clients yet'
+                : 'No clients match this filter'
+            }
+            description={
+              linkedClientsForActiveTrainer.length === 0
+                ? 'Create an invite link or accept an incoming coaching request to start coaching clients.'
+                : isCloudSynced
+                  ? 'Clear your search or filter to see all linked clients.'
+                  : 'Clear your search or filter to see all linked demo clients.'
+            }
+            actionLabel={linkedClientsForActiveTrainer.length === 0 ? 'Invite a client' : 'Show all clients'}
             onAction={() => {
-              setQuery('');
-              setGoalFilter('all');
+              if (linkedClientsForActiveTrainer.length === 0) {
+                setInviteModalOpen(true);
+              } else {
+                setQuery('');
+                setGoalFilter('all');
+                setGroupFilter('all');
+              }
             }}
           />
         ) : (
@@ -191,16 +352,24 @@ export const StudioClientsPage: React.FC = () => {
             <div className="divide-y divide-white/[0.08]">
               {filteredClients.map((client) => {
                 const isSelected = selectedIds.includes(client.id);
+                const approvedRecovery = getClientApprovedRecoveryDates(client.id);
                 const adherence = computeClientAdherencePercent(
                   client.id,
                   store.assignments,
                   store.completions,
                   todayKey,
                   7,
+                  approvedRecovery,
                 );
                 const clientAsg = store.assignments.filter((a) => a.clientId === client.id);
                 const clientCmp = store.completions.filter((c) => c.clientId === client.id);
-                const streak = computeStreakSummary(clientAsg, clientCmp, todayKey);
+                const streak = computeStreakSummary(
+                  clientAsg,
+                  clientCmp,
+                  todayKey,
+                  120,
+                  approvedRecovery,
+                );
                 const rel = store.relationships.find(
                   (r) => r.clientId === client.id && r.status === 'active',
                 );
@@ -266,37 +435,107 @@ export const StudioClientsPage: React.FC = () => {
         )}
       </div>
 
+      {/* Custom Client Groups Sheet */}
+      <GlassSheet
+        open={groupModalOpen}
+        onClose={() => setGroupModalOpen(false)}
+        title="Custom client groups"
+        description="Organize your roster into batches for targeted programming and bulk task assignment."
+      >
+        <div className="flex flex-col gap-5">
+          <form onSubmit={handleCreateGroup} className="flex flex-col gap-3">
+            <InputField
+              label="Group name"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              placeholder="e.g., Morning 7 AM Batch"
+            />
+            <InputField
+              label="Description"
+              optionalTag="Optional"
+              value={newGroupDesc}
+              onChange={(e) => setNewGroupDesc(e.target.value)}
+              placeholder="e.g., Beginner home strength track"
+            />
+            <GlassButton type="submit" fullWidth>
+              Create group
+            </GlassButton>
+          </form>
+
+          <div className="pt-4 border-t border-white/[0.08] space-y-2.5">
+            <p className="text-[13px] font-semibold text-[#F5F5F7]">Your groups</p>
+            {clientGroups.length === 0 ? (
+              <p className="text-[13px] text-[#7C8393]">
+                No custom groups yet. Create one above, then assign clients from any client profile.
+              </p>
+            ) : (
+              clientGroups.map((grp) => {
+                const count = clientGroupMembers.filter((m) => m.groupId === grp.id).length;
+                return (
+                  <div
+                    key={grp.id}
+                    className="rounded-[14px] surface-elevated p-3.5 flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <p className="text-[14px] font-semibold text-[#F5F5F7]">{grp.name}</p>
+                      <p className="text-[12px] text-[#7C8393] tabular-nums">
+                        {count} member{count === 1 ? '' : 's'}
+                        {grp.description ? ` · ${grp.description}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => deleteClientGroup(grp.id)}
+                      aria-label={`Delete ${grp.name}`}
+                      className="min-h-[36px] min-w-[36px] rounded-[10px] border border-white/[0.08] flex items-center justify-center text-[#A2A8B5] hover:text-[#FF6B70] cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </GlassSheet>
+
       {/* Invite Client Sheet */}
       <GlassSheet
         open={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
         title={COPY.trainer.inviteTitle}
-        description="Generate a demo invitation link for a prospective client."
+        description={
+          isCloudSynced
+            ? 'Generate a cryptographic invitation link to onboard a prospective client.'
+            : 'Generate a demo invitation link for a prospective client.'
+        }
       >
         <div className="flex flex-col gap-5">
           <form onSubmit={handleCreateInvite} className="flex flex-col gap-3">
             <InputField
-              label="Client label or sample email"
+              label={isCloudSynced ? 'Client name or email label' : 'Client label or sample email'}
               value={inviteLabel}
               onChange={(e) => setInviteLabel(e.target.value)}
               placeholder="e.g., Meenakshi Rao (Weight Management)"
             />
-            <label className="flex flex-col gap-1.5 text-[13px] font-medium text-[#F5F5F7]">
-              Suggested package
-              <select
-                value={suggestedPkgId}
-                onChange={(e) => setSuggestedPkgId(e.target.value)}
-                className="min-h-[48px] rounded-[12px] bg-[#101218] border border-white/[0.1] px-3 text-[14px] text-[#F5F5F7]"
-              >
-                {trainerPackages.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {trainerPackages.length > 0 ? (
+              <label className="flex flex-col gap-1.5 text-[13px] font-medium text-[#F5F5F7]">
+                Suggested package
+                <select
+                  value={resolvedPkgId}
+                  onChange={(e) => setSuggestedPkgId(e.target.value)}
+                  className="min-h-[48px] rounded-[12px] bg-[#101218] border border-white/[0.1] px-3 text-[14px] text-[#F5F5F7]"
+                >
+                  {trainerPackages.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <GlassButton type="submit" fullWidth>
-              Generate demo invitation
+              {isCloudSynced ? 'Create invitation link' : 'Generate demo invitation'}
             </GlassButton>
           </form>
 
@@ -331,7 +570,7 @@ export const StudioClientsPage: React.FC = () => {
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                          Copy demo invitation
+                          {isCloudSynced ? 'Copy invite link' : 'Copy demo invitation'}
                         </>
                       )}
                     </GlassButton>

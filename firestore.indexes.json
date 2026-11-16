@@ -1,0 +1,127 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "trainers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "acceptingClients", "order": "ASCENDING" },
+        { "fieldPath": "city", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "packages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainerId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "relationships",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainerUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "relationships",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "assignments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientUserId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "completions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientUserId", "order": "ASCENDING" },
+        { "fieldPath": "dateKey", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "progressEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientUserId", "order": "ASCENDING" },
+        { "fieldPath": "dateKey", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dailyActivity",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientUserId", "order": "ASCENDING" },
+        { "fieldPath": "dateKey", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "consultationSlots",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainerId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dateKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainerUserId", "order": "ASCENDING" },
+        { "fieldPath": "dateKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "notifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientUserId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "payments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainerUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "subscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientUserId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "reviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "trainerId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "auditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "action", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

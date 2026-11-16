@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
-import { Camera, Plus } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Camera, Eye, EyeOff, Loader2, Plus } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
+import * as fsService from '../../data/firestoreService';
 import { addDaysToKey, formatIndiaDate } from '../../lib/date';
 import { computeHeatmapGrid, computeStreakSummary } from '../../lib/streak';
 import { AppShell } from '../../components/layout/AppShell';
@@ -21,10 +22,32 @@ import {
   WeightManagementSvg,
 } from '../../components/ui/FitnessIllustrations';
 
+type ProgressMetricTab = 'weight' | 'strength' | 'waist' | 'steps' | 'checkin';
+
+const METRIC_META: Record<
+  ProgressMetricTab,
+  { label: string; defaultLabel: string; unit: string; defaultVal: string; max: number }
+> = {
+  weight: { label: 'Weight (kg)', defaultLabel: 'Body weight', unit: 'kg', defaultVal: '75.0', max: 400 },
+  strength: { label: 'Strength (kg)', defaultLabel: 'Goblet squat', unit: 'kg', defaultVal: '28', max: 500 },
+  waist: { label: 'Waist (cm)', defaultLabel: 'Waist circumference', unit: 'cm', defaultVal: '84', max: 250 },
+  steps: { label: 'Steps', defaultLabel: 'Daily steps', unit: 'steps', defaultVal: '8000', max: 100000 },
+  checkin: { label: 'Check-ins', defaultLabel: 'Weekly check-in', unit: 'score', defaultVal: '8', max: 10 },
+};
+
 export const ProgressPage: React.FC = () => {
-  const { store, todayKey, activeClient, addProgressMeasurement } = useApp();
+  const {
+    store,
+    todayKey,
+    activeClient,
+    activeCoach,
+    isCloudSynced,
+    getClientApprovedRecoveryDates,
+    addProgressMeasurement,
+    toggleProgressPhotoShare,
+  } = useApp();
   const [range, setRange] = useState<'7d' | '30d' | '12w'>('12w');
-  const [metricTab, setMetricTab] = useState<'weight' | 'strength'>('weight');
+  const [metricTab, setMetricTab] = useState<ProgressMetricTab>('weight');
   const [modalOpen, setModalOpen] = useState(false);
 
   const [entryDate, setEntryDate] = useState(todayKey);
@@ -32,7 +55,11 @@ export const ProgressPage: React.FC = () => {
     activeClient?.weightKg ? String(activeClient.weightKg) : '78.0',
   );
   const [entryNote, setEntryNote] = useState('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [shareWithCoach, setShareWithCoach] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
   const clientAssignments = useMemo(
     () => store.assignments.filter((a) => a.clientId === activeClient?.id),
@@ -43,14 +70,33 @@ export const ProgressPage: React.FC = () => {
     [store.completions, activeClient?.id],
   );
 
+  const approvedRecoveryDates = useMemo(() => {
+    if (!activeClient) return [];
+    return getClientApprovedRecoveryDates(activeClient.id);
+  }, [activeClient, getClientApprovedRecoveryDates]);
+
   const streak = useMemo(
-    () => computeStreakSummary(clientAssignments, clientCompletions, todayKey),
-    [clientAssignments, clientCompletions, todayKey],
+    () =>
+      computeStreakSummary(
+        clientAssignments,
+        clientCompletions,
+        todayKey,
+        120,
+        approvedRecoveryDates,
+      ),
+    [clientAssignments, clientCompletions, todayKey, approvedRecoveryDates],
   );
 
   const heatmapDays = useMemo(
-    () => computeHeatmapGrid(todayKey, 12, clientAssignments, clientCompletions),
-    [todayKey, clientAssignments, clientCompletions],
+    () =>
+      computeHeatmapGrid(
+        todayKey,
+        12,
+        clientAssignments,
+        clientCompletions,
+        approvedRecoveryDates,
+      ),
+    [todayKey, clientAssignments, clientCompletions, approvedRecoveryDates],
   );
 
   const cutoffDate = useMemo(() => {
@@ -81,6 +127,28 @@ export const ProgressPage: React.FC = () => {
         .sort((a, b) => b.dateKey.localeCompare(a.dateKey)),
     [store.progressEvents, activeClient?.id],
   );
+
+  const photoEvents = useMemo(
+    () => allClientEvents.filter((ev) => Boolean(ev.photoPath)),
+    [allClientEvents],
+  );
+
+  useEffect(() => {
+    if (!isCloudSynced) return;
+    let active = true;
+    for (const ev of photoEvents) {
+      if (!ev.photoPath || photoUrls[ev.id]) continue;
+      void fsService
+        .getStorageFileDownloadUrl(ev.photoPath)
+        .then((url) => {
+          if (active) setPhotoUrls((prev) => ({ ...prev, [ev.id]: url }));
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      active = false;
+    };
+  }, [isCloudSynced, photoEvents, photoUrls]);
 
   const completedDaysCount = useMemo(
     () =>
@@ -123,11 +191,25 @@ export const ProgressPage: React.FC = () => {
     [streak.longestStreak, completedDaysCount, allClientEvents],
   );
 
-  const handleSaveMeasurement = (e: React.FormEvent) => {
+  const openModalForTab = (tab: ProgressMetricTab = metricTab) => {
+    setMetricTab(tab);
+    setEntryValue(
+      tab === 'weight'
+        ? String(activeClient?.weightKg || METRIC_META.weight.defaultVal)
+        : METRIC_META[tab].defaultVal,
+    );
+    setPhotoFile(null);
+    setShareWithCoach(false);
+    setFormError('');
+    setModalOpen(true);
+  };
+
+  const handleSaveMeasurement = async (e: React.FormEvent) => {
     e.preventDefault();
+    const meta = METRIC_META[metricTab];
     const num = Number(entryValue);
-    if (!Number.isFinite(num) || num <= 0 || num > 400) {
-      setFormError('Enter a valid positive number.');
+    if (!Number.isFinite(num) || num <= 0 || num > meta.max) {
+      setFormError(`Enter a valid positive number up to ${meta.max}.`);
       return;
     }
     if (!entryDate) {
@@ -135,16 +217,25 @@ export const ProgressPage: React.FC = () => {
       return;
     }
     setFormError('');
-    addProgressMeasurement({
-      dateKey: entryDate,
-      metricType: metricTab,
-      label: metricTab === 'weight' ? 'Body weight' : 'Goblet squat',
-      value: Math.round(num * 10) / 10,
-      unit: 'kg',
-      note: entryNote.trim() || undefined,
-    });
-    setEntryNote('');
-    setModalOpen(false);
+    setSaving(true);
+    try {
+      await addProgressMeasurement({
+        dateKey: entryDate,
+        metricType: metricTab,
+        label: meta.defaultLabel,
+        value: metricTab === 'steps' ? Math.round(num) : Math.round(num * 10) / 10,
+        unit: meta.unit,
+        note: entryNote.trim() || undefined,
+        photoFile,
+        shareWithTrainer: Boolean(photoFile && shareWithCoach && activeCoach),
+      });
+      setEntryNote('');
+      setPhotoFile(null);
+      setShareWithCoach(false);
+      setModalOpen(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -157,15 +248,7 @@ export const ProgressPage: React.FC = () => {
               {COPY.client.progressTitle}
             </h1>
           </div>
-          <GlassButton
-            size="sm"
-            onClick={() => {
-              setEntryValue(
-                metricTab === 'weight' ? String(activeClient?.weightKg || 75) : '28',
-              );
-              setModalOpen(true);
-            }}
-          >
+          <GlassButton size="sm" onClick={() => openModalForTab(metricTab)}>
             <Plus className="w-4 h-4" aria-hidden="true" />
             Log progress
           </GlassButton>
@@ -197,30 +280,39 @@ export const ProgressPage: React.FC = () => {
         </div>
 
         {/* Metric & Range Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <GlassSegmentedControl
-            ariaLabel="Select metric type"
-            value={metricTab}
-            onChange={setMetricTab}
-            size="sm"
-            options={[
-              { id: 'weight', label: 'Weight (kg)' },
-              { id: 'strength', label: 'Strength (kg)' },
-            ]}
-          />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Select metric type">
+            {(Object.keys(METRIC_META) as ProgressMetricTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => setMetricTab(tab)}
+                aria-pressed={metricTab === tab}
+                className={`min-h-[40px] px-3.5 py-1.5 rounded-[12px] text-[13px] font-medium border cursor-pointer transition-colors ${
+                  metricTab === tab
+                    ? 'bg-[#FF803E] border-[#FF803E] text-[#101218] font-semibold'
+                    : 'bg-[#101218] border-white/[0.08] text-[#A2A8B5] hover:text-[#F5F5F7]'
+                }`}
+              >
+                {METRIC_META[tab].label}
+              </button>
+            ))}
+          </div>
 
-          <GlassSegmentedControl
-            ariaLabel="Select time range"
-            value={range}
-            onChange={setRange}
-            size="sm"
-            tone="neutral"
-            options={[
-              { id: '7d', label: '7 days' },
-              { id: '30d', label: '30 days' },
-              { id: '12w', label: '12 weeks' },
-            ]}
-          />
+          <div className="flex justify-end">
+            <GlassSegmentedControl
+              ariaLabel="Select time range"
+              value={range}
+              onChange={setRange}
+              size="sm"
+              tone="neutral"
+              options={[
+                { id: '7d', label: '7 days' },
+                { id: '30d', label: '30 days' },
+                { id: '12w', label: '12 weeks' },
+              ]}
+            />
+          </div>
         </div>
 
         {progressPoints.length === 0 ? (
@@ -228,13 +320,13 @@ export const ProgressPage: React.FC = () => {
             artwork="progress"
             title={COPY.client.noProgressTitle}
             description={COPY.client.noProgressSupport}
-            actionLabel="Add measurement"
-            onAction={() => setModalOpen(true)}
+            actionLabel={`Add ${METRIC_META[metricTab].defaultLabel.toLowerCase()}`}
+            onAction={() => openModalForTab(metricTab)}
           />
         ) : (
           <TrendChart
-            title={metricTab === 'weight' ? 'Weight history' : 'Strength benchmark (Goblet squat)'}
-            unit="kg"
+            title={`${METRIC_META[metricTab].defaultLabel} history`}
+            unit={METRIC_META[metricTab].unit}
             points={progressPoints}
           />
         )}
@@ -283,6 +375,89 @@ export const ProgressPage: React.FC = () => {
           </div>
         </section>
 
+        {/* Private Progress Photos */}
+        <section className="surface-card rounded-[20px] p-5 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-[12px] bg-[#252A35] border border-white/[0.08] flex items-center justify-center text-[#FF803E] shrink-0">
+                <Camera className="w-5 h-5" aria-hidden="true" />
+              </div>
+              <div>
+                <h2 className="text-[16px] font-semibold text-[#F5F5F7]">
+                  {COPY.client.journalTitle}
+                </h2>
+                <p className="text-[13px] text-[#7C8393] mt-0.5">
+                  {isCloudSynced
+                    ? 'Stored privately in encrypted cloud storage. Only visible to your active coach if you enable sharing.'
+                    : 'Sign in with a verified FitPlus account to upload private check-in photos.'}
+                </p>
+              </div>
+            </div>
+            {isCloudSynced ? (
+              <GlassButton size="sm" variant="glass" onClick={() => openModalForTab('checkin')}>
+                Add check-in photo
+              </GlassButton>
+            ) : null}
+          </div>
+
+          {photoEvents.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {photoEvents.map((ev) => {
+                const url = photoUrls[ev.id];
+                const shared = Boolean(ev.shareWithTrainer);
+                return (
+                  <div
+                    key={ev.id}
+                    className="rounded-[16px] surface-elevated p-3 flex flex-col gap-2.5"
+                  >
+                    {url ? (
+                      <img
+                        src={url}
+                        alt={`Check-in on ${ev.dateKey}`}
+                        className="w-full h-44 object-cover rounded-[12px] bg-[#101218]"
+                      />
+                    ) : (
+                      <div className="w-full h-44 rounded-[12px] bg-[#101218] flex items-center justify-center text-[12px] text-[#7C8393]">
+                        Loading private photo...
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2 text-[12px]">
+                      <span className="text-[#F5F5F7] font-medium tabular-nums">
+                        {formatIndiaDate(ev.dateKey, 'short')} · {ev.label}
+                      </span>
+                      {activeCoach ? (
+                        <button
+                          type="button"
+                          onClick={() => void toggleProgressPhotoShare(ev.id, !shared)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[8px] border cursor-pointer transition-colors ${
+                            shared
+                              ? 'bg-[#B8E66C]/15 border-[#B8E66C]/45 text-[#B8E66C]'
+                              : 'bg-[#101218] border-white/[0.1] text-[#A2A8B5] hover:text-[#F5F5F7]'
+                          }`}
+                        >
+                          {shared ? (
+                            <>
+                              <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                              Shared with coach
+                            </>
+                          ) : (
+                            <>
+                              <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+                              Private only
+                            </>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="text-[#7C8393]">Private</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+
         {/* Recent Check-ins & Measurements */}
         <section className="surface-card rounded-[20px] p-5">
           <h2 className="text-[17px] font-semibold text-[#F5F5F7]">Recent measurements</h2>
@@ -290,7 +465,7 @@ export const ProgressPage: React.FC = () => {
             <p className="mt-2 text-[14px] text-[#7C8393]">No entries logged yet.</p>
           ) : (
             <ul className="mt-3 divide-y divide-white/[0.08]">
-              {allClientEvents.slice(0, 6).map((ev) => (
+              {allClientEvents.slice(0, 8).map((ev) => (
                 <li key={ev.id} className="py-3 flex items-center justify-between gap-3 text-[14px]">
                   <div>
                     <p className="text-[#F5F5F7] font-medium">{ev.label}</p>
@@ -307,31 +482,13 @@ export const ProgressPage: React.FC = () => {
             </ul>
           )}
         </section>
-
-        {/* Private Journal Placeholder */}
-        <section className="surface-card rounded-[20px] p-5 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-[12px] bg-[#252A35] border border-white/[0.08] flex items-center justify-center text-[#A2A8B5] shrink-0">
-            <Camera className="w-5 h-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-[16px] font-semibold text-[#F5F5F7]">
-              {COPY.client.journalTitle}
-            </h2>
-            <p className="text-[13px] text-[#7C8393] mt-0.5">
-              {COPY.client.journalSupport} Private media storage is deferred until Stage 2B.
-            </p>
-          </div>
-        </section>
       </div>
 
       {/* Floating Log Action Button */}
       <div className="fixed right-4 bottom-24 lg:right-8 lg:bottom-8 z-20">
         <FloatingActionButton
           label="Log new measurement"
-          onClick={() => {
-            setEntryValue(metricTab === 'weight' ? String(activeClient?.weightKg || 75) : '28');
-            setModalOpen(true);
-          }}
+          onClick={() => openModalForTab(metricTab)}
         />
       </div>
 
@@ -339,7 +496,7 @@ export const ProgressPage: React.FC = () => {
       <GlassSheet
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Add measurement"
+        title={`Log ${METRIC_META[metricTab].defaultLabel.toLowerCase()}`}
         description="Stored locally or in your private FitPlus workspace."
       >
         <form onSubmit={handleSaveMeasurement} className="flex flex-col gap-4">
@@ -351,8 +508,8 @@ export const ProgressPage: React.FC = () => {
             onChange={(e) => setEntryDate(e.target.value)}
           />
           <InputField
-            label={metricTab === 'weight' ? 'Body weight' : 'Goblet squat load'}
-            unit="kg"
+            label={METRIC_META[metricTab].defaultLabel}
+            unit={METRIC_META[metricTab].unit}
             inputMode="decimal"
             value={entryValue}
             onChange={(e) => setEntryValue(e.target.value)}
@@ -363,8 +520,37 @@ export const ProgressPage: React.FC = () => {
             optionalTag="Optional"
             value={entryNote}
             onChange={(e) => setEntryNote(e.target.value)}
-            placeholder="e.g., Morning weight before breakfast"
+            placeholder="e.g., Morning check-in before breakfast"
           />
+
+          {isCloudSynced ? (
+            <div className="rounded-[14px] surface-elevated p-3.5 space-y-2.5">
+              <p className="text-[13px] font-medium text-[#F5F5F7]">
+                Check-in photo <span className="text-[#7C8393] font-normal">(optional · max 5 MB)</span>
+              </p>
+              <label className="glass-control min-h-[40px] px-3 py-2 rounded-[10px] text-[13px] text-[#F5F5F7] cursor-pointer inline-flex items-center">
+                <span>{photoFile ? photoFile.name : 'Attach private photo'}</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="sr-only"
+                  onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                />
+              </label>
+              {photoFile && activeCoach ? (
+                <label className="flex items-center gap-2 text-[13px] text-[#A2A8B5] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={shareWithCoach}
+                    onChange={(e) => setShareWithCoach(e.target.checked)}
+                    className="h-4 w-4 accent-[#FF803E]"
+                  />
+                  Share this photo with {activeCoach.displayName}
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="flex gap-2.5 pt-2">
             <GlassButton
               type="button"
@@ -374,8 +560,15 @@ export const ProgressPage: React.FC = () => {
             >
               Cancel
             </GlassButton>
-            <GlassButton type="submit" fullWidth>
-              Save measurement
+            <GlassButton type="submit" fullWidth disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  Saving...
+                </>
+              ) : (
+                'Save measurement'
+              )}
             </GlassButton>
           </div>
         </form>

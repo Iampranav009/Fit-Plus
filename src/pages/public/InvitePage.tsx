@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { BadgeCheck, CalendarX2, CheckCircle2 } from 'lucide-react';
+import { BadgeCheck, CalendarX2, CheckCircle2, CreditCard, Lock } from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
+import type { PublicInviteResolveResult } from '../../data/firestoreService';
 import { validateInvite } from '../../lib/engines';
 import { formatIndiaDate, formatINR } from '../../lib/date';
+import { openRazorpayCheckout } from '../../lib/razorpay';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
@@ -14,35 +16,78 @@ export const InvitePage: React.FC = () => {
   const {
     store,
     todayKey,
+    activeUser,
     activeClient,
+    firebaseUser,
+    isEmailVerified,
+    isCloudSynced,
+    isDemoSandbox,
+    publicDirectory,
     setPendingInviteToken,
     acceptDemoInviteAndPackage,
+    createPackageOrder,
+    verifyPackageOrder,
     rejectInvite,
     lookupInviteToken,
+    pushToast,
   } = useApp();
   const navigate = useNavigate();
   const [selectedPkgId, setSelectedPkgId] = useState<string>('');
+  const [resolved, setResolved] = useState<PublicInviteResolveResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
 
   useEffect(() => {
-    if (token) {
-      void lookupInviteToken(token);
+    let active = true;
+    setLoading(true);
+    if (!token) {
+      setResolved({ source: 'client_fallback', state: 'not_found' });
+      setLoading(false);
+      return;
     }
+    void lookupInviteToken(token)
+      .then((res) => {
+        if (active) setResolved(res);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [token, lookupInviteToken]);
 
-  const validation = useMemo(
-    () => validateInvite(token, store.invites, todayKey),
-    [token, store.invites, todayKey],
-  );
+  const mergedInvites = useMemo(() => {
+    if (resolved?.invite && !store.invites.some((i) => i.id === resolved.invite!.id)) {
+      return [resolved.invite, ...store.invites];
+    }
+    return store.invites;
+  }, [resolved?.invite, store.invites]);
+
+  const validation = useMemo(() => {
+    if (resolved?.state === 'unverified_server' && mergedInvites.every((i) => i.token.toUpperCase() !== token.toUpperCase())) {
+      return { state: 'unverified_server' as const };
+    }
+    return validateInvite(token, mergedInvites, todayKey);
+  }, [resolved?.state, mergedInvites, token, todayKey]);
 
   const trainer = useMemo(() => {
     if (validation.state !== 'valid') return undefined;
-    return store.trainers.find((t) => t.id === validation.invite.trainerId);
-  }, [validation, store.trainers]);
+    return (
+      resolved?.trainer ??
+      store.trainers.find((t) => t.id === validation.invite.trainerId) ??
+      publicDirectory.trainers.find((t) => t.id === validation.invite.trainerId)
+    );
+  }, [validation, resolved?.trainer, store.trainers, publicDirectory.trainers]);
 
   const trainerPackages = useMemo(() => {
     if (!trainer) return [];
-    return store.packages.filter((p) => p.trainerId === trainer.id && p.status === 'active');
-  }, [trainer, store.packages]);
+    if (resolved?.packages && resolved.packages.length > 0) return resolved.packages;
+    const fromStore = store.packages.filter((p) => p.trainerId === trainer.id && p.status === 'active');
+    if (fromStore.length > 0) return fromStore;
+    return publicDirectory.packages.filter((p) => p.trainerId === trainer.id && p.status === 'active');
+  }, [trainer, resolved?.packages, store.packages, publicDirectory.packages]);
 
   const activePackage = useMemo(() => {
     if (selectedPkgId) {
@@ -59,13 +104,78 @@ export const InvitePage: React.FC = () => {
 
   const handleReviewAndContinue = () => {
     setPendingInviteToken(token);
-    navigate('/onboarding/client/basics');
+    if (firebaseUser && isEmailVerified) {
+      navigate('/onboarding/client/basics');
+    } else if (isDemoSandbox) {
+      navigate('/onboarding/client/basics');
+    } else {
+      navigate(`/auth?redirect=${encodeURIComponent(`/join/${token}`)}`);
+    }
   };
 
-  const handleAcceptNow = () => {
-    if (!activePackage) return;
-    acceptDemoInviteAndPackage(token, activePackage);
-    navigate('/app/coach');
+  const handleAcceptNow = async () => {
+    if (!activePackage || !trainer) return;
+    if (!isCloudSynced) {
+      acceptDemoInviteAndPackage(token, activePackage);
+      navigate('/app/coach');
+      return;
+    }
+
+    setCheckoutBusy(true);
+    setCheckoutError('');
+    try {
+      const inviteId = validation.state === 'valid' ? validation.invite.id : undefined;
+      const orderRes = await createPackageOrder({
+        trainerId: trainer.id,
+        packageId: activePackage.id,
+        inviteId,
+      });
+
+      if (!orderRes.ok) {
+        setCheckoutError(orderRes.error || 'Unable to start enrollment.');
+        return;
+      }
+
+      if (orderRes.mode === 'free_enrolled') {
+        pushToast(`Connected with ${trainer.displayName} (${orderRes.invoiceNumber || 'Free tier'}).`);
+        navigate('/app/coach');
+        return;
+      }
+
+      if (!orderRes.keyId || !orderRes.orderId || !orderRes.paymentId) {
+        setCheckoutError('Incomplete payment order details from server.');
+        return;
+      }
+
+      const rzpRes = await openRazorpayCheckout({
+        keyId: orderRes.keyId,
+        orderId: orderRes.orderId,
+        amountPaise: orderRes.amountPaise || activePackage.priceInr * 100,
+        packageName: orderRes.packageName || activePackage.name,
+        trainerName: trainer.displayName,
+        customerName: `${activeUser.firstName} ${activeUser.lastName}`.trim(),
+        customerEmail: activeUser.email,
+      });
+
+      if (!rzpRes.ok) {
+        setCheckoutError('error' in rzpRes ? rzpRes.error : 'Payment canceled.');
+        return;
+      }
+
+      const verifyRes = await verifyPackageOrder({
+        paymentId: orderRes.paymentId,
+        razorpayOrderId: rzpRes.razorpayOrderId,
+        razorpayPaymentId: rzpRes.razorpayPaymentId,
+        razorpaySignature: rzpRes.razorpaySignature,
+      });
+      if (!verifyRes.ok) {
+        setCheckoutError(verifyRes.error || 'Payment verification failed.');
+        return;
+      }
+      navigate('/app/coach');
+    } finally {
+      setCheckoutBusy(false);
+    }
   };
 
   const handleDecline = () => {
@@ -73,12 +183,44 @@ export const InvitePage: React.FC = () => {
     navigate('/discover');
   };
 
+  const isVerifiedBadge =
+    trainer?.verificationStatus === 'verified' || (isDemoSandbox && trainer?.isDemoVerified);
+
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
       <PublicTopBar />
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-10">
-        {validation.state !== 'valid' || !trainer ? (
+        {loading ? (
+          <div className="rounded-[28px] surface-card p-8 text-center text-[15px] text-[#A2A8B5]">
+            Checking invitation {token.toUpperCase()}…
+          </div>
+        ) : validation.state === 'unverified_server' ? (
+          <div className="rounded-[28px] surface-card p-6 sm:p-8 flex flex-col items-center text-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-[#252A35] border border-white/[0.1] flex items-center justify-center text-[#FF803E]">
+              <Lock className="w-6 h-6" aria-hidden="true" />
+            </div>
+            <h1 className="text-[26px] font-semibold text-[#F5F5F7]">
+              Sign in to open invitation {token.toUpperCase()}
+            </h1>
+            <p className="text-[15px] text-[#A2A8B5] max-w-md">
+              This coaching invitation is protected. Sign in or create a verified FitPlus account to review your coach&apos;s plan and accept.
+            </p>
+            <div className="flex flex-wrap gap-3 pt-2">
+              <GlassButton
+                onClick={() => {
+                  setPendingInviteToken(token);
+                  navigate(`/auth?redirect=${encodeURIComponent(`/join/${token}`)}`);
+                }}
+              >
+                Sign in & review invite
+              </GlassButton>
+              <GlassButton variant="secondary" onClick={() => navigate('/discover')}>
+                Browse coaches
+              </GlassButton>
+            </div>
+          </div>
+        ) : validation.state !== 'valid' || !trainer ? (
           <div className="rounded-[28px] surface-card p-6 sm:p-8 flex flex-col items-center text-center gap-4">
             <div className="w-12 h-12 rounded-full bg-[#252A35] border border-white/[0.1] flex items-center justify-center text-[#F5C25C]">
               <CalendarX2 className="w-6 h-6" aria-hidden="true" />
@@ -88,9 +230,9 @@ export const InvitePage: React.FC = () => {
             </h1>
             <p className="text-[15px] text-[#A2A8B5] max-w-md">
               {validation.state === 'expired'
-                ? 'This sample invitation link has expired.'
+                ? 'This invitation link has expired.'
                 : validation.state === 'redeemed'
-                  ? 'This sample invitation has already been redeemed.'
+                  ? 'This invitation has already been redeemed.'
                   : validation.state === 'revoked'
                     ? 'This invitation was revoked by the coach.'
                     : 'No matching invitation token was found.'}{' '}
@@ -100,8 +242,8 @@ export const InvitePage: React.FC = () => {
               <GlassButton onClick={() => navigate('/discover')}>
                 {COPY.public.findTrainer}
               </GlassButton>
-              <GlassButton variant="secondary" onClick={() => navigate('/join/FIT-ARJUN-2026')}>
-                Try active sample invite
+              <GlassButton variant="secondary" onClick={() => navigate('/demo')}>
+                Explore interactive demo
               </GlassButton>
             </div>
           </div>
@@ -125,11 +267,11 @@ export const InvitePage: React.FC = () => {
                 />
                 <div className="pb-1">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-[13px] text-[#FFB06B]">Invitation</span>
-                    {trainer.isDemoVerified ? (
+                    <span className="text-[13px] text-[#FFB06B]">Coaching invitation</span>
+                    {isVerifiedBadge ? (
                       <span className="inline-flex items-center gap-1 text-[12px] text-[#A2A8B5]">
                         <BadgeCheck className="w-3.5 h-3.5 text-[#FFB06B]" aria-hidden="true" />
-                        Demo verified
+                        {isCloudSynced ? 'Verified coach' : 'Demo verified'}
                       </span>
                     ) : null}
                   </div>
@@ -158,7 +300,7 @@ export const InvitePage: React.FC = () => {
               {trainerPackages.length > 0 ? (
                 <div className="flex flex-col gap-3">
                   <h2 className="text-[16px] font-semibold text-[#F5F5F7]">
-                    Select a demo coaching package
+                    Select a coaching package
                   </h2>
                   <div className="grid gap-2.5">
                     {trainerPackages.map((pkg) => {
@@ -167,7 +309,10 @@ export const InvitePage: React.FC = () => {
                         <button
                           key={pkg.id}
                           type="button"
-                          onClick={() => setSelectedPkgId(pkg.id)}
+                          onClick={() => {
+                            setCheckoutError('');
+                            setSelectedPkgId(pkg.id);
+                          }}
                           aria-pressed={isSelected}
                           className={`text-left rounded-[16px] p-4 border transition-colors cursor-pointer ${
                             isSelected
@@ -183,7 +328,7 @@ export const InvitePage: React.FC = () => {
                               {pkg.name}
                             </span>
                             <span className="text-[15px] font-semibold text-[#F5F5F7] tabular-nums">
-                              {formatINR(pkg.priceInr)}/mo
+                              {pkg.priceInr === 0 ? 'Free' : `${formatINR(pkg.priceInr)}/mo`}
                             </span>
                           </div>
                           <p className="mt-1 text-[13px] text-[#A2A8B5]">{pkg.summary}</p>
@@ -192,31 +337,64 @@ export const InvitePage: React.FC = () => {
                     })}
                   </div>
                   <p className="text-[12px] text-[#7C8393]">
-                    {COPY.discovery.checkoutNotice} Accepting explicitly connects you to {trainer.displayName} in this local demo.
+                    {isCloudSynced
+                      ? activePackage?.priceInr === 0
+                        ? `Accepting activates your coaching relationship with ${trainer.displayName}.`
+                        : `Paid packages are processed via Razorpay before activating your coaching workspace.`
+                      : `${COPY.discovery.checkoutNotice} Accepting explicitly connects you to ${trainer.displayName} in this local demo.`}
                   </p>
                 </div>
               ) : null}
 
+              {checkoutError ? (
+                <p className="rounded-[12px] bg-[#FF6B70]/12 border border-[#FF6B70]/35 px-3.5 py-2.5 text-[13px] text-[#FFB5B8]">
+                  {checkoutError}
+                </p>
+              ) : null}
+
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 {activeClient ? (
-                  <GlassButton fullWidth onClick={handleAcceptNow} disabled={!activePackage}>
-                    Accept & confirm demo enrollment
+                  <GlassButton
+                    fullWidth
+                    onClick={() => void handleAcceptNow()}
+                    disabled={!activePackage || checkoutBusy}
+                  >
+                    {checkoutBusy ? (
+                      'Processing…'
+                    ) : isCloudSynced ? (
+                      activePackage && activePackage.priceInr > 0 ? (
+                        <>
+                          <CreditCard className="w-4 h-4" aria-hidden="true" />
+                          Accept & pay {formatINR(activePackage.priceInr)}
+                        </>
+                      ) : (
+                        'Accept & connect with coach'
+                      )
+                    ) : (
+                      'Accept & confirm demo enrollment'
+                    )}
                   </GlassButton>
                 ) : (
                   <GlassButton fullWidth onClick={handleReviewAndContinue}>
-                    {COPY.public.reviewInvitation}
+                    {firebaseUser && isEmailVerified
+                      ? COPY.public.reviewInvitation
+                      : 'Sign in to accept invitation'}
                   </GlassButton>
                 )}
-                <GlassButton variant="secondary" fullWidth onClick={handleDecline}>
+                <GlassButton variant="secondary" fullWidth onClick={handleDecline} disabled={checkoutBusy}>
                   {COPY.public.notNow}
                 </GlassButton>
               </div>
 
-              {!activeClient ? (
+              {!activeClient && !firebaseUser ? (
                 <p className="text-[12px] text-[#7C8393] text-center">
-                  Already previewing a client?{' '}
-                  <Link to="/auth" className="text-[#FFB06B] underline underline-offset-4">
-                    Switch in Demo Auth
+                  Already have a FitPlus account?{' '}
+                  <Link
+                    to={`/auth?redirect=${encodeURIComponent(`/join/${token}`)}`}
+                    onClick={() => setPendingInviteToken(token)}
+                    className="text-[#FFB06B] underline underline-offset-4"
+                  >
+                    Sign in here
                   </Link>
                 </p>
               ) : null}

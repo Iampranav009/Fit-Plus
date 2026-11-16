@@ -5,6 +5,7 @@ export const BLUEPRINT_PATTERNS = {
   slug: /^[a-z0-9\-]+$/,
   dateKey: /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/,
   timeHHMM: /^[0-9]{2}:[0-9]{2}$/,
+  e164Phone: /^\+[1-9][0-9]{6,14}$/,
 } as const;
 
 export const BLUEPRINT_LIMITS = {
@@ -18,6 +19,7 @@ export const BLUEPRINT_LIMITS = {
   cityMax: 80,
   timezoneMax: 64,
   emailMax: 160,
+  phoneE164Max: 20,
   tokenMax: 64,
   titleMax: 140,
   summaryMax: 500,
@@ -26,6 +28,9 @@ export const BLUEPRINT_LIMITS = {
   constraintsMax: 800,
   noteMax: 400,
   dietaryNotesMax: 500,
+  allergiesMax: 400,
+  healthLimitationsMax: 600,
+  coachingPrefsMax: 500,
   coachNotesMax: 2000,
   overrideNoteMax: 300,
   targetLabelMax: 80,
@@ -33,11 +38,15 @@ export const BLUEPRINT_LIMITS = {
   loggedValueMax: 120,
   completionNotesMax: 1000,
   topicMax: 300,
+  meetingLinkMax: 300,
   notificationBodyMax: 500,
   actionRouteMax: 128,
   clientLabelMax: 120,
+  reviewCommentMax: 600,
+  policyVersionMax: 24,
   specialtiesMaxItems: 10,
   languagesMaxItems: 10,
+  certificationsMaxItems: 10,
   featuresMaxItems: 10,
   equipmentMaxItems: 15,
   scheduledDatesMaxItems: 31,
@@ -106,4 +115,10 @@ export function sanitizeDateKey(value: string, fallback: string): string {
 export function sanitizeTimeHHMM(value: string, fallback = '09:00'): string {
   const trimmed = value.trim();
   return BLUEPRINT_PATTERNS.timeHHMM.test(trimmed) ? trimmed : fallback;
+}
+
+export function sanitizeE164Phone(value?: string): string {
+  if (!value) return '';
+  const cleaned = value.replace(/[\s\-()]/g, '').trim();
+  return BLUEPRINT_PATTERNS.e164Phone.test(cleaned) ? cleaned.slice(0, BLUEPRINT_LIMITS.phoneE164Max) : '';
 }

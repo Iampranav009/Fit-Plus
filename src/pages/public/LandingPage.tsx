@@ -1,25 +1,13 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, PlayCircle } from 'lucide-react';
 import { COPY } from '../../data/copy';
-import { useApp } from '../../context/AppContext';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
 
 export const LandingPage: React.FC = () => {
-  const { startDemoAsRole } = useApp();
   const navigate = useNavigate();
-
-  const openClientPreview = () => {
-    startDemoAsRole('client', 'usr_client_aarav');
-    navigate('/app/home');
-  };
-
-  const openTrainerPreview = () => {
-    startDemoAsRole('trainer', 'usr_trainer_arjun');
-    navigate('/studio/overview');
-  };
 
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
@@ -31,13 +19,13 @@ export const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-stretch">
             <div className="lg:col-span-7 flex flex-col justify-center gap-6">
               <p className="text-[13px] font-medium text-[#FFB06B]">
-                India-first personal coaching · Interactive preview
+                India-first personal coaching platform
               </p>
               <h1 className="text-[36px] sm:text-[46px] leading-[1.08] font-semibold tracking-[-0.03em] text-[#F5F5F7] max-w-xl">
                 {COPY.public.landingHeadline}
               </h1>
               <p className="text-[16px] leading-[1.6] text-[#A2A8B5] max-w-lg">
-                {COPY.public.landingSupport} Built for independent coaches and adult clients across India with INR packages, everyday Indian meal guidance, and steady daily commitments.
+                {COPY.public.landingSupport} Built for independent coaches and adult clients across India with transparent INR packages, everyday Indian meal guidance, and steady daily commitments.
               </p>
 
               <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -47,32 +35,25 @@ export const LandingPage: React.FC = () => {
                 </GlassButton>
                 <GlassButton
                   variant="glass"
-                  onClick={() => navigate('/onboarding/trainer/profile')}
+                  onClick={() => navigate('/auth')}
                 >
                   {COPY.public.imATrainer}
                 </GlassButton>
               </div>
 
               <div className="pt-5 border-t border-white/[0.08] flex flex-wrap items-center gap-x-6 gap-y-2 text-[14px] text-[#A2A8B5]">
-                <button
-                  type="button"
-                  onClick={openClientPreview}
-                  className="text-[#F5F5F7] hover:text-[#FF803E] transition-colors underline underline-offset-4 cursor-pointer min-h-[44px]"
+                <Link
+                  to="/demo"
+                  className="text-[#F5F5F7] hover:text-[#FF803E] transition-colors inline-flex items-center gap-1.5 min-h-[44px]"
                 >
-                  Preview Client App (Aarav)
-                </button>
-                <button
-                  type="button"
-                  onClick={openTrainerPreview}
-                  className="text-[#F5F5F7] hover:text-[#FF803E] transition-colors underline underline-offset-4 cursor-pointer min-h-[44px]"
-                >
-                  Preview Trainer Studio (Arjun)
-                </button>
+                  <PlayCircle className="w-4 h-4 text-[#FF803E]" aria-hidden="true" />
+                  Explore interactive demo sandbox
+                </Link>
                 <Link
                   to="/welcome"
                   className="hover:text-[#F5F5F7] transition-colors min-h-[44px] inline-flex items-center"
                 >
-                  View Welcome screen
+                  See how FitPlus works
                 </Link>
               </div>
             </div>
@@ -225,7 +206,7 @@ export const LandingPage: React.FC = () => {
                 One daily view, zero noise
               </h2>
               <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                Track today's workout, Indian home meals, steps, and recovery commitments without guilt or red failure alerts.
+                Track today&apos;s workout, Indian home meals, steps, and recovery commitments without guilt or red failure alerts.
               </p>
             </div>
             <div className="surface-card rounded-[22px] p-6">
@@ -234,16 +215,16 @@ export const LandingPage: React.FC = () => {
                 Assign cleanly, review fast
               </h2>
               <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                Manage clients, bulk-assign templates while respecting individual overrides, and draft blocks in seconds.
+                Manage clients, bulk-assign templates while respecting individual overrides, and draft blocks with Gemini AI assistance.
               </p>
             </div>
             <div className="surface-card rounded-[22px] p-6">
-              <p className="text-[12px] text-[#7C8393]">03 · Demo boundaries</p>
+              <p className="text-[12px] text-[#7C8393]">03 · Verified billing & trust</p>
               <h2 className="mt-2 text-[20px] font-semibold text-[#F5F5F7]">
-                Transparent preview data
+                Transparent INR coaching
               </h2>
               <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                Sample coaches, INR packages, consultations, and AI plan drafts run cleanly with zero external charges.
+                Clear monthly and quarterly INR packages, verified trainer credentials, client reviews, and direct WhatsApp coaching handoffs.
               </p>
             </div>
           </div>
@@ -252,11 +233,11 @@ export const LandingPage: React.FC = () => {
 
       <footer className="border-t border-white/[0.08] px-4 sm:px-6 lg:px-10 py-6 text-[12px] text-[#7C8393]">
         <div className="max-w-[1280px] mx-auto flex flex-wrap items-center justify-between gap-4">
-          <p>FitPlus (Provisional brand) · Interactive demo · Sample pricing & fictional profiles only</p>
-          <div className="flex items-center gap-4">
+          <p>FitPlus · India-first personal fitness coaching platform · en-IN</p>
+          <div className="flex flex-wrap items-center gap-4">
             <Link to="/discover" className="hover:text-[#F5F5F7] transition-colors">Discover coaches</Link>
-            <Link to="/join/FIT-ARJUN-2026" className="hover:text-[#F5F5F7] transition-colors">Test invite flow</Link>
-            <Link to="/join/FIT-EXP-000" className="hover:text-[#F5F5F7] transition-colors">Test expired invite</Link>
+            <Link to="/demo" className="hover:text-[#F5F5F7] transition-colors">Interactive demo</Link>
+            <Link to="/auth" className="hover:text-[#F5F5F7] transition-colors">Sign in</Link>
           </div>
         </div>
       </footer>

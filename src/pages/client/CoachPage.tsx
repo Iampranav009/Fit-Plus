@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BadgeCheck, Calendar, MessageCircle, Search } from 'lucide-react';
+import { BadgeCheck, Calendar, MessageCircle, Receipt, Search } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { formatIndiaDate, formatINR } from '../../lib/date';
@@ -15,8 +15,13 @@ import { InputField } from '../../components/ui/InputField';
 export const CoachPage: React.FC = () => {
   const {
     store,
+    activeClient,
     activeCoach,
     activeRelationship,
+    subscriptions,
+    payments,
+    isCloudSynced,
+    isDemoSandbox,
     disconnectActiveCoach,
   } = useApp();
   const navigate = useNavigate();
@@ -29,6 +34,18 @@ export const CoachPage: React.FC = () => {
     if (!activeRelationship?.packageId) return undefined;
     return store.packages.find((p) => p.id === activeRelationship.packageId);
   }, [activeRelationship, store.packages]);
+
+  const activeSubscription = useMemo(() => {
+    if (!activeClient) return undefined;
+    return subscriptions.find((s) => s.clientId === activeClient.id && s.status === 'active');
+  }, [subscriptions, activeClient]);
+
+  const latestPayment = useMemo(() => {
+    if (!activeClient) return undefined;
+    return payments
+      .filter((p) => p.clientId === activeClient.id)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  }, [payments, activeClient]);
 
   const handleOpenInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,17 +84,30 @@ export const CoachPage: React.FC = () => {
             <div className="px-5 sm:px-6 pb-6 -mt-9 relative flex flex-col gap-5">
               <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div className="flex items-end gap-4">
-                  <MediaImage
-                    assetKey={activeCoach.avatarKey}
-                    alt={activeCoach.displayName}
-                    aspectClass="w-20 h-20 rounded-[18px] border-2 border-[#1C2029] shrink-0"
-                  />
+                  {activeCoach.photoUrl ? (
+                    <img
+                      src={activeCoach.photoUrl}
+                      alt={activeCoach.displayName}
+                      className="w-20 h-20 rounded-[18px] border-2 border-[#1C2029] object-cover shrink-0 bg-[#101218]"
+                    />
+                  ) : (
+                    <MediaImage
+                      assetKey={activeCoach.avatarKey}
+                      alt={activeCoach.displayName}
+                      aspectClass="w-20 h-20 rounded-[18px] border-2 border-[#1C2029] shrink-0"
+                    />
+                  )}
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <h2 className="text-[22px] font-semibold text-[#F5F5F7]">
                         {activeCoach.displayName}
                       </h2>
-                      {activeCoach.isDemoVerified ? (
+                      {activeCoach.verificationStatus === 'verified' ? (
+                        <span className="inline-flex items-center gap-1 text-[12px] text-[#B8E66C]">
+                          <BadgeCheck className="w-4 h-4" aria-hidden="true" />
+                          Verified coach
+                        </span>
+                      ) : activeCoach.isDemoVerified && !isCloudSynced ? (
                         <span className="inline-flex items-center gap-1 text-[12px] text-[#FFB06B]">
                           <BadgeCheck className="w-4 h-4" aria-hidden="true" />
                           Demo verified
@@ -96,20 +126,41 @@ export const CoachPage: React.FC = () => {
                 </Link>
               </div>
 
-              {activePackage ? (
+              {activePackage || activeSubscription ? (
                 <div className="rounded-[16px] surface-elevated p-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-[12px] text-[#7C8393]">Active demo package</p>
+                    <p className="text-[12px] text-[#7C8393]">
+                      {isCloudSynced ? 'Active coaching plan' : 'Active demo package'}
+                    </p>
                     <p className="text-[16px] font-semibold text-[#F5F5F7]">
-                      {activePackage.name}
+                      {activeSubscription?.packageName || activePackage?.name}
                     </p>
-                    <p className="text-[12px] text-[#A2A8B5] mt-0.5">
-                      Connected since {formatIndiaDate(activeRelationship.startedAt.slice(0, 10), 'short')}
+                    <p className="text-[12px] text-[#A2A8B5] mt-0.5 tabular-nums">
+                      {activeSubscription
+                        ? `Current period: ${formatIndiaDate(activeSubscription.currentPeriodStart.slice(0, 10), 'short')} – ${formatIndiaDate(activeSubscription.currentPeriodEnd.slice(0, 10), 'short')}`
+                        : `Connected since ${formatIndiaDate(activeRelationship.startedAt.slice(0, 10), 'short')}`}
                     </p>
+                    {latestPayment ? (
+                      <p className="text-[12px] text-[#7C8393] mt-0.5 tabular-nums">
+                        Latest receipt: {latestPayment.invoiceNumber} ({formatINR(latestPayment.amountInr)})
+                      </p>
+                    ) : null}
                   </div>
-                  <p className="text-[18px] font-semibold text-[#F5F5F7] tabular-nums">
-                    {formatINR(activePackage.priceInr)}/mo
-                  </p>
+                  <div className="flex flex-col items-end gap-1.5">
+                    <p className="text-[18px] font-semibold text-[#F5F5F7] tabular-nums">
+                      {formatINR(activeSubscription?.priceInr ?? activePackage?.priceInr ?? 0)}/
+                      {(activeSubscription?.cadence ?? activePackage?.cadence) === 'quarterly'
+                        ? 'qtr'
+                        : 'mo'}
+                    </p>
+                    <Link
+                      to="/app/payments"
+                      className="text-[12px] font-medium text-[#FFB06B] hover:text-[#FF803E] inline-flex items-center gap-1"
+                    >
+                      <Receipt className="w-3.5 h-3.5" aria-hidden="true" />
+                      Billing & receipts
+                    </Link>
+                  </div>
                 </div>
               ) : null}
 
@@ -130,7 +181,9 @@ export const CoachPage: React.FC = () => {
 
               <div className="pt-4 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
                 <p className="text-[13px] text-[#7C8393]">
-                  You can end coaching in this local demo any time.
+                  {isCloudSynced
+                    ? 'You can manage or end this coaching relationship anytime.'
+                    : 'You can end coaching in this local demo any time.'}
                 </p>
                 <GlassButton
                   variant="destructive"
@@ -201,6 +254,8 @@ export const CoachPage: React.FC = () => {
           open={whatsAppOpen}
           onClose={() => setWhatsAppOpen(false)}
           coachName={activeCoach.displayName}
+          whatsappE164={activeCoach.whatsappBusinessE164}
+          isDemoSandbox={isDemoSandbox}
         />
       ) : null}
     </AppShell>

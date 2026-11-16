@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Sparkles } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
+import * as fsService from '../../data/firestoreService';
 import { formatIndiaDate } from '../../lib/date';
 import { computeClientAdherencePercent, computeStreakSummary } from '../../lib/streak';
 import { AppShell } from '../../components/layout/AppShell';
@@ -17,6 +18,13 @@ export const StudioClientDetailPage: React.FC = () => {
   const {
     store,
     todayKey,
+    isCloudSynced,
+    dailyActivities,
+    clientGroups,
+    clientGroupMembers,
+    getClientApprovedRecoveryDates,
+    toggleClientGroupMember,
+    toggleClientRecoveryDay,
     isClientLinkedToActiveTrainer,
     updateClientCoachNotes,
   } = useApp();
@@ -25,6 +33,12 @@ export const StudioClientDetailPage: React.FC = () => {
   const client = store.clients.find((c) => c.id === id);
 
   const [notes, setNotes] = useState(client?.coachNotes || '');
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [sharedPhotoUrls, setSharedPhotoUrls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setNotes(client?.coachNotes || '');
+  }, [client?.coachNotes]);
 
   const clientAssignments = useMemo(
     () => store.assignments.filter((a) => a.clientId === id),
@@ -38,9 +52,54 @@ export const StudioClientDetailPage: React.FC = () => {
     () => store.progressEvents.filter((p) => p.clientId === id && p.metricType === 'weight'),
     [store.progressEvents, id],
   );
+  const sharedPhotoEvents = useMemo(
+    () =>
+      store.progressEvents
+        .filter((p) => p.clientId === id && p.shareWithTrainer && Boolean(p.photoPath))
+        .sort((a, b) => b.dateKey.localeCompare(a.dateKey)),
+    [store.progressEvents, id],
+  );
+  const recentMeasurements = useMemo(
+    () =>
+      store.progressEvents
+        .filter((p) => p.clientId === id)
+        .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+        .slice(0, 6),
+    [store.progressEvents, id],
+  );
   const goal = useMemo(
     () => store.goals.find((g) => g.clientId === id),
     [store.goals, id],
+  );
+
+  useEffect(() => {
+    if (!isCloudSynced) return;
+    let active = true;
+    for (const ev of sharedPhotoEvents) {
+      if (!ev.photoPath || sharedPhotoUrls[ev.id]) continue;
+      void fsService
+        .getStorageFileDownloadUrl(ev.photoPath)
+        .then((url) => {
+          if (active) setSharedPhotoUrls((prev) => ({ ...prev, [ev.id]: url }));
+        })
+        .catch(() => undefined);
+    }
+    return () => {
+      active = false;
+    };
+  }, [isCloudSynced, sharedPhotoEvents, sharedPhotoUrls]);
+
+  const approvedRecoveryDates = useMemo(
+    () => getClientApprovedRecoveryDates(id),
+    [getClientApprovedRecoveryDates, id],
+  );
+
+  const isTodayRecoveryApproved = useMemo(
+    () =>
+      dailyActivities.some(
+        (d) => d.clientId === id && d.dateKey === todayKey && d.recoveryApproved === true,
+      ),
+    [dailyActivities, id, todayKey],
   );
 
   // Role-scoped access check: never display unrelated client fixtures to the trainer
@@ -60,8 +119,30 @@ export const StudioClientDetailPage: React.FC = () => {
     );
   }
 
-  const adherence = computeClientAdherencePercent(id, store.assignments, store.completions, todayKey, 7);
-  const streak = computeStreakSummary(clientAssignments, clientCompletions, todayKey);
+  const adherence = computeClientAdherencePercent(
+    id,
+    store.assignments,
+    store.completions,
+    todayKey,
+    7,
+    approvedRecoveryDates,
+  );
+  const streak = computeStreakSummary(
+    clientAssignments,
+    clientCompletions,
+    todayKey,
+    120,
+    approvedRecoveryDates,
+  );
+
+  const handleToggleRecovery = async () => {
+    setRecoveryBusy(true);
+    try {
+      await toggleClientRecoveryDay(client.id, todayKey, !isTodayRecoveryApproved);
+    } finally {
+      setRecoveryBusy(false);
+    }
+  };
 
   return (
     <AppShell pageTitle={`${client.firstName} ${client.lastName}`}>
@@ -75,15 +156,28 @@ export const StudioClientDetailPage: React.FC = () => {
             Back to clients
           </Link>
 
-          <GlassButton
-            size="sm"
-            onClick={() =>
-              navigate('/studio/assign', { state: { preselectedClientIds: [client.id] } })
-            }
-          >
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            Assign commitment
-          </GlassButton>
+          <div className="flex flex-wrap gap-2">
+            <GlassButton
+              size="sm"
+              variant={isTodayRecoveryApproved ? 'secondary' : 'glass'}
+              disabled={recoveryBusy}
+              onClick={() => void handleToggleRecovery()}
+            >
+              <Sparkles className="w-4 h-4 text-[#C1ACF9]" aria-hidden="true" />
+              {isTodayRecoveryApproved
+                ? 'Approved recovery today'
+                : 'Approve recovery day'}
+            </GlassButton>
+            <GlassButton
+              size="sm"
+              onClick={() =>
+                navigate('/studio/assign', { state: { preselectedClientIds: [client.id] } })
+              }
+            >
+              <Plus className="w-4 h-4" aria-hidden="true" />
+              Assign commitment
+            </GlassButton>
+          </div>
         </div>
 
         {/* Client Header & Derived Metrics */}
@@ -124,6 +218,62 @@ export const StudioClientDetailPage: React.FC = () => {
           ) : null}
         </section>
 
+        {/* Client Intake Profile & Custom Group Memberships */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="surface-card rounded-[22px] p-5 space-y-2.5 text-[13px]">
+            <h2 className="text-[16px] font-semibold text-[#F5F5F7]">Intake profile</h2>
+            <p className="text-[#A2A8B5] tabular-nums">
+              Age: {client.age ?? 'Not set'} · Height: {client.heightCm ? `${client.heightCm} cm` : 'Not set'} · Weight: {client.weightKg ? `${client.weightKg} kg` : 'Not set'}
+              {client.targetWeightKg ? ` → Target ${client.targetWeightKg} kg` : ''}
+            </p>
+            <p className="text-[#A2A8B5] capitalize">
+              Diet: {client.dietaryPreference.replaceAll('_', ' ')}
+              {client.preferredLanguage ? ` · Language: ${client.preferredLanguage}` : ''}
+            </p>
+            {client.foodAllergies ? (
+              <p className="text-[#FFB06B]">Allergies: {client.foodAllergies}</p>
+            ) : null}
+            {client.healthLimitations ? (
+              <p className="text-[#A2A8B5]">Limitations: {client.healthLimitations}</p>
+            ) : null}
+            {client.coachingPreferences ? (
+              <p className="text-[#A2A8B5]">Coaching preference: {client.coachingPreferences}</p>
+            ) : null}
+          </div>
+
+          <div className="surface-card rounded-[22px] p-5 space-y-3">
+            <h2 className="text-[16px] font-semibold text-[#F5F5F7]">Custom groups</h2>
+            {clientGroups.length === 0 ? (
+              <p className="text-[13px] text-[#7C8393]">
+                Create groups in the Clients directory to organize this client into batches.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {clientGroups.map((grp) => {
+                  const isMember = clientGroupMembers.some(
+                    (m) => m.groupId === grp.id && m.clientId === client.id,
+                  );
+                  return (
+                    <button
+                      key={grp.id}
+                      type="button"
+                      onClick={() => toggleClientGroupMember(grp.id, client.id)}
+                      aria-pressed={isMember}
+                      className={`min-h-[38px] px-3 py-1.5 rounded-[10px] border text-[13px] font-medium cursor-pointer transition-colors ${
+                        isMember
+                          ? 'bg-[#FF803E]/18 border-[#FF803E] text-[#FFB06B]'
+                          : 'bg-[#101218] border-white/[0.08] text-[#A2A8B5] hover:text-[#F5F5F7]'
+                      }`}
+                    >
+                      {isMember ? `✓ ${grp.name}` : `+ ${grp.name}`}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Assigned Tasks */}
         <section className="surface-card rounded-[22px] p-5">
           <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Assigned commitments</h2>
@@ -161,6 +311,54 @@ export const StudioClientDetailPage: React.FC = () => {
               note: p.note,
             }))}
           />
+        ) : null}
+
+        {recentMeasurements.length > 0 ? (
+          <section className="surface-card rounded-[22px] p-5">
+            <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Recent measurements & check-ins</h2>
+            <ul className="mt-3 divide-y divide-white/[0.08]">
+              {recentMeasurements.map((ev) => (
+                <li key={ev.id} className="py-2.5 flex items-center justify-between gap-3 text-[13px]">
+                  <div>
+                    <p className="text-[#F5F5F7] font-medium">{ev.label}</p>
+                    <p className="text-[#7C8393]">
+                      {formatIndiaDate(ev.dateKey, 'short')}
+                      {ev.note ? ` · ${ev.note}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-[#F5F5F7] font-semibold tabular-nums">
+                    {ev.value} {ev.unit}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {sharedPhotoEvents.length > 0 ? (
+          <section className="surface-card rounded-[22px] p-5 space-y-3">
+            <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Shared progress photos</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {sharedPhotoEvents.map((ev) => (
+                <div key={ev.id} className="rounded-[14px] surface-elevated p-3 space-y-2">
+                  {sharedPhotoUrls[ev.id] ? (
+                    <img
+                      src={sharedPhotoUrls[ev.id]}
+                      alt={`${client.firstName} check-in ${ev.dateKey}`}
+                      className="w-full h-44 object-cover rounded-[10px] bg-[#101218]"
+                    />
+                  ) : (
+                    <div className="w-full h-44 rounded-[10px] bg-[#101218] flex items-center justify-center text-[12px] text-[#7C8393]">
+                      Loading shared photo...
+                    </div>
+                  )}
+                  <p className="text-[12px] text-[#A2A8B5] tabular-nums">
+                    {formatIndiaDate(ev.dateKey, 'short')} · {ev.label}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
         ) : null}
 
         {/* Recent Completions */}
@@ -205,7 +403,7 @@ export const StudioClientDetailPage: React.FC = () => {
           className="surface-card rounded-[22px] p-5 flex flex-col gap-3"
         >
           <TextAreaField
-            label="Private coach notes (demo)"
+            label={isCloudSynced ? 'Private coach notes' : 'Private coach notes (demo)'}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Add context on injury considerations, travel weeks, or form cues."

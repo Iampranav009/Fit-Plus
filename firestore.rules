@@ -33,6 +33,13 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'pranavshindeji5001@gmail.com'
+      );
+    }
+
     function isValidId(id) {
       return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -63,29 +70,36 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'firstName', 'lastName', 'role', 'timezone', 'locale',
-          'isAdultConfirmed', 'onboardingCompleted', 'createdAt', 'updatedAt'
+          'isAdultConfirmed', 'onboardingCompleted', 'privacyConsentAccepted',
+          'createdAt', 'updatedAt'
         ])
         && data.id == userId
         && isValidId(data.id)
         && data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 80
         && data.lastName is string && data.lastName.size() <= 80
-        && data.role in ['client', 'trainer']
+        && data.role in ['client', 'trainer', 'admin']
         && data.timezone is string && data.timezone.size() >= 2 && data.timezone.size() <= 64
         && data.locale == 'en-IN'
         && data.isAdultConfirmed is bool
         && data.onboardingCompleted is bool
+        && (!('privacyConsentAccepted' in data) || data.privacyConsentAccepted is bool)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
     function isValidUserPrivateContact(data, userId) {
       return data.keys().hasAll(['userId', 'email', 'celebratedDateKeys', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['userId', 'email', 'celebratedDateKeys', 'pendingInviteToken', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'userId', 'email', 'whatsappE164', 'celebratedDateKeys',
+          'pendingInviteToken', 'notificationPrefs', 'createdAt', 'updatedAt'
+        ])
         && data.userId == userId
         && isValidId(data.userId)
         && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && (!('whatsappE164' in data) || (data.whatsappE164 is string && data.whatsappE164.size() <= 20))
         && isValidStringList(data.celebratedDateKeys, 365, 10)
         && (!('pendingInviteToken' in data) || (data.pendingInviteToken is string && data.pendingInviteToken.size() <= 64))
+        && (!('notificationPrefs' in data) || data.notificationPrefs is map)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -98,8 +112,10 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'userId', 'slug', 'displayName', 'headline', 'bio', 'coachingStyle',
-          'city', 'coachingMode', 'specialties', 'languages', 'experienceYears',
-          'avatarKey', 'coverKey', 'isDemoVerified', 'acceptingClients', 'createdAt', 'updatedAt'
+          'city', 'coachingMode', 'specialties', 'languages', 'certifications',
+          'experienceYears', 'avatarKey', 'coverKey', 'photoUrl', 'whatsappBusinessE164',
+          'verificationStatus', 'isDemoVerified', 'acceptingClients', 'isPublished',
+          'createdAt', 'updatedAt'
         ])
         && data.id == trainerId
         && isValidId(data.id)
@@ -113,11 +129,16 @@ service cloud.firestore {
         && data.coachingMode in ['online', 'in_person', 'hybrid']
         && isValidStringList(data.specialties, 10, 80)
         && isValidStringList(data.languages, 10, 40)
+        && (!('certifications' in data) || isValidStringList(data.certifications, 10, 100))
         && data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 80
         && data.avatarKey is string && data.avatarKey.size() <= 64
         && data.coverKey is string && data.coverKey.size() <= 64
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500))
+        && (!('whatsappBusinessE164' in data) || (data.whatsappBusinessE164 is string && data.whatsappBusinessE164.size() <= 20))
+        && (!('verificationStatus' in data) || data.verificationStatus in ['unverified', 'pending', 'verified'])
         && data.isDemoVerified is bool
         && data.acceptingClients is bool
+        && (!('isPublished' in data) || data.isPublished is bool)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -129,7 +150,8 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'trainerId', 'trainerUserId', 'name', 'summary', 'priceInr',
-          'cadence', 'features', 'status', 'isDemoSample', 'createdAt', 'updatedAt'
+          'cadence', 'durationDays', 'consultationsIncluded',
+          'features', 'status', 'isDemoSample', 'createdAt', 'updatedAt'
         ])
         && data.id == packageId
         && isValidId(data.id)
@@ -139,6 +161,8 @@ service cloud.firestore {
         && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500
         && data.priceInr is number && data.priceInr >= 0 && data.priceInr <= 1000000
         && data.cadence in ['monthly', 'quarterly', 'free']
+        && (!('durationDays' in data) || (data.durationDays is number && data.durationDays >= 1 && data.durationDays <= 366))
+        && (!('consultationsIncluded' in data) || (data.consultationsIncluded is number && data.consultationsIncluded >= 0 && data.consultationsIncluded <= 60))
         && isValidStringList(data.features, 10, 140)
         && data.status in ['active', 'paused']
         && data.isDemoSample is bool
@@ -153,9 +177,10 @@ service cloud.firestore {
           'activeTrainerUserId', 'activeRelationshipId', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'id', 'userId', 'firstName', 'lastName', 'heightCm', 'weightKg', 'targetWeightKg',
+          'id', 'userId', 'firstName', 'lastName', 'age', 'heightCm', 'weightKg', 'targetWeightKg',
           'primaryGoal', 'experienceLevel', 'daysPerWeek', 'environment', 'equipment',
-          'dietaryPreference', 'dietaryNotes', 'coachNotes',
+          'dietaryPreference', 'dietaryNotes', 'foodAllergies', 'healthLimitations',
+          'preferredLanguage', 'coachingPreferences', 'coachNotes',
           'activeTrainerUserId', 'activeRelationshipId', 'createdAt', 'updatedAt'
         ])
         && data.id == clientId
@@ -163,6 +188,7 @@ service cloud.firestore {
         && isValidId(data.userId)
         && data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 80
         && data.lastName is string && data.lastName.size() <= 80
+        && (!('age' in data) || (data.age is number && data.age >= 18 && data.age <= 120))
         && (!('heightCm' in data) || (data.heightCm is number && data.heightCm > 0 && data.heightCm <= 300))
         && (!('weightKg' in data) || (data.weightKg is number && data.weightKg > 0 && data.weightKg <= 500))
         && (!('targetWeightKg' in data) || (data.targetWeightKg is number && data.targetWeightKg > 0 && data.targetWeightKg <= 500))
@@ -173,6 +199,10 @@ service cloud.firestore {
         && isValidStringList(data.equipment, 15, 60)
         && data.dietaryPreference in ['vegetarian', 'vegan', 'non_vegetarian', 'other', 'prefer_not_to_say']
         && (!('dietaryNotes' in data) || (data.dietaryNotes is string && data.dietaryNotes.size() <= 500))
+        && (!('foodAllergies' in data) || (data.foodAllergies is string && data.foodAllergies.size() <= 400))
+        && (!('healthLimitations' in data) || (data.healthLimitations is string && data.healthLimitations.size() <= 600))
+        && (!('preferredLanguage' in data) || (data.preferredLanguage is string && data.preferredLanguage.size() <= 40))
+        && (!('coachingPreferences' in data) || (data.coachingPreferences is string && data.coachingPreferences.size() <= 500))
         && (!('coachNotes' in data) || (data.coachNotes is string && data.coachNotes.size() <= 2000))
         && isValidOptionalId(data, 'activeTrainerUserId')
         && isValidOptionalId(data, 'activeRelationshipId')
@@ -187,7 +217,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
-          'packageId', 'status', 'startedAt', 'endedAt', 'createdAt', 'updatedAt'
+          'packageId', 'groupId', 'status', 'startedAt', 'endedAt', 'createdAt', 'updatedAt'
         ])
         && data.id == relationshipId
         && isValidId(data.id)
@@ -196,6 +226,7 @@ service cloud.firestore {
         && isValidId(data.clientId)
         && isValidId(data.clientUserId)
         && isValidOptionalId(data, 'packageId')
+        && isValidOptionalId(data, 'groupId')
         && data.status in ['pending', 'active', 'ended']
         && data.startedAt is string && data.startedAt.size() <= 64
         && (!('endedAt' in data) || (data.endedAt is string && data.endedAt.size() <= 64))
@@ -235,7 +266,8 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'clientId', 'clientUserId', 'trainerId', 'trainerUserId',
-          'packageId', 'status', 'isDemoCheckout', 'enrolledAt', 'endedAt', 'createdAt', 'updatedAt'
+          'packageId', 'subscriptionId', 'status', 'isDemoCheckout', 'enrolledAt',
+          'endedAt', 'createdAt', 'updatedAt'
         ])
         && data.id == enrollmentId
         && isValidId(data.id)
@@ -244,12 +276,36 @@ service cloud.firestore {
         && isValidId(data.trainerId)
         && isValidId(data.trainerUserId)
         && isValidId(data.packageId)
+        && isValidOptionalId(data, 'subscriptionId')
         && data.status in ['active', 'ended']
         && data.isDemoCheckout is bool
         && data.enrolledAt is string && data.enrolledAt.size() <= 64
         && (!('endedAt' in data) || (data.endedAt is string && data.endedAt.size() <= 64))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
+    }
+
+    function isValidClientGroup(data, groupId) {
+      return data.keys().hasAll(['id', 'trainerId', 'trainerUserId', 'name', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'trainerId', 'trainerUserId', 'name', 'description', 'createdAt', 'updatedAt'])
+        && data.id == groupId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 80
+        && (!('description' in data) || (data.description is string && data.description.size() <= 300))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClientGroupMember(data, clientId) {
+      return data.keys().hasAll(['clientId', 'clientUserId', 'trainerUserId', 'addedAt'])
+        && data.keys().hasOnly(['clientId', 'clientUserId', 'trainerUserId', 'addedAt'])
+        && data.clientId == clientId
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidId(data.trainerUserId)
+        && data.addedAt is timestamp;
     }
 
     function isValidTaskTemplate(data, templateId) {
@@ -289,7 +345,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'clientId', 'clientUserId', 'trainerId', 'trainerUserId', 'templateId',
-          'title', 'category', 'instructions', 'durationMinutes', 'dueTime',
+          'groupId', 'title', 'category', 'instructions', 'durationMinutes', 'dueTime',
           'completionType', 'targetLabel', 'scheduledDates', 'isOptional',
           'isRecovery', 'hasCustomOverride', 'overrideNote', 'createdAt', 'updatedAt'
         ])
@@ -300,6 +356,7 @@ service cloud.firestore {
         && isValidOptionalId(data, 'trainerId')
         && isValidOptionalId(data, 'trainerUserId')
         && isValidOptionalId(data, 'templateId')
+        && isValidOptionalId(data, 'groupId')
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
         && data.category in ['workout', 'nutrition', 'habit', 'recovery', 'check_in']
         && data.instructions is string && data.instructions.size() <= 2000
@@ -339,6 +396,51 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidDailyActivity(data, activityId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'hydrationGlasses', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'hydrationGlasses', 'steps', 'sleepHours', 'recoveryApproved',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id == activityId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerUserId')
+        && isValidDateKey(data.dateKey)
+        && data.hydrationGlasses is number && data.hydrationGlasses >= 0 && data.hydrationGlasses <= 24
+        && (!('steps' in data) || (data.steps is number && data.steps >= 0 && data.steps <= 200000))
+        && (!('sleepHours' in data) || (data.sleepHours is number && data.sleepHours >= 0 && data.sleepHours <= 24))
+        && (!('recoveryApproved' in data) || data.recoveryApproved is bool)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStreakRecord(data, clientId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId',
+          'currentStreak', 'longestStreak', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerUserId',
+          'currentStreak', 'longestStreak', 'lastEligibleDateKey', 'createdAt', 'updatedAt'
+        ])
+        && data.id == clientId
+        && data.clientId == clientId
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerUserId')
+        && data.currentStreak is number && data.currentStreak >= 0 && data.currentStreak <= 5000
+        && data.longestStreak is number && data.longestStreak >= 0 && data.longestStreak <= 5000
+        && (!('lastEligibleDateKey' in data) || data.lastEligibleDateKey == '' || isValidDateKey(data.lastEligibleDateKey))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     function isValidProgressEvent(data, eventId) {
       return data.keys().hasAll([
           'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
@@ -346,7 +448,8 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
-          'metricType', 'label', 'value', 'unit', 'note', 'createdAt', 'updatedAt'
+          'metricType', 'label', 'value', 'unit', 'note', 'photoPath', 'shareWithTrainer',
+          'createdAt', 'updatedAt'
         ])
         && data.id == eventId
         && isValidId(data.id)
@@ -354,11 +457,13 @@ service cloud.firestore {
         && isValidId(data.clientUserId)
         && isValidOptionalId(data, 'trainerUserId')
         && isValidDateKey(data.dateKey)
-        && data.metricType in ['weight', 'strength', 'waist', 'steps']
+        && data.metricType in ['weight', 'strength', 'waist', 'steps', 'checkin']
         && data.label is string && data.label.size() >= 1 && data.label.size() <= 80
         && data.value is number && data.value >= 0 && data.value <= 1000000
         && data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 24
         && (!('note' in data) || (data.note is string && data.note.size() <= 400))
+        && (!('photoPath' in data) || (data.photoPath is string && data.photoPath.size() <= 300))
+        && (!('shareWithTrainer' in data) || data.shareWithTrainer is bool)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -417,7 +522,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'trainerId', 'trainerUserId', 'dateKey', 'startTime', 'endTime',
-          'timezone', 'mode', 'status', 'bookedByUserId', 'activeBookingId',
+          'timezone', 'mode', 'meetingLink', 'status', 'bookedByUserId', 'activeBookingId',
           'createdAt', 'updatedAt'
         ])
         && data.id == slotId
@@ -429,6 +534,7 @@ service cloud.firestore {
         && isValidTimeHHMM(data.endTime)
         && data.timezone is string && data.timezone.size() >= 2 && data.timezone.size() <= 64
         && data.mode in ['online', 'in_person']
+        && (!('meetingLink' in data) || (data.meetingLink is string && data.meetingLink.size() <= 300))
         && data.status in ['available', 'booked', 'blocked']
         && isValidOptionalId(data, 'bookedByUserId')
         && isValidOptionalId(data, 'activeBookingId')
@@ -444,7 +550,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'slotId', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
-          'dateKey', 'startTime', 'endTime', 'timezone', 'topic', 'status',
+          'dateKey', 'startTime', 'endTime', 'timezone', 'topic', 'meetingLink', 'status',
           'createdAt', 'updatedAt'
         ])
         && data.id == bookingId
@@ -459,6 +565,7 @@ service cloud.firestore {
         && isValidTimeHHMM(data.endTime)
         && data.timezone is string && data.timezone.size() >= 2 && data.timezone.size() <= 64
         && data.topic is string && data.topic.size() >= 1 && data.topic.size() <= 300
+        && (!('meetingLink' in data) || (data.meetingLink is string && data.meetingLink.size() <= 300))
         && data.status in ['booked', 'completed', 'canceled', 'rescheduled']
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -520,32 +627,111 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidConsentRecord(data, consentId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'consentType', 'granted', 'policyVersion', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'userId', 'consentType', 'granted', 'policyVersion', 'createdAt', 'updatedAt'
+        ])
+        && data.id == consentId
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.consentType in ['terms_privacy', 'health_data', 'ai_coaching', 'notifications']
+        && data.granted is bool
+        && data.policyVersion is string && data.policyVersion.size() >= 1 && data.policyVersion.size() <= 24
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVerificationRequest(data, requestId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'qualificationTitle', 'issuingBody',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'qualificationTitle', 'issuingBody',
+          'credentialRef', 'status', 'reviewNote', 'createdAt', 'updatedAt'
+        ])
+        && data.id == requestId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.qualificationTitle is string && data.qualificationTitle.size() >= 2 && data.qualificationTitle.size() <= 140
+        && data.issuingBody is string && data.issuingBody.size() >= 2 && data.issuingBody.size() <= 140
+        && (!('credentialRef' in data) || (data.credentialRef is string && data.credentialRef.size() <= 120))
+        && data.status in ['pending', 'approved', 'rejected']
+        && (!('reviewNote' in data) || (data.reviewNote is string && data.reviewNote.size() <= 400))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTrainerReview(data, reviewId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'clientId', 'clientUserId', 'relationshipId',
+          'authorName', 'rating', 'comment', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'clientId', 'clientUserId', 'relationshipId',
+          'authorName', 'rating', 'comment', 'createdAt', 'updatedAt'
+        ])
+        && data.id == reviewId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidId(data.relationshipId)
+        && data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80
+        && data.rating is number && data.rating >= 1 && data.rating <= 5
+        && data.comment is string && data.comment.size() >= 4 && data.comment.size() <= 600
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // /admins/{userId} (Server-Provisioned Admins — Never Client-Writable)
+    // -------------------------------------------------------------------------
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list, create, update, delete: if false;
+    }
+
     // -------------------------------------------------------------------------
     // /users/{userId} & Isolated Private PII Subcollection
     // -------------------------------------------------------------------------
     match /users/{userId} {
-      allow get: if isValidId(userId) && isOwner(userId);
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
       allow list: if false;
 
       allow create: if isVerifiedUser()
         && isValidId(userId)
         && isOwner(userId)
         && isValidUser(incoming(), userId)
+        && incoming().role in ['client', 'trainer']
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
       allow update: if isVerifiedUser()
         && isValidId(userId)
-        && isOwner(userId)
+        && (isOwner(userId) || isAdmin())
         && isValidUser(incoming(), userId)
         && incoming().id == existing().id
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly([
-          'firstName', 'lastName', 'role', 'timezone', 'isAdultConfirmed', 'onboardingCompleted', 'updatedAt'
-        ]);
+        && (
+          (
+            isOwner(userId) &&
+            existing().role != 'admin' &&
+            incoming().role in ['client', 'trainer'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'firstName', 'lastName', 'role', 'timezone', 'isAdultConfirmed',
+              'onboardingCompleted', 'privacyConsentAccepted', 'updatedAt'
+            ])
+          ) ||
+          isAdmin()
+        );
 
-      allow delete: if false;
+      allow delete: if isValidId(userId) && isVerifiedUser() && (isOwner(userId) || isAdmin());
 
       match /private/{docId} {
         allow get: if isValidId(userId) && isValidId(docId) && isOwner(userId);
@@ -568,7 +754,8 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && incoming().diff(existing()).affectedKeys().hasOnly([
-            'email', 'celebratedDateKeys', 'pendingInviteToken', 'updatedAt'
+            'email', 'whatsappE164', 'celebratedDateKeys', 'pendingInviteToken',
+            'notificationPrefs', 'updatedAt'
           ]);
 
         allow delete: if isValidId(userId) && isValidId(docId) && isOwner(userId);
@@ -576,11 +763,13 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // /trainers/{trainerId} (Public Storefront — No PII)
+    // /trainers/{trainerId} (Public Storefront — No Personal PII)
     // -------------------------------------------------------------------------
     match /trainers/{trainerId} {
       allow get: if isValidId(trainerId) && (
-        existing().acceptingClients == true || (isSignedIn() && existing().userId == request.auth.uid)
+        existing().acceptingClients == true ||
+        (isSignedIn() && existing().userId == request.auth.uid) ||
+        isAdmin()
       );
       allow list: if resource.data.acceptingClients == true || (isSignedIn() && resource.data.userId == request.auth.uid);
 
@@ -589,23 +778,36 @@ service cloud.firestore {
         && isValidTrainerProfile(incoming(), trainerId)
         && incoming().userId == request.auth.uid
         && incoming().isDemoVerified == false
+        && (!('verificationStatus' in incoming()) || incoming().verificationStatus == 'unverified')
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
       allow update: if isVerifiedUser()
         && isValidId(trainerId)
         && isValidTrainerProfile(incoming(), trainerId)
-        && existing().userId == request.auth.uid
         && incoming().id == existing().id
         && incoming().userId == existing().userId
         && incoming().isDemoVerified == existing().isDemoVerified
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly([
-          'slug', 'displayName', 'headline', 'bio', 'coachingStyle', 'city',
-          'coachingMode', 'specialties', 'languages', 'experienceYears',
-          'avatarKey', 'coverKey', 'acceptingClients', 'updatedAt'
-        ]);
+        && (
+          (
+            existing().userId == request.auth.uid &&
+            (
+              (!('verificationStatus' in incoming()) && !('verificationStatus' in existing())) ||
+              (('verificationStatus' in incoming()) && ('verificationStatus' in existing()) && incoming().verificationStatus == existing().verificationStatus) ||
+              (incoming().verificationStatus == 'pending' && (!('verificationStatus' in existing()) || existing().verificationStatus == 'unverified'))
+            ) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'slug', 'displayName', 'headline', 'bio', 'coachingStyle', 'city',
+              'coachingMode', 'specialties', 'languages', 'certifications',
+              'experienceYears', 'avatarKey', 'coverKey', 'photoUrl',
+              'whatsappBusinessE164', 'verificationStatus', 'acceptingClients',
+              'isPublished', 'updatedAt'
+            ])
+          ) ||
+          isAdmin()
+        );
 
       allow delete: if false;
     }
@@ -638,9 +840,10 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Edit package details
-          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'summary', 'priceInr', 'cadence', 'features', 'status', 'updatedAt']) ||
-          // Action: Toggle status
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'summary', 'priceInr', 'cadence', 'durationDays',
+            'consultationsIncluded', 'features', 'status', 'updatedAt'
+          ]) ||
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
         );
 
@@ -685,16 +888,15 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Client updates personal details
           (
             existing().userId == request.auth.uid &&
             incoming().diff(existing()).affectedKeys().hasOnly([
-              'firstName', 'lastName', 'heightCm', 'weightKg', 'targetWeightKg',
+              'firstName', 'lastName', 'age', 'heightCm', 'weightKg', 'targetWeightKg',
               'primaryGoal', 'experienceLevel', 'daysPerWeek', 'environment',
-              'equipment', 'dietaryPreference', 'dietaryNotes', 'updatedAt'
+              'equipment', 'dietaryPreference', 'dietaryNotes', 'foodAllergies',
+              'healthLimitations', 'preferredLanguage', 'coachingPreferences', 'updatedAt'
             ])
           ) ||
-          // Action: Client binds or clears active relationship atomically
           (
             existing().userId == request.auth.uid &&
             incoming().diff(existing()).affectedKeys().hasOnly(['activeTrainerUserId', 'activeRelationshipId', 'updatedAt']) &&
@@ -709,7 +911,6 @@ service cloud.firestore {
               )
             )
           ) ||
-          // Action: Actively linked trainer updates coach notes
           (
             existing().activeTrainerUserId == request.auth.uid &&
             existing().activeRelationshipId != '' &&
@@ -720,11 +921,11 @@ service cloud.firestore {
           )
         );
 
-      allow delete: if false;
+      allow delete: if isValidId(clientId) && isVerifiedUser() && (existing().userId == request.auth.uid || isAdmin());
     }
 
     // -------------------------------------------------------------------------
-    // /relationships/{relationshipId} (Master Source of Truth for Coaching Links)
+    // /relationships/{relationshipId} (Master Source of Truth)
     // -------------------------------------------------------------------------
     match /relationships/{relationshipId} {
       allow get: if isSignedIn() && isValidId(relationshipId) && (
@@ -760,9 +961,8 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
         && (
-          // Action: Activate pending relationship
           (existing().status == 'pending' && incoming().status == 'active' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'packageId', 'updatedAt'])) ||
-          // Action: End relationship (terminal state)
+          (existing().trainerUserId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['groupId', 'updatedAt'])) ||
           (incoming().status == 'ended' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'endedAt', 'updatedAt']))
         );
 
@@ -770,7 +970,7 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // /invites/{inviteId} (List restricted strictly to owning trainer)
+    // /invites/{inviteId}
     // -------------------------------------------------------------------------
     match /invites/{inviteId} {
       allow get: if isSignedIn() && isValidId(inviteId) && (
@@ -801,13 +1001,11 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Owning trainer revokes or marks expired
           (
             existing().trainerUserId == request.auth.uid &&
             incoming().status in ['revoked', 'expired'] &&
             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
           ) ||
-          // Action: Client redeems active invite with verified client ownership
           (
             incoming().status == 'redeemed' &&
             incoming().redeemedByUserId == request.auth.uid &&
@@ -865,6 +1063,88 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // /clientGroups/{groupId} & /members/{clientId} (Master Gate Sync)
+    // -------------------------------------------------------------------------
+    match /clientGroups/{groupId} {
+      allow get: if isSignedIn() && isValidId(groupId) && existing().trainerUserId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.trainerUserId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(groupId)
+        && isValidClientGroup(incoming(), groupId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(groupId)
+        && isValidClientGroup(incoming(), groupId)
+        && existing().trainerUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'updatedAt']);
+
+      allow delete: if isValidId(groupId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid;
+
+      match /members/{clientId} {
+        allow get: if isSignedIn() && isValidId(groupId) && isValidId(clientId) && (
+          existing().trainerUserId == request.auth.uid || existing().clientUserId == request.auth.uid
+        );
+        allow list: if isSignedIn() && (
+          resource.data.trainerUserId == request.auth.uid || resource.data.clientUserId == request.auth.uid
+        );
+
+        allow create: if isVerifiedUser()
+          && isValidId(groupId)
+          && isValidId(clientId)
+          && isValidClientGroupMember(incoming(), clientId)
+          && incoming().trainerUserId == request.auth.uid
+          && incoming().addedAt == request.time
+          && exists(/databases/$(database)/documents/clientGroups/$(groupId))
+          && get(/databases/$(database)/documents/clientGroups/$(groupId)).data.trainerUserId == request.auth.uid
+          && exists(/databases/$(database)/documents/clients/$(clientId))
+          && get(/databases/$(database)/documents/clients/$(clientId)).data.activeTrainerUserId == request.auth.uid;
+
+        allow update: if false;
+        allow delete: if isValidId(groupId) && isValidId(clientId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // /subscriptions/{subscriptionId} & /payments/{paymentId} (Server-Written Only)
+    // -------------------------------------------------------------------------
+    match /subscriptions/{subscriptionId} {
+      allow get: if isSignedIn() && isValidId(subscriptionId) && (
+        existing().clientUserId == request.auth.uid ||
+        existing().trainerUserId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid ||
+        resource.data.trainerUserId == request.auth.uid
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isSignedIn() && isValidId(paymentId) && (
+        existing().clientUserId == request.auth.uid ||
+        existing().trainerUserId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid ||
+        resource.data.trainerUserId == request.auth.uid
+      );
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // /templates/{templateId}
     // -------------------------------------------------------------------------
     match /templates/{templateId} {
@@ -890,12 +1170,10 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Edit template fields
           incoming().diff(existing()).affectedKeys().hasOnly([
             'title', 'category', 'instructions', 'durationMinutes', 'completionType',
             'targetLabel', 'isRecoveryDefault', 'isOptionalDefault', 'archived', 'updatedAt'
           ]) ||
-          // Action: Archive or restore template
           incoming().diff(existing()).affectedKeys().hasOnly(['archived', 'updatedAt'])
         );
 
@@ -921,9 +1199,7 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
         && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == incoming().clientUserId
         && (
-          // Self-guided client assignment
           (incoming().clientUserId == request.auth.uid && incoming().trainerUserId == '') ||
-          // Trainer-assigned to actively linked client
           (
             incoming().trainerUserId == request.auth.uid &&
             get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == request.auth.uid
@@ -989,6 +1265,85 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // /dailyActivity/{activityId} & /streaks/{clientId}
+    // -------------------------------------------------------------------------
+    match /dailyActivity/{activityId} {
+      allow get: if isSignedIn() && isValidId(activityId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(activityId)
+        && isValidDailyActivity(incoming(), activityId)
+        && incoming().clientUserId == request.auth.uid
+        && (!('recoveryApproved' in incoming()) || incoming().recoveryApproved == false)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(activityId)
+        && isValidDailyActivity(incoming(), activityId)
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().dateKey == existing().dateKey
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            existing().clientUserId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['hydrationGlasses', 'steps', 'sleepHours', 'updatedAt'])
+          ) ||
+          (
+            existing().trainerUserId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['recoveryApproved', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(activityId) && isVerifiedUser() && existing().clientUserId == request.auth.uid;
+    }
+
+    match /streaks/{clientId} {
+      allow get: if isSignedIn() && isValidId(clientId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(clientId)
+        && isValidStreakRecord(incoming(), clientId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(clientId))
+        && get(/databases/$(database)/documents/clients/$(clientId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(clientId)
+        && isValidStreakRecord(incoming(), clientId)
+        && existing().clientUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'currentStreak', 'longestStreak', 'lastEligibleDateKey', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(clientId) && isVerifiedUser() && existing().clientUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
     // /progressEvents/{eventId}
     // -------------------------------------------------------------------------
     match /progressEvents/{eventId} {
@@ -1018,7 +1373,7 @@ service cloud.firestore {
         && incoming().trainerUserId == existing().trainerUserId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['value', 'note', 'updatedAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['value', 'note', 'shareWithTrainer', 'updatedAt']);
 
       allow delete: if isValidId(eventId) && isVerifiedUser() && existing().clientUserId == request.auth.uid;
     }
@@ -1062,7 +1417,10 @@ service cloud.firestore {
         && incoming().clientUserId == existing().clientUserId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && (
+          (existing().trainerUserId == '' && existing().clientUserId == request.auth.uid) ||
+          (existing().trainerUserId == request.auth.uid)
+        )
         && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'weekLabel', 'coachNotes', 'days', 'updatedAt']);
 
       allow delete: if false;
@@ -1104,14 +1462,17 @@ service cloud.firestore {
         && incoming().clientUserId == existing().clientUserId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && (
+          (existing().trainerUserId == '' && existing().clientUserId == request.auth.uid) ||
+          (existing().trainerUserId == request.auth.uid)
+        )
         && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'dietaryLabel', 'coachNotes', 'meals', 'updatedAt']);
 
       allow delete: if false;
     }
 
     // -------------------------------------------------------------------------
-    // /consultationSlots/{slotId} (Atomic Sync with /bookings)
+    // /consultationSlots/{slotId} & /bookings/{bookingId}
     // -------------------------------------------------------------------------
     match /consultationSlots/{slotId} {
       allow get: if isSignedIn() && isValidId(slotId) && (
@@ -1146,16 +1507,14 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Trainer toggles available/blocked
           (
             existing().trainerUserId == request.auth.uid &&
             existing().status != 'booked' &&
             incoming().status in ['available', 'blocked'] &&
             incoming().bookedByUserId == '' &&
             incoming().activeBookingId == '' &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'meetingLink', 'updatedAt'])
           ) ||
-          // Action: Client books an available slot atomically with a new Booking doc
           (
             existing().status == 'available' &&
             incoming().status == 'booked' &&
@@ -1167,7 +1526,6 @@ service cloud.firestore {
             getAfter(/databases/$(database)/documents/bookings/$(incoming().activeBookingId)).data.slotId == slotId &&
             getAfter(/databases/$(database)/documents/bookings/$(incoming().activeBookingId)).data.status == 'booked'
           ) ||
-          // Action: Client or trainer releases a booked slot when canceling/rescheduling atomically
           (
             existing().status == 'booked' &&
             (existing().bookedByUserId == request.auth.uid || existing().trainerUserId == request.auth.uid) &&
@@ -1183,9 +1541,6 @@ service cloud.firestore {
       allow delete: if isValidId(slotId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid && existing().status != 'booked';
     }
 
-    // -------------------------------------------------------------------------
-    // /bookings/{bookingId}
-    // -------------------------------------------------------------------------
     match /bookings/{bookingId} {
       allow get: if isSignedIn() && isValidId(bookingId) && (
         existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
@@ -1223,17 +1578,20 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Client or trainer cancels or marks rescheduled
           (
             (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid) &&
             incoming().status in ['canceled', 'rescheduled'] &&
             incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
           ) ||
-          // Action: Trainer marks consultation completed
           (
             existing().trainerUserId == request.auth.uid &&
             incoming().status == 'completed' &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'meetingLink', 'updatedAt'])
+          ) ||
+          (
+            existing().trainerUserId == request.auth.uid &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['meetingLink', 'updatedAt'])
           )
         );
 
@@ -1279,7 +1637,7 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // /aiDrafts/{draftId}
+    // /aiDrafts/{draftId} & /aiGenerations/{generationId}
     // -------------------------------------------------------------------------
     match /aiDrafts/{draftId} {
       allow get: if isSignedIn() && isValidId(draftId) && existing().trainerUserId == request.auth.uid;
@@ -1305,15 +1663,121 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          // Action: Edit draft content
           incoming().diff(existing()).affectedKeys().hasOnly([
             'title', 'summary', 'workoutDays', 'nutritionOutline', 'habitCommitments', 'status', 'updatedAt'
           ]) ||
-          // Action: Approve or mark saved
           incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
         );
 
       allow delete: if isValidId(draftId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid;
+    }
+
+    match /aiGenerations/{generationId} {
+      allow get: if isSignedIn() && isValidId(generationId) && (
+        existing().trainerUserId == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && resource.data.trainerUserId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /consentRecords/{consentId} (Immutable Compliance Trail)
+    // -------------------------------------------------------------------------
+    match /consentRecords/{consentId} {
+      allow get: if isSignedIn() && isValidId(consentId) && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(consentId)
+        && isValidConsentRecord(incoming(), consentId)
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /auditLogs/{logId} (Admin Audit Trail — Server Written Only)
+    // -------------------------------------------------------------------------
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isVerifiedUser() && (
+        resource.data.actorUserId == request.auth.uid ||
+        request.auth.token.email == 'pranavshindeji5001@gmail.com'
+      );
+      allow create, update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /trainerVerificationRequests/{requestId}
+    // -------------------------------------------------------------------------
+    match /trainerVerificationRequests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) && (
+        existing().trainerUserId == request.auth.uid || isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.trainerUserId == request.auth.uid ||
+        request.auth.token.email == 'pranavshindeji5001@gmail.com'
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(requestId)
+        && isValidVerificationRequest(incoming(), requestId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isAdmin()
+        && isValidId(requestId)
+        && isValidVerificationRequest(incoming(), requestId)
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewNote', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /reviews/{reviewId} (Relationship-Verified Client Reviews)
+    // -------------------------------------------------------------------------
+    match /reviews/{reviewId} {
+      allow get: if isValidId(reviewId);
+      allow list: if resource.data.rating >= 1 && resource.data.rating <= 5;
+
+      allow create: if isVerifiedUser()
+        && isValidId(reviewId)
+        && isValidTrainerReview(incoming(), reviewId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/relationships/$(incoming().relationshipId))
+        && get(/databases/$(database)/documents/relationships/$(incoming().relationshipId)).data.clientUserId == request.auth.uid
+        && get(/databases/$(database)/documents/relationships/$(incoming().relationshipId)).data.clientId == incoming().clientId
+        && get(/databases/$(database)/documents/relationships/$(incoming().relationshipId)).data.trainerId == incoming().trainerId;
+
+      allow update: if isVerifiedUser()
+        && isValidId(reviewId)
+        && isValidTrainerReview(incoming(), reviewId)
+        && existing().clientUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().relationshipId == existing().relationshipId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'comment', 'updatedAt']);
+
+      allow delete: if isValidId(reviewId) && isVerifiedUser() && (existing().clientUserId == request.auth.uid || isAdmin());
     }
   }
 }

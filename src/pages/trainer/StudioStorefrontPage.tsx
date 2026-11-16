@@ -3,28 +3,59 @@ import { Link } from 'react-router-dom';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
+import * as fsService from '../../data/firestoreService';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField, TextAreaField } from '../../components/ui/InputField';
 
 export const StudioStorefrontPage: React.FC = () => {
-  const { activeTrainer, updateTrainerProfile } = useApp();
+  const { activeTrainer, isCloudSynced, firebaseUser, pushToast, updateTrainerProfile } = useApp();
 
   const [headline, setHeadline] = useState(activeTrainer?.headline || '');
   const [city, setCity] = useState(activeTrainer?.city || '');
   const [bio, setBio] = useState(activeTrainer?.bio || '');
   const [coachingStyle, setCoachingStyle] = useState(activeTrainer?.coachingStyle || '');
+  const [certsInput, setCertsInput] = useState((activeTrainer?.certifications || []).join(', '));
+  const [whatsappE164, setWhatsappE164] = useState(activeTrainer?.whatsappBusinessE164 || '');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
   if (!activeTrainer) return null;
 
+  const handlePhotoUpload = async (file?: File | null) => {
+    if (!file || !isCloudSynced || !firebaseUser) return;
+    setUploadingPhoto(true);
+    try {
+      const { photoUrl } = await fsService.uploadTrainerPhotoToStorage({
+        uid: firebaseUser.uid,
+        file,
+      });
+      updateTrainerProfile({ photoUrl });
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : 'Unable to upload profile photo.', 'error');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanedWa = whatsappE164.trim();
+    if (cleanedWa && !/^\+[1-9]\d{6,14}$/.test(cleanedWa)) {
+      pushToast('Enter WhatsApp Business number in E.164 format (e.g., +919876543210).', 'error');
+      return;
+    }
+    const certifications = certsInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     updateTrainerProfile({
       headline: headline.trim() || activeTrainer.headline,
       city: city.trim() || activeTrainer.city,
       bio: bio.trim() || activeTrainer.bio,
       coachingStyle: coachingStyle.trim() || activeTrainer.coachingStyle,
+      certifications,
+      whatsappBusinessE164: cleanedWa || undefined,
     });
   };
 
@@ -44,7 +75,9 @@ export const StudioStorefrontPage: React.FC = () => {
       <div className="max-w-2xl mx-auto flex flex-col gap-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-[13px] text-[#7C8393]">Public demo listing</p>
+            <p className="text-[13px] text-[#7C8393]">
+              {isCloudSynced ? 'Public coaching profile' : 'Public demo listing'}
+            </p>
             <h1 className="mt-1 text-[30px] sm:text-[34px] font-semibold tracking-[-0.025em] text-[#F5F5F7]">
               {COPY.trainer.storefrontTitle}
             </h1>
@@ -60,7 +93,7 @@ export const StudioStorefrontPage: React.FC = () => {
               ) : (
                 <>
                   <Copy className="w-4 h-4" aria-hidden="true" />
-                  Copy demo profile link
+                  {isCloudSynced ? 'Copy profile link' : 'Copy demo profile link'}
                 </>
               )}
             </GlassButton>
@@ -78,6 +111,31 @@ export const StudioStorefrontPage: React.FC = () => {
           onSubmit={handleSave}
           className="surface-card rounded-[22px] p-5 sm:p-6 flex flex-col gap-4"
         >
+          {isCloudSynced ? (
+            <div className="flex items-center gap-4 pb-2 border-b border-white/[0.08]">
+              {activeTrainer.photoUrl ? (
+                <img
+                  src={activeTrainer.photoUrl}
+                  alt={activeTrainer.displayName}
+                  className="w-16 h-16 rounded-[14px] object-cover border border-white/15 shrink-0"
+                />
+              ) : null}
+              <div className="space-y-1">
+                <p className="text-[13px] font-medium text-[#F5F5F7]">Profile photo</p>
+                <label className="glass-control min-h-[38px] px-3 py-1.5 rounded-[10px] text-[12px] font-medium text-[#F5F5F7] cursor-pointer inline-flex items-center">
+                  <span>{uploadingPhoto ? 'Uploading...' : 'Upload new photo'}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    disabled={uploadingPhoto}
+                    onChange={(e) => void handlePhotoUpload(e.target.files?.[0])}
+                  />
+                </label>
+              </div>
+            </div>
+          ) : null}
+
           <InputField
             label="Headline"
             value={headline}
@@ -87,6 +145,20 @@ export const StudioStorefrontPage: React.FC = () => {
             label="City"
             value={city}
             onChange={(e) => setCity(e.target.value)}
+          />
+          <InputField
+            label="Certifications"
+            optionalTag="Optional · comma-separated"
+            value={certsInput}
+            onChange={(e) => setCertsInput(e.target.value)}
+            placeholder="e.g., ACE CPT, Precision Nutrition L1"
+          />
+          <InputField
+            label="WhatsApp Business number"
+            optionalTag="Optional · E.164 format"
+            value={whatsappE164}
+            onChange={(e) => setWhatsappE164(e.target.value)}
+            placeholder="+919876543210"
           />
           <TextAreaField
             label="About your coaching"

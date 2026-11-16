@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Sparkles } from 'lucide-react';
+import { AlertCircle, Check, Loader2, Sparkles } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import type {
@@ -16,9 +16,18 @@ import { GlassTooltip } from '../../components/ui/GlassTooltip';
 import { InputField, TextAreaField } from '../../components/ui/InputField';
 
 export const StudioAIBuilderPage: React.FC = () => {
-  const { generateAIDraft, updateAIDraft, approveAndSaveAIDraftAsTemplate } = useApp();
+  const {
+    isCloudSynced,
+    isDemoSandbox,
+    linkedClientsForActiveTrainer,
+    aiQuotaRemaining,
+    generateAIPlanWithCopilot,
+    updateAIDraft,
+    approveAndSaveAIDraftAsTemplate,
+  } = useApp();
   const navigate = useNavigate();
 
+  const [selectedClientId, setSelectedClientId] = useState('');
   const [objective, setObjective] = useState<GoalFocus>('weight_management');
   const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel>('beginner');
   const [daysPerWeek, setDaysPerWeek] = useState(4);
@@ -26,67 +35,136 @@ export const StudioAIBuilderPage: React.FC = () => {
   const [dietaryPreference, setDietaryPreference] = useState<DietaryPreference>('vegetarian');
   const [constraints, setConstraints] = useState('Mild knee sensitivity; prefers 40-min sessions');
 
+  const [busy, setBusy] = useState(false);
+  const [apiError, setApiError] = useState('');
   const [activeDraft, setActiveDraft] = useState<AIPlanDraft | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editSummary, setEditSummary] = useState('');
+  const [editDays, setEditDays] = useState<{ dayLabel: string; focus: string; sampleSession: string }[]>([]);
+  const [editNutrition, setEditNutrition] = useState('');
+  const [editHabits, setEditHabits] = useState('');
 
-  const handleGenerate = (e: React.FormEvent) => {
-    e.preventDefault();
-    const draft = generateAIDraft({
-      objective,
-      experienceLevel,
-      daysPerWeek,
-      environment,
-      dietaryPreference,
-      constraints,
-    });
+  const handleClientSelect = (clientId: string) => {
+    setSelectedClientId(clientId);
+    const client = linkedClientsForActiveTrainer.find((c) => c.id === clientId);
+    if (!client) return;
+    setObjective(client.primaryGoal);
+    setExperienceLevel(client.experienceLevel);
+    setDaysPerWeek(Math.max(2, Math.min(6, client.daysPerWeek || 3)));
+    setEnvironment(client.environment);
+    setDietaryPreference(client.dietaryPreference);
+    const notesParts = [
+      client.healthLimitations ? `Limitations: ${client.healthLimitations}` : '',
+      client.foodAllergies ? `Allergies: ${client.foodAllergies}` : '',
+      client.equipment.length > 0 ? `Equipment: ${client.equipment.join(', ')}` : '',
+      client.coachingPreferences ? `Preferences: ${client.coachingPreferences}` : '',
+    ].filter(Boolean);
+    if (notesParts.length > 0) {
+      setConstraints(notesParts.join(' · '));
+    }
+  };
+
+  const loadDraftIntoEditor = (draft: AIPlanDraft) => {
     setActiveDraft(draft);
     setEditTitle(draft.title);
     setEditSummary(draft.summary);
+    setEditDays(draft.workoutDays.map((d) => ({ ...d })));
+    setEditNutrition(draft.nutritionOutline.join('\n'));
+    setEditHabits(draft.habitCommitments.join('\n'));
   };
 
-  const handleSaveEdits = () => {
-    if (!activeDraft) return;
-    const updated: AIPlanDraft = {
+  const handleGenerate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setApiError('');
+    setBusy(true);
+    try {
+      const res = await generateAIPlanWithCopilot({
+        objective,
+        experienceLevel,
+        daysPerWeek,
+        environment,
+        dietaryPreference,
+        constraints,
+        clientId: selectedClientId || undefined,
+      });
+      if (!res.ok || !res.draft) {
+        setApiError(res.error || 'Could not generate AI draft right now.');
+        return;
+      }
+      loadDraftIntoEditor(res.draft);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const buildEditedDraft = (status: AIPlanDraft['status']): AIPlanDraft | null => {
+    if (!activeDraft) return null;
+    return {
       ...activeDraft,
       title: editTitle.trim() || activeDraft.title,
       summary: editSummary.trim() || activeDraft.summary,
-      status: 'approved',
+      workoutDays: editDays,
+      nutritionOutline: editNutrition
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 10),
+      habitCommitments: editHabits
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(0, 10),
+      status,
     };
+  };
+
+  const handleSaveEdits = () => {
+    const updated = buildEditedDraft('approved');
+    if (!updated) return;
     setActiveDraft(updated);
     updateAIDraft(updated);
   };
 
-  const handleApproveToTemplates = () => {
-    if (!activeDraft) return;
-    const updated: AIPlanDraft = {
-      ...activeDraft,
-      title: editTitle.trim() || activeDraft.title,
-      summary: editSummary.trim() || activeDraft.summary,
-      status: 'approved',
-    };
+  const handleApproveToTemplates = (redirectToAssign = false) => {
+    const updated = buildEditedDraft('approved');
+    if (!updated) return;
     updateAIDraft(updated);
-    approveAndSaveAIDraftAsTemplate(activeDraft.id);
-    navigate('/studio/templates');
+    approveAndSaveAIDraftAsTemplate(updated.id);
+    if (redirectToAssign) {
+      navigate('/studio/assign', {
+        state: selectedClientId ? { preselectedClientIds: [selectedClientId] } : undefined,
+      });
+    } else {
+      navigate('/studio/templates');
+    }
   };
 
   return (
-    <AppShell pageTitle="AI Plan Builder (Preview)">
+    <AppShell pageTitle={isCloudSynced ? 'AI Plan Copilot' : 'AI Plan Builder (Preview)'}>
       <div className="max-w-5xl mx-auto flex flex-col gap-6">
         <div className="rounded-[20px] bg-[#FF803E]/12 border border-[#FF803E]/35 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p className="text-[14px] font-semibold text-[#FFB06B]">
-              Preview only — no live Gemini call
+              {isCloudSynced
+                ? 'Gemini AI Plan Copilot · Coach review & approval required'
+                : 'Preview only — deterministic sample draft'}
             </p>
             <p className="text-[13px] text-[#F5F5F7] mt-0.5">
               {COPY.trainer.aiNotice} {COPY.trainer.aiMedicalNotice}
             </p>
           </div>
-          <GlassTooltip content="Drafts are never sent to clients until you review, edit, and approve them into your template library.">
-            <span className="text-[12px] text-[#FFB06B] underline underline-offset-4 whitespace-nowrap cursor-help">
-              Trainer approval required
-            </span>
-          </GlassTooltip>
+          <div className="flex items-center gap-3 shrink-0">
+            {isCloudSynced && aiQuotaRemaining !== null ? (
+              <span className="text-[12px] font-medium text-[#A2A8B5] tabular-nums">
+                {aiQuotaRemaining} daily drafts left
+              </span>
+            ) : null}
+            <GlassTooltip content="Drafts are never sent to clients until you review, edit, and approve them into your template library.">
+              <span className="text-[12px] text-[#FFB06B] underline underline-offset-4 whitespace-nowrap cursor-help">
+                Trainer approval required
+              </span>
+            </GlassTooltip>
+          </div>
         </div>
 
         <div>
@@ -103,6 +181,24 @@ export const StudioAIBuilderPage: React.FC = () => {
             className="lg:col-span-5 surface-card rounded-[22px] p-5 flex flex-col gap-4"
           >
             <h2 className="text-[17px] font-semibold text-[#F5F5F7]">Client training context</h2>
+
+            {linkedClientsForActiveTrainer.length > 0 ? (
+              <label className="flex flex-col gap-1.5 text-[13px] font-medium text-[#F5F5F7]">
+                Pre-fill from active client
+                <select
+                  value={selectedClientId}
+                  onChange={(e) => handleClientSelect(e.target.value)}
+                  className="min-h-[48px] rounded-[12px] bg-[#101218] border border-white/[0.1] px-3 text-[14px]"
+                >
+                  <option value="">Custom client context</option>
+                  {linkedClientsForActiveTrainer.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.firstName} {client.lastName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <label className="flex flex-col gap-1.5 text-[13px] font-medium text-[#F5F5F7]">
               Objective
@@ -179,9 +275,28 @@ export const StudioAIBuilderPage: React.FC = () => {
               placeholder="Schedule limits, equipment gaps, or recovery considerations"
             />
 
-            <GlassButton type="submit" fullWidth>
-              <Sparkles className="w-4 h-4" aria-hidden="true" />
-              Generate sample draft
+            {apiError ? (
+              <div
+                role="alert"
+                className="rounded-[12px] bg-[#FF6B70]/12 border border-[#FF6B70]/40 p-3 flex items-start gap-2 text-[13px] text-[#FF6B70]"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{apiError}</span>
+              </div>
+            ) : null}
+
+            <GlassButton type="submit" fullWidth disabled={busy}>
+              {busy ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  Generating draft...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" aria-hidden="true" />
+                  {isCloudSynced ? 'Generate draft with Gemini' : 'Generate sample draft'}
+                </>
+              )}
             </GlassButton>
           </form>
 
@@ -190,10 +305,12 @@ export const StudioAIBuilderPage: React.FC = () => {
             {!activeDraft ? (
               <div className="py-12 text-center space-y-2">
                 <p className="text-[17px] font-semibold text-[#F5F5F7]">
-                  Deterministic draft preview
+                  {isCloudSynced ? 'Gemini AI Copilot ready' : 'Deterministic draft preview'}
                 </p>
                 <p className="text-[14px] text-[#A2A8B5] max-w-md mx-auto">
-                  Select an objective and context on the left to generate an editable sample draft. Nothing is shared with clients automatically.
+                  {isCloudSynced
+                    ? 'Select an active client or training context on the left to draft an editable 7-day plan, Indian nutrition outline, and daily habits.'
+                    : 'Select an objective and context on the left to generate an editable sample draft. Nothing is shared with clients automatically.'}
                 </p>
               </div>
             ) : (
@@ -202,7 +319,13 @@ export const StudioAIBuilderPage: React.FC = () => {
                   <span className="text-[12px] font-medium text-[#FFB06B]">
                     Status: {activeDraft.status === 'approved' ? 'Approved by trainer' : 'Draft — awaiting review'}
                   </span>
-                  <span className="text-[12px] text-[#7C8393]">Deterministic sample</span>
+                  <span className="text-[12px] text-[#7C8393]">
+                    {isDemoSandbox || !isCloudSynced
+                      ? 'Deterministic sample'
+                      : activeDraft.model
+                        ? `Generated by ${activeDraft.model}`
+                        : 'Gemini Copilot draft'}
+                  </span>
                 </div>
 
                 <InputField
@@ -219,38 +342,75 @@ export const StudioAIBuilderPage: React.FC = () => {
 
                 <div>
                   <h3 className="text-[15px] font-semibold text-[#F5F5F7] mb-2">
-                    Proposed weekly schedule
+                    Proposed weekly schedule (editable)
                   </h3>
-                  <ul className="divide-y divide-white/[0.08] border-t border-b border-white/[0.08]">
-                    {activeDraft.workoutDays.map((day) => (
-                      <li key={day.dayLabel} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[13px]">
-                        <span className="font-medium text-[#F5F5F7]">
-                          {day.dayLabel} · {day.focus}
+                  <div className="space-y-2.5">
+                    {editDays.map((day, idx) => (
+                      <div
+                        key={day.dayLabel}
+                        className="rounded-[14px] bg-[#101218] border border-white/[0.08] p-3 grid grid-cols-1 sm:grid-cols-12 gap-2 items-center"
+                      >
+                        <span className="sm:col-span-2 text-[13px] font-semibold text-[#FFB06B]">
+                          {day.dayLabel}
                         </span>
-                        <span className="text-[#A2A8B5]">{day.sampleSession}</span>
-                      </li>
+                        <input
+                          type="text"
+                          value={day.focus}
+                          aria-label={`${day.dayLabel} focus`}
+                          onChange={(e) =>
+                            setEditDays((prev) =>
+                              prev.map((d, i) => (i === idx ? { ...d, focus: e.target.value } : d)),
+                            )
+                          }
+                          className="sm:col-span-4 rounded-[10px] bg-[#1C2029] border border-white/[0.08] px-2.5 py-1.5 text-[13px] text-[#F5F5F7]"
+                        />
+                        <input
+                          type="text"
+                          value={day.sampleSession}
+                          aria-label={`${day.dayLabel} session`}
+                          onChange={(e) =>
+                            setEditDays((prev) =>
+                              prev.map((d, i) =>
+                                i === idx ? { ...d, sampleSession: e.target.value } : d,
+                              ),
+                            )
+                          }
+                          className="sm:col-span-6 rounded-[10px] bg-[#1C2029] border border-white/[0.08] px-2.5 py-1.5 text-[13px] text-[#A2A8B5]"
+                        />
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
 
-                <div>
-                  <h3 className="text-[15px] font-semibold text-[#F5F5F7] mb-1.5">
-                    Sample Indian nutrition outline
-                  </h3>
-                  <ul className="text-[13px] text-[#A2A8B5] space-y-1 list-disc list-inside">
-                    {activeDraft.nutritionOutline.map((item) => (
-                      <li key={item}>{item}</li>
-                    ))}
-                  </ul>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <TextAreaField
+                    label="Indian nutrition outline (one per line)"
+                    value={editNutrition}
+                    onChange={(e) => setEditNutrition(e.target.value)}
+                    rows={4}
+                  />
+                  <TextAreaField
+                    label="Daily habit commitments (one per line)"
+                    value={editHabits}
+                    onChange={(e) => setEditHabits(e.target.value)}
+                    rows={4}
+                  />
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
                   <GlassButton variant="secondary" fullWidth onClick={handleSaveEdits}>
                     Save draft edits
                   </GlassButton>
-                  <GlassButton fullWidth onClick={handleApproveToTemplates}>
+                  <GlassButton fullWidth onClick={() => handleApproveToTemplates(false)}>
                     <Check className="w-4 h-4" aria-hidden="true" />
                     Approve & save template
+                  </GlassButton>
+                  <GlassButton
+                    variant="glass"
+                    fullWidth
+                    onClick={() => handleApproveToTemplates(true)}
+                  >
+                    Approve & assign
                   </GlassButton>
                 </div>
               </div>

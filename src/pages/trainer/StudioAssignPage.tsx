@@ -17,7 +17,10 @@ export const StudioAssignPage: React.FC = () => {
     store,
     todayKey,
     activeTrainer,
+    isCloudSynced,
     linkedClientsForActiveTrainer,
+    clientGroups,
+    clientGroupMembers,
     runBulkAssignment,
     switchDemoPersona,
   } = useApp();
@@ -44,9 +47,7 @@ export const StudioAssignPage: React.FC = () => {
   const [isRecovery, setIsRecovery] = useState(false);
   const [isOptional, setIsOptional] = useState(false);
 
-  const [recipientIds, setRecipientIds] = useState<string[]>(
-    preselected.length > 0 ? preselected : ['cl_aarav'],
-  );
+  const [recipientIds, setRecipientIds] = useState<string[]>(preselected);
   const [startDateKey, setStartDateKey] = useState(todayKey);
   const [recurrenceDays, setRecurrenceDays] = useState(3);
   const [dueTime, setDueTime] = useState('8:00 PM');
@@ -67,6 +68,16 @@ export const StudioAssignPage: React.FC = () => {
   const selectGoalGroup = (focus: GoalFocus) => {
     const matching = linkedClientsForActiveTrainer
       .filter((c) => c.primaryGoal === focus)
+      .map((c) => c.id);
+    setRecipientIds(matching);
+  };
+
+  const selectCustomGroup = (groupId: string) => {
+    const memberIds = new Set(
+      clientGroupMembers.filter((m) => m.groupId === groupId).map((m) => m.clientId),
+    );
+    const matching = linkedClientsForActiveTrainer
+      .filter((c) => memberIds.has(c.id))
       .map((c) => c.id);
     setRecipientIds(matching);
   };
@@ -139,20 +150,28 @@ export const StudioAssignPage: React.FC = () => {
                   {lastResult.skipped > 0 ? ` (${lastResult.skipped} duplicate skipped)` : ''}.
                 </p>
                 <p className="text-[13px] text-[#A2A8B5]">
-                  Resulting tasks are now live in the client demo view while preserving individual overrides.
+                  {isCloudSynced
+                    ? 'Tasks are now live on your clients’ Today checklists while preserving individual overrides.'
+                    : 'Resulting tasks are now live in the client demo view while preserving individual overrides.'}
                 </p>
               </div>
             </div>
-            <GlassButton
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                switchDemoPersona('usr_client_aarav');
-                navigate('/app/home');
-              }}
-            >
-              Preview in Aarav's Today
-            </GlassButton>
+            {isCloudSynced ? (
+              <GlassButton size="sm" variant="secondary" onClick={() => navigate('/studio/clients')}>
+                Back to clients
+              </GlassButton>
+            ) : (
+              <GlassButton
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  switchDemoPersona('usr_client_aarav');
+                  navigate('/app/home');
+                }}
+              >
+                Preview in Aarav&apos;s Today
+              </GlassButton>
+            )}
           </div>
         ) : null}
 
@@ -309,39 +328,66 @@ export const StudioAssignPage: React.FC = () => {
                 >
                   General fitness group
                 </GlassButton>
+                {clientGroups.map((grp) => (
+                  <GlassButton
+                    key={grp.id}
+                    type="button"
+                    size="sm"
+                    variant="glass"
+                    onClick={() => selectCustomGroup(grp.id)}
+                  >
+                    {grp.name}
+                  </GlassButton>
+                ))}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {linkedClientsForActiveTrainer.map((client) => {
-                const checked = recipientIds.includes(client.id);
-                return (
-                  <label
-                    key={client.id}
-                    className={`rounded-[14px] p-3.5 border flex items-center gap-3 cursor-pointer transition-colors ${
-                      checked
-                        ? 'bg-[#FF803E]/12 border-[#FF803E]'
-                        : 'bg-[#101218] border-white/[0.08] hover:border-white/20'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleRecipient(client.id)}
-                      className="h-4 w-4 accent-[#FF803E]"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-[14px] font-medium text-[#F5F5F7] truncate">
-                        {client.firstName} {client.lastName}
-                      </p>
-                      <p className="text-[12px] text-[#7C8393] capitalize truncate">
-                        {client.primaryGoal.replaceAll('_', ' ')}
-                      </p>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
+            {linkedClientsForActiveTrainer.length === 0 ? (
+              <div className="rounded-[14px] bg-[#101218] border border-white/[0.08] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-[13px] text-[#A2A8B5]">
+                  No active linked clients yet. Invite clients or accept pending coaching requests before assigning commitments.
+                </p>
+                <GlassButton
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => navigate('/studio/clients')}
+                >
+                  Go to clients
+                </GlassButton>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {linkedClientsForActiveTrainer.map((client) => {
+                  const checked = recipientIds.includes(client.id);
+                  return (
+                    <label
+                      key={client.id}
+                      className={`rounded-[14px] p-3.5 border flex items-center gap-3 cursor-pointer transition-colors ${
+                        checked
+                          ? 'bg-[#FF803E]/12 border-[#FF803E]'
+                          : 'bg-[#101218] border-white/[0.08] hover:border-white/20'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleRecipient(client.id)}
+                        className="h-4 w-4 accent-[#FF803E]"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[14px] font-medium text-[#F5F5F7] truncate">
+                          {client.firstName} {client.lastName}
+                        </p>
+                        <p className="text-[12px] text-[#7C8393] capitalize truncate">
+                          {client.primaryGoal.replaceAll('_', ' ')}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           {/* Step 3: Schedule & Duplicate Rules */}

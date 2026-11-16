@@ -9,8 +9,11 @@ import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField, TextAreaField } from '../../components/ui/InputField';
 import { MediaImage } from '../../components/ui/MediaImage';
 
+const CLIENT_DRAFT_STORAGE_KEY = 'fitplus_client_onboarding_draft';
 const STEPS = ['basics', 'measurements', 'goal', 'training', 'food', 'review'] as const;
 type ClientStep = (typeof STEPS)[number];
+
+const LANGUAGE_CHOICES = ['English', 'Hindi', 'Marathi', 'Tamil', 'Telugu', 'Kannada', 'Bengali'];
 
 const GOAL_OPTIONS: { value: GoalFocus; label: string; imageKey: string }[] = [
   { value: 'weight_management', label: 'Weight management', imageKey: 'programWeightLoss' },
@@ -29,25 +32,95 @@ export const ClientOnboardingPage: React.FC = () => {
   const currentStep = STEPS[stepIndex] || 'basics';
 
   const nameParts = (firebaseUser?.displayName || '').trim().split(/\s+/);
+
+  const initialSavedDraft = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem(CLIENT_DRAFT_STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as Partial<OnboardingClientDraft>;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const [hasSavedDraftBanner, setHasSavedDraftBanner] = useState(Boolean(initialSavedDraft));
   const [draft, setDraft] = useState<OnboardingClientDraft>({
-    firstName: nameParts[0] || '',
-    lastName: nameParts.slice(1).join(' ') || '',
-    isAdultConfirmed: false,
-    heightCm: undefined,
-    weightKg: undefined,
-    primaryGoal: 'general_fitness',
-    experienceLevel: 'beginner',
-    daysPerWeek: 3,
-    environment: 'home',
-    equipment: ['Yoga mat'],
-    dietaryPreference: 'vegetarian',
-    dietaryNotes: '',
+    firstName: initialSavedDraft?.firstName ?? nameParts[0] ?? '',
+    lastName: initialSavedDraft?.lastName ?? (nameParts.slice(1).join(' ') || ''),
+    isAdultConfirmed: initialSavedDraft?.isAdultConfirmed ?? false,
+    age: initialSavedDraft?.age,
+    heightCm: initialSavedDraft?.heightCm,
+    weightKg: initialSavedDraft?.weightKg,
+    targetWeightKg: initialSavedDraft?.targetWeightKg,
+    primaryGoal: initialSavedDraft?.primaryGoal ?? 'general_fitness',
+    experienceLevel: initialSavedDraft?.experienceLevel ?? 'beginner',
+    daysPerWeek: initialSavedDraft?.daysPerWeek ?? 3,
+    environment: initialSavedDraft?.environment ?? 'home',
+    equipment: initialSavedDraft?.equipment ?? ['Yoga mat'],
+    dietaryPreference: initialSavedDraft?.dietaryPreference ?? 'vegetarian',
+    dietaryNotes: initialSavedDraft?.dietaryNotes ?? '',
+    foodAllergies: initialSavedDraft?.foodAllergies ?? '',
+    healthLimitations: initialSavedDraft?.healthLimitations ?? '',
+    preferredLanguage: initialSavedDraft?.preferredLanguage ?? 'English',
+    coachingPreferences: initialSavedDraft?.coachingPreferences ?? '',
   });
 
-  const [heightInput, setHeightInput] = useState('');
-  const [weightInput, setWeightInput] = useState('');
+  const [ageInput, setAgeInput] = useState(
+    initialSavedDraft?.age ? String(initialSavedDraft.age) : '',
+  );
+  const [heightInput, setHeightInput] = useState(
+    initialSavedDraft?.heightCm ? String(initialSavedDraft.heightCm) : '',
+  );
+  const [weightInput, setWeightInput] = useState(
+    initialSavedDraft?.weightKg ? String(initialSavedDraft.weightKg) : '',
+  );
+  const [targetWeightInput, setTargetWeightInput] = useState(
+    initialSavedDraft?.targetWeightKg ? String(initialSavedDraft.targetWeightKg) : '',
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [finished, setFinished] = useState(false);
+
+  React.useEffect(() => {
+    if (finished || typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(CLIENT_DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [draft, finished]);
+
+  const discardSavedDraft = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(CLIENT_DRAFT_STORAGE_KEY);
+    }
+    setHasSavedDraftBanner(false);
+    setAgeInput('');
+    setHeightInput('');
+    setWeightInput('');
+    setTargetWeightInput('');
+    setDraft({
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      isAdultConfirmed: false,
+      age: undefined,
+      heightCm: undefined,
+      weightKg: undefined,
+      targetWeightKg: undefined,
+      primaryGoal: 'general_fitness',
+      experienceLevel: 'beginner',
+      daysPerWeek: 3,
+      environment: 'home',
+      equipment: ['Yoga mat'],
+      dietaryPreference: 'vegetarian',
+      dietaryNotes: '',
+      foodAllergies: '',
+      healthLimitations: '',
+      preferredLanguage: 'English',
+      coachingPreferences: '',
+    });
+    navigate('/onboarding/client/basics');
+  };
 
   const pendingInvite = useMemo(() => {
     if (!store.session.pendingInviteToken) return undefined;
@@ -67,6 +140,12 @@ export const ClientOnboardingPage: React.FC = () => {
 
     if (currentStep === 'basics') {
       if (!draft.firstName.trim()) nextErrors.firstName = COPY.onboarding.errors.enterName;
+      if (ageInput.trim()) {
+        const parsedAge = Number(ageInput);
+        if (!Number.isFinite(parsedAge) || parsedAge < 18 || parsedAge > 110) {
+          nextErrors.age = 'Enter an adult age between 18 and 110.';
+        }
+      }
       if (!draft.isAdultConfirmed) nextErrors.adult = COPY.onboarding.errors.confirmAdult;
     }
 
@@ -83,6 +162,12 @@ export const ClientOnboardingPage: React.FC = () => {
           nextErrors.weightKg = COPY.onboarding.errors.positiveNumber;
         }
       }
+      if (targetWeightInput.trim()) {
+        const tw = Number(targetWeightInput);
+        if (!Number.isFinite(tw) || tw <= 0) {
+          nextErrors.targetWeightKg = COPY.onboarding.errors.positiveNumber;
+        }
+      }
     }
 
     if (currentStep === 'goal' && !draft.primaryGoal) {
@@ -94,11 +179,19 @@ export const ClientOnboardingPage: React.FC = () => {
       return;
     }
 
+    if (currentStep === 'basics') {
+      setDraft((prev) => ({
+        ...prev,
+        age: ageInput.trim() ? Math.round(Number(ageInput)) : undefined,
+      }));
+    }
+
     if (currentStep === 'measurements') {
       setDraft((prev) => ({
         ...prev,
         heightCm: heightInput.trim() ? Number(heightInput) : undefined,
         weightKg: weightInput.trim() ? Number(weightInput) : undefined,
+        targetWeightKg: targetWeightInput.trim() ? Number(targetWeightInput) : undefined,
       }));
     }
 
@@ -112,15 +205,31 @@ export const ClientOnboardingPage: React.FC = () => {
     if (currentStep === 'measurements') {
       setHeightInput('');
       setWeightInput('');
-      setDraft((prev) => ({ ...prev, heightCm: undefined, weightKg: undefined }));
+      setTargetWeightInput('');
+      setDraft((prev) => ({
+        ...prev,
+        heightCm: undefined,
+        weightKg: undefined,
+        targetWeightKg: undefined,
+      }));
     }
     goStep(stepIndex + 1);
   };
 
   const handleFinish = () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(CLIENT_DRAFT_STORAGE_KEY);
+    }
     completeClientOnboarding({
       ...draft,
       firstName: draft.firstName.trim() || 'Guest',
+      age: ageInput.trim() ? Math.round(Number(ageInput)) : draft.age,
+      heightCm: heightInput.trim() ? Number(heightInput) : draft.heightCm,
+      weightKg: weightInput.trim() ? Number(weightInput) : draft.weightKg,
+      targetWeightKg: targetWeightInput.trim() ? Number(targetWeightInput) : draft.targetWeightKg,
+      foodAllergies: draft.foodAllergies?.trim() || undefined,
+      healthLimitations: draft.healthLimitations?.trim() || undefined,
+      coachingPreferences: draft.coachingPreferences?.trim() || undefined,
       isAdultConfirmed: true,
     });
     if (pendingInvite) {
@@ -136,31 +245,37 @@ export const ClientOnboardingPage: React.FC = () => {
         <header className="sticky top-0 z-20 px-3 sm:px-6 lg:px-8 pt-2.5 pt-safe">
           <div className="glass-nav max-w-[1280px] mx-auto h-14 rounded-[18px] px-4 sm:px-6 flex items-center justify-between">
             <BrandMark />
-            <span className="text-[12px] text-[#7C8393]">{COPY.onboarding.demoDataOnly}</span>
+            <span className="text-[12px] text-[#7C8393]">
+              {isCloudSynced || firebaseUser ? 'Synced to your FitPlus account' : COPY.onboarding.demoDataOnly}
+            </span>
           </div>
         </header>
         <main className="flex-1 max-w-lg w-full mx-auto px-4 py-12 flex flex-col justify-center gap-6">
           <div className="surface-card rounded-[26px] p-6 sm:p-8 flex flex-col gap-6">
             <div>
-              <p className="text-[13px] font-medium text-[#FFB06B]">Setup complete (demo)</p>
+              <p className="text-[13px] font-medium text-[#FFB06B]">
+                {isCloudSynced || firebaseUser ? 'Setup complete' : 'Setup complete (demo)'}
+              </p>
               <h1 className="mt-2 text-[28px] font-semibold text-[#F5F5F7]">
                 {COPY.onboarding.client.nextChoiceTitle}
               </h1>
               <p className="mt-2 text-[15px] text-[#A2A8B5]">
-                A coach relationship only activates when you explicitly accept an invitation or enroll in a demo package.
+                A coach relationship only activates when you explicitly accept an invitation or select a coaching package.
               </p>
             </div>
             <div className="flex flex-col gap-3">
               <GlassButton fullWidth onClick={() => navigate('/discover')}>
                 {COPY.onboarding.client.findTrainer}
               </GlassButton>
-              <GlassButton
-                variant="glass"
-                fullWidth
-                onClick={() => navigate('/join/FIT-ARJUN-2026')}
-              >
-                {COPY.onboarding.client.haveInvite} (sample)
-              </GlassButton>
+              {!(isCloudSynced || firebaseUser) ? (
+                <GlassButton
+                  variant="glass"
+                  fullWidth
+                  onClick={() => navigate('/join/FIT-ARJUN-2026')}
+                >
+                  {COPY.onboarding.client.haveInvite} (sample)
+                </GlassButton>
+              ) : null}
               <GlassButton
                 variant="tertiary"
                 fullWidth
@@ -210,10 +325,27 @@ export const ClientOnboardingPage: React.FC = () => {
 
       <main className="flex-1 max-w-xl w-full mx-auto px-4 py-6 flex flex-col justify-between gap-8">
         <div className="flex flex-col gap-6">
+          {hasSavedDraftBanner ? (
+            <div className="rounded-[16px] bg-[#252A35] border border-white/[0.1] px-4 py-3 flex items-center justify-between gap-3">
+              <p className="text-[13px] text-[#A2A8B5]">
+                Resuming your saved onboarding progress.
+              </p>
+              <button
+                type="button"
+                onClick={discardSavedDraft}
+                className="text-[12px] font-medium text-[#FFB06B] hover:text-[#FF803E] whitespace-nowrap cursor-pointer"
+              >
+                Start fresh
+              </button>
+            </div>
+          ) : null}
+
           {currentStep === 'basics' ? (
             <>
               <div>
-                <p className="text-[12px] text-[#7C8393]">{COPY.onboarding.demoDataOnly}</p>
+                <p className="text-[12px] text-[#7C8393]">
+                  {isCloudSynced || firebaseUser ? 'FitPlus client profile' : COPY.onboarding.demoDataOnly}
+                </p>
                 <h1 className="mt-1 text-[28px] sm:text-[32px] font-semibold tracking-[-0.02em]">
                   {COPY.onboarding.client.basicsTitle}
                 </h1>
@@ -236,6 +368,34 @@ export const ClientOnboardingPage: React.FC = () => {
                 onChange={(e) => setDraft({ ...draft, lastName: e.target.value })}
                 placeholder="e.g., Mehta"
               />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <InputField
+                  label="Age"
+                  unit="yrs"
+                  type="number"
+                  min={18}
+                  max={110}
+                  optionalTag={COPY.onboarding.optional}
+                  value={ageInput}
+                  onChange={(e) => setAgeInput(e.target.value)}
+                  placeholder="28"
+                  error={errors.age}
+                />
+                <label className="flex flex-col gap-1.5 text-[13px] font-medium text-[#F5F5F7]">
+                  Preferred language
+                  <select
+                    value={draft.preferredLanguage || 'English'}
+                    onChange={(e) => setDraft({ ...draft, preferredLanguage: e.target.value })}
+                    className="min-h-[48px] rounded-[12px] bg-[#101218] border border-white/[0.1] px-3 text-[14px]"
+                  >
+                    {LANGUAGE_CHOICES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {lang}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
               <label className="flex items-start gap-3 rounded-[16px] surface-card p-4 cursor-pointer">
                 <input
                   type="checkbox"
@@ -286,6 +446,16 @@ export const ClientOnboardingPage: React.FC = () => {
                 placeholder="72"
                 error={errors.weightKg}
                 helper="Stored locally or in your private FitPlus workspace."
+              />
+              <InputField
+                label="Target weight"
+                unit="kg"
+                inputMode="decimal"
+                optionalTag={COPY.onboarding.optional}
+                value={targetWeightInput}
+                onChange={(e) => setTargetWeightInput(e.target.value)}
+                placeholder="68"
+                error={errors.targetWeightKg}
               />
             </>
           ) : null}
@@ -420,6 +590,22 @@ export const ClientOnboardingPage: React.FC = () => {
                   }
                   placeholder="Dumbbells, resistance bands, yoga mat"
                 />
+
+                <TextAreaField
+                  label="Movement limitations or schedule preferences"
+                  optionalTag={COPY.onboarding.optional}
+                  value={draft.healthLimitations || ''}
+                  onChange={(e) => setDraft({ ...draft, healthLimitations: e.target.value })}
+                  placeholder="e.g., Avoid deep knee flexion; prefer 35-min morning sessions"
+                />
+
+                <InputField
+                  label="Coaching style preference"
+                  optionalTag={COPY.onboarding.optional}
+                  value={draft.coachingPreferences || ''}
+                  onChange={(e) => setDraft({ ...draft, coachingPreferences: e.target.value })}
+                  placeholder="e.g., Calm check-ins twice a week via WhatsApp"
+                />
               </div>
             </>
           ) : null}
@@ -458,12 +644,20 @@ export const ClientOnboardingPage: React.FC = () => {
                 ))}
               </div>
 
+              <InputField
+                label="Food allergies"
+                optionalTag={COPY.onboarding.optional}
+                value={draft.foodAllergies || ''}
+                onChange={(e) => setDraft({ ...draft, foodAllergies: e.target.value })}
+                placeholder="e.g., Peanuts, shellfish, lactose"
+              />
+
               <TextAreaField
-                label="Dietary preferences or allergies"
-                optionalTag="Optional · sample data only"
+                label="Dietary preferences & meal notes"
+                optionalTag={COPY.onboarding.optional}
                 value={draft.dietaryNotes}
                 onChange={(e) => setDraft({ ...draft, dietaryNotes: e.target.value })}
-                placeholder="e.g., Prefer no eggs; lactose tolerant"
+                placeholder="e.g., Home-cooked dal-chawal lunches, prefer paneer or soy protein"
               />
             </>
           ) : null}
@@ -487,10 +681,18 @@ export const ClientOnboardingPage: React.FC = () => {
                   </span>
                 </div>
                 <div className="p-4 flex justify-between gap-3 tabular-nums">
+                  <span className="text-[#7C8393]">Age & language</span>
+                  <span className="text-[#F5F5F7]">
+                    {ageInput.trim() ? `${ageInput.trim()} yrs` : 'Age skipped'} ·{' '}
+                    {draft.preferredLanguage || 'English'}
+                  </span>
+                </div>
+                <div className="p-4 flex justify-between gap-3 tabular-nums">
                   <span className="text-[#7C8393]">Measurements</span>
                   <span className="text-[#F5F5F7]">
-                    {draft.heightCm ? `${draft.heightCm} cm` : 'Skipped'} ·{' '}
-                    {draft.weightKg ? `${draft.weightKg} kg` : 'Skipped'}
+                    {heightInput.trim() ? `${heightInput.trim()} cm` : 'Skipped'} ·{' '}
+                    {weightInput.trim() ? `${weightInput.trim()} kg` : 'Skipped'}
+                    {targetWeightInput.trim() ? ` → Target ${targetWeightInput.trim()} kg` : ''}
                   </span>
                 </div>
                 <div className="p-4 flex justify-between gap-3">
@@ -509,8 +711,19 @@ export const ClientOnboardingPage: React.FC = () => {
                   <span className="text-[#7C8393]">Food preference</span>
                   <span className="text-[#F5F5F7] capitalize">
                     {draft.dietaryPreference.replaceAll('_', ' ')}
+                    {draft.foodAllergies?.trim() ? ` · Allergies: ${draft.foodAllergies.trim()}` : ''}
                   </span>
                 </div>
+                {draft.healthLimitations?.trim() || draft.coachingPreferences?.trim() ? (
+                  <div className="p-4 flex flex-col gap-1">
+                    <span className="text-[#7C8393]">Notes for your coach</span>
+                    <span className="text-[#F5F5F7] text-[13px]">
+                      {[draft.healthLimitations?.trim(), draft.coachingPreferences?.trim()]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                  </div>
+                ) : null}
               </div>
 
               <p className="text-[12px] text-[#7C8393]">
