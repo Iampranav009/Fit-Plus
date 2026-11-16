@@ -50,8 +50,6 @@
     "vite-plugin-pwa": "^2.0.0"
   },
   "overrides": {
-    "jwks-rsa": {
-      "jose": "4.15.9"
-    }
+    "jose": "4.15.9"
   }
 }

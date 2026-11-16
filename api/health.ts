@@ -51,16 +51,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         reqQuery: req.query,
       };
       try {
+        const firestoreAdminMod = await import('./_lib/firestoreAdmin.js');
+        results.firestoreAdminImport = 'ok';
+        results.isConfigured = firestoreAdminMod.isFirebaseAdminConfigured();
+      } catch (e: unknown) {
+        results.firestoreAdminImportError = {
+          message: e instanceof Error ? e.message : String(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        };
+      }
+
+      try {
         const adminMod = await import('./_lib/firebaseAdmin.js');
         results.firebaseAdminImport = 'ok';
-        try {
-          results.firebaseAdminStatus = adminMod.getFirebaseAdminStatus();
-        } catch (e: unknown) {
-          results.firebaseAdminStatusError = {
-            message: e instanceof Error ? e.message : String(e),
-            stack: e instanceof Error ? e.stack : undefined,
-          };
-        }
       } catch (e: unknown) {
         results.firebaseAdminImportError = {
           message: e instanceof Error ? e.message : String(e),

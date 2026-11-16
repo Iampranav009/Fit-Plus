@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { FieldValue } from 'firebase-admin/firestore';
-import { getFirebaseAdminContext, isFirebaseAdminConfigured } from '../_lib/firebaseAdmin.js';
+import { getFirestoreAdminContext, isFirebaseAdminConfigured } from '../_lib/firestoreAdmin.js';
 import {
   activateEnrollmentFromPayment,
   buildDeterministicWebhookEventId,
@@ -155,7 +155,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const { db } = getFirebaseAdminContext();
+    const { db } = getFirestoreAdminContext();
     const paymentsSnap = await db
       .collection('payments')
       .where('providerOrderId', '==', orderId)
