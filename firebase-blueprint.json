@@ -852,6 +852,32 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "recipientUserId", "category", "title", "body", "scheduledFor", "triggerStatus", "idempotencyKey", "channel", "createdAt"]
+    },
+    "ReferralRecord": {
+      "title": "ReferralRecord",
+      "description": "Client and trainer referral codes, attribution, and conversion reward tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "referrerUserId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "referrerName": { "type": "string", "maxLength": 100 },
+        "referrerRole": { "type": "string", "enum": ["client", "trainer"] },
+        "referralCode": { "type": "string", "minLength": 4, "maxLength": 64 },
+        "refereeUserId": { "type": "string", "maxLength": 128 },
+        "refereeName": { "type": "string", "maxLength": 100 },
+        "refereeEmail": { "type": "string", "maxLength": 160 },
+        "status": { "type": "string", "enum": ["pending", "signed_up", "converted"] },
+        "rewardInr": { "type": "number", "minimum": 0 },
+        "rewardPaise": { "type": "number", "minimum": 0 },
+        "rewardType": { "type": "string", "enum": ["coaching_credit", "payout"] },
+        "packageId": { "type": "string", "maxLength": 128 },
+        "packageName": { "type": "string", "maxLength": 140 },
+        "paymentId": { "type": "string", "maxLength": 128 },
+        "convertedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "referrerUserId", "referrerName", "referrerRole", "referralCode", "status", "rewardInr", "rewardPaise", "rewardType", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -1014,6 +1040,10 @@
     "/scheduledReminders/{reminderId}": {
       "schema": { "$ref": "#/entities/ScheduledReminder" },
       "description": "Scheduled reminder notifications with deduplication."
+    },
+    "/referrals/{referralId}": {
+      "schema": { "$ref": "#/entities/ReferralRecord" },
+      "description": "Client and trainer referral codes and conversion tracking."
     }
   }
 }

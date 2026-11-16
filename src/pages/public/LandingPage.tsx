@@ -1,6 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, PlayCircle } from 'lucide-react';
+import {
+  ArrowRight,
+  CheckCircle2,
+  Gift,
+  IndianRupee,
+  Lock,
+  PlayCircle,
+  Scale,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
 import { GlassButton } from '../../components/ui/GlassButton';
@@ -8,6 +20,15 @@ import { MediaImage } from '../../components/ui/MediaImage';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
+
+  // Stage 4C Trainer Independence & ROI Calculator state
+  const [clientCount, setClientCount] = useState(15);
+  const [monthlyFee, setMonthlyFee] = useState(3500);
+
+  const grossEarnings = clientCount * monthlyFee;
+  const fitPlusTakeHome = Math.round(grossEarnings * 0.9); // 10% platform fee
+  const gymTakeHome = Math.round(grossEarnings * 0.3); // Typical Indian commercial gym only gives 30-35%
+  const monthlyExtra = fitPlusTakeHome - gymTakeHome;
 
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
@@ -194,6 +215,133 @@ export const LandingPage: React.FC = () => {
                 </div>
               </div>
             </article>
+          </div>
+        </section>
+
+        {/* Stage 4C: Interactive Trainer Independence & ROI Calculator */}
+        <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-12 border-t border-white/[0.08]">
+          <div className="rounded-[32px] glass-card border border-white/15 p-6 sm:p-10 relative overflow-hidden bg-gradient-to-br from-[#1C2029] via-[#090B10] to-[#1C2029]">
+            <div className="pointer-events-none absolute -right-24 -top-24 w-80 h-80 rounded-full bg-[#FF803E]/15 blur-3xl" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+              {/* Left description */}
+              <div className="lg:col-span-6 space-y-4">
+                <span className="px-3 py-1 rounded-full bg-[#FF803E]/10 text-[#FF9D5C] text-xs font-semibold border border-[#FF803E]/20 inline-flex items-center gap-1.5">
+                  <TrendingUp className="w-3.5 h-3.5" /> Trainer Commercial Independence
+                </span>
+                <h2 className="text-2xl sm:text-4xl font-bold text-white tracking-tight leading-tight">
+                  Stop giving 60% of your earnings to gyms.
+                </h2>
+                <p className="text-sm sm:text-base text-zinc-300 leading-relaxed">
+                  Traditional fitness chains in India take 60% to 70% of what your clients pay. On FitPlus, you retain <strong className="text-white">90% of every rupee</strong> with automated Cashfree payouts and zero monthly software fees.
+                </p>
+
+                {/* Slider 1: Clients */}
+                <div className="space-y-2 pt-2">
+                  <div className="flex justify-between text-xs sm:text-sm">
+                    <span className="text-zinc-400">Active Coaching Clients</span>
+                    <span className="font-bold text-white text-base">{clientCount} clients</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max="50"
+                    step="1"
+                    value={clientCount}
+                    onChange={(e) => setClientCount(Number(e.target.value))}
+                    className="w-full accent-[#FF803E] bg-white/10 rounded-lg h-2 cursor-pointer"
+                  />
+                </div>
+
+                {/* Slider 2: Fee */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs sm:text-sm">
+                    <span className="text-zinc-400">Monthly Package Price (INR)</span>
+                    <span className="font-bold text-white text-base">₹{monthlyFee.toLocaleString('en-IN')}/mo</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1500"
+                    max="10000"
+                    step="500"
+                    value={monthlyFee}
+                    onChange={(e) => setMonthlyFee(Number(e.target.value))}
+                    className="w-full accent-[#FF803E] bg-white/10 rounded-lg h-2 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Right comparison card */}
+              <div className="lg:col-span-6">
+                <div className="rounded-2xl border border-white/10 bg-black/40 p-6 sm:p-8 space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5">
+                      <span className="text-xs text-zinc-400 block mb-1">Traditional Gym</span>
+                      <span className="text-xl sm:text-2xl font-bold text-zinc-400 line-through">
+                        ₹{gymTakeHome.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[11px] text-zinc-500 block mt-0.5">30% typical split</span>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
+                      <span className="text-xs text-emerald-400 font-semibold block mb-1">FitPlus Take-Home</span>
+                      <span className="text-xl sm:text-3xl font-extrabold text-emerald-400">
+                        ₹{fitPlusTakeHome.toLocaleString('en-IN')}
+                      </span>
+                      <span className="text-[11px] text-emerald-500/80 block mt-0.5">90% keep rate</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-[#FF803E]/15 to-transparent border border-[#FF803E]/30 text-center sm:text-left flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div>
+                      <span className="text-xs text-[#FF9D5C] font-semibold uppercase tracking-wider block">
+                        Monthly Extra Take-Home
+                      </span>
+                      <span className="text-2xl font-black text-white">
+                        +₹{monthlyExtra.toLocaleString('en-IN')} / month
+                      </span>
+                    </div>
+                    <GlassButton variant="primary" onClick={() => navigate('/auth')}>
+                      Start Free Studio
+                      <ArrowRight className="w-4 h-4 ml-1" />
+                    </GlassButton>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-zinc-400 pt-2 border-t border-white/10">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> T+2 Cashfree Bank Transfers
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> 18% GST Compliant Invoices
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> No Fixed Monthly Charge
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Growth & Viral Referral Banner */}
+        <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-6">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF803E] to-[#FF4444] flex items-center justify-center text-white flex-shrink-0 shadow-lg shadow-[#FF803E]/20">
+                <Gift className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Give ₹500, Get ₹500</h3>
+                <p className="text-xs sm:text-sm text-zinc-300">
+                  Invite friends to start their fitness journey. They get ₹500 off, and you earn ₹500 coaching credits.
+                </p>
+              </div>
+            </div>
+            <GlassButton variant="glass" onClick={() => navigate('/discover')}>
+              Find Your Coach
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </GlassButton>
           </div>
         </section>
 

@@ -20,11 +20,19 @@ import {
 import {
   buildWhatsAppChatUrl,
   computeAuthoritativeOrderAmountPaise,
+  computeGstBreakdown,
   computePackageDurationDays,
   computeReviewStats,
+  computeTrainerSettlement,
   findEligibleReviewRelationship,
   isValidHttpMeetingLink,
+  validateCouponCode,
 } from '../lib/commerce';
+import {
+  buildReferralDeepLink,
+  evaluateReferralReward,
+  generateReferralCode,
+} from '../lib/referralEngine';
 import {
   buildConversationId,
   formatMessageTime,
@@ -1214,6 +1222,65 @@ test('Stage 4B — Automation & Reminders: quiet hours evaluation and idempotenc
   assert.equal(evalResult.generatedNotifications.length, 1);
   assert.equal(evalResult.generatedNotifications[0].recipientUserId, 'usr_client_aarav');
 });
+
+test('Stage 4C — Commercial Engine: GST invoicing, coupon code validation, and trainer settlements', () => {
+  // 1. Coupon validation
+  const welcomeRes = validateCouponCode({ code: 'WELCOME20', originalAmountInr: 3000 });
+  assert.equal(welcomeRes.isValid, true);
+  assert.equal(welcomeRes.discountInr, 600); // 20% of 3000
+  assert.equal(welcomeRes.finalAmountInr, 2400);
+
+  const cappedRes = validateCouponCode({ code: 'WELCOME20', originalAmountInr: 8000 });
+  assert.equal(cappedRes.isValid, true);
+  assert.equal(cappedRes.discountInr, 1000); // Capped at 1000
+  assert.equal(cappedRes.finalAmountInr, 7000);
+
+  const flatRes = validateCouponCode({ code: 'FITPLUS500', originalAmountInr: 2500 });
+  assert.equal(flatRes.isValid, true);
+  assert.equal(flatRes.discountInr, 500);
+  assert.equal(flatRes.finalAmountInr, 2000);
+
+  const coachRes = validateCouponCode({ code: 'VIP10', originalAmountInr: 5000 });
+  assert.equal(coachRes.isValid, true);
+  assert.equal(coachRes.discountInr, 500);
+  assert.equal(coachRes.finalAmountInr, 4500);
+
+  const invalidRes = validateCouponCode({ code: 'INVALID_CODE', originalAmountInr: 2000 });
+  assert.equal(invalidRes.isValid, false);
+  assert.equal(invalidRes.discountInr, 0);
+
+  // 2. GST Breakdown (18% inclusive)
+  const gst = computeGstBreakdown(5900);
+  assert.equal(gst.totalAmountInr, 5900);
+  assert.equal(gst.baseAmountInr, 5000); // 5900 / 1.18 = 5000
+  assert.equal(gst.cgstInr, 450); // 9%
+  assert.equal(gst.sgstInr, 450); // 9%
+  assert.equal(gst.totalGstInr, 900); // 18%
+
+  // 3. Trainer Settlement (10% platform fee, 90% take home)
+  const settlement = computeTrainerSettlement(10000);
+  assert.equal(settlement.grossAmountInr, 10000);
+  assert.equal(settlement.platformFeeInr, 1000); // 10%
+  assert.equal(settlement.netPayableInr, 9000); // 90%
+});
+
+test('Stage 4C — Growth Engine: Referral codes, deep links, and reward qualification', () => {
+  const code = generateReferralCode('Pranav Shinde', 'user_7x9q123');
+  assert.equal(code, 'FIT-PRANAV-Q123');
+
+  const deepLink = buildReferralDeepLink(code, 'https://fitplus-kappa.vercel.app');
+  assert.equal(deepLink, 'https://fitplus-kappa.vercel.app/auth?ref=FIT-PRANAV-Q123');
+
+  const eligibleReward = evaluateReferralReward(3500);
+  assert.equal(eligibleReward.isEligible, true);
+  assert.equal(eligibleReward.discountInr, 500);
+  assert.equal(eligibleReward.rewardInr, 500);
+
+  const ineligibleReward = evaluateReferralReward(1000); // Below 1500 minimum
+  assert.equal(ineligibleReward.isEligible, false);
+  assert.equal(ineligibleReward.discountInr, 0);
+});
+
 
 
 

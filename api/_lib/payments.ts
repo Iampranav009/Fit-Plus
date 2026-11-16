@@ -596,6 +596,29 @@ export async function activateEnrollmentFromPayment(params: {
     });
   }
 
+  if (payment.referralCode) {
+    const refCode = String(payment.referralCode).trim().toUpperCase();
+    try {
+      const refQuery = await db
+        .collection('referrals')
+        .where('referralCode', '==', refCode)
+        .limit(1)
+        .get();
+      if (!refQuery.empty) {
+        batch.update(refQuery.docs[0].ref, {
+          status: 'converted',
+          refereeUserId: clientUserId,
+          packageId,
+          paymentId,
+          convertedAt: nowIso,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (refErr) {
+      console.warn('Error associating referral conversion:', refErr);
+    }
+  }
+
   const trainerName = String(trainerSnap.data()?.displayName || 'Your FitPlus Coach');
   const clientName = clientSnap.exists
     ? `${String(clientSnap.data()?.firstName || '')} ${String(clientSnap.data()?.lastName || '')}`.trim() || 'Client'

@@ -577,6 +577,12 @@ export interface PaymentRecord {
   verifiedAt?: string;
   webhookEventId?: string;
   lastWebhookAt?: string;
+  couponCode?: string;
+  discountInr?: number;
+  originalAmountInr?: number;
+  referralCode?: string;
+  platformFeePaise?: number;
+  netTrainerPaise?: number;
   /** Legacy historical fields preserved for pre-migration Razorpay records. */
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
@@ -1002,6 +1008,67 @@ export interface ScheduledReminder {
   channel: 'in_app' | 'whatsapp_manual' | 'push';
   createdAt: string;
 }
+
+// -----------------------------------------------------------------------------
+// Stage 4C — Monetization, Growth & Viral Acquisition Loops
+// -----------------------------------------------------------------------------
+export interface CouponDiscount {
+  code: string;
+  discountType: 'percentage' | 'flat';
+  discountValue: number;
+  discountInr: number;
+  originalAmountInr: number;
+  finalAmountInr: number;
+  message: string;
+}
+
+export interface GstBreakdown {
+  totalAmountInr: number;
+  baseAmountInr: number;
+  cgstInr: number;
+  sgstInr: number;
+  totalGstInr: number;
+  gstRatePercent: number;
+}
+
+export interface TrainerSettlementBreakdown {
+  grossAmountInr: number;
+  platformFeePercent: number;
+  platformFeeInr: number;
+  gstOnFeeInr: number;
+  netPayableInr: number;
+  settlementTimeline: string;
+}
+
+export interface ReferralRecord {
+  id: string;
+  referrerUserId: string;
+  referrerName: string;
+  referrerRole: 'client' | 'trainer';
+  referralCode: string;
+  refereeUserId?: string;
+  refereeName?: string;
+  refereeEmail?: string;
+  status: 'pending' | 'signed_up' | 'converted';
+  rewardInr: number;
+  rewardPaise: number;
+  rewardType: 'coaching_credit' | 'payout';
+  packageId?: string;
+  packageName?: string;
+  paymentId?: string;
+  convertedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedTrainerRecord {
+  id: string;
+  userId: string;
+  trainerId: string;
+  trainerName: string;
+  createdAt: string;
+}
+
 
 
 

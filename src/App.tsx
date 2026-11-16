@@ -53,6 +53,7 @@ const StudioWorkoutBuilderPage = React.lazy(() => import('./pages/trainer/Studio
 const StudioNutritionBuilderPage = React.lazy(() => import('./pages/trainer/StudioNutritionBuilderPage').then((m) => ({ default: m.StudioNutritionBuilderPage })));
 const StudioAIBuilderPage = React.lazy(() => import('./pages/trainer/StudioAIBuilderPage').then((m) => ({ default: m.StudioAIBuilderPage })));
 const StudioPackagesPage = React.lazy(() => import('./pages/trainer/StudioPackagesPage').then((m) => ({ default: m.StudioPackagesPage })));
+const StudioEarningsPage = React.lazy(() => import('./pages/trainer/StudioEarningsPage').then((m) => ({ default: m.StudioEarningsPage })));
 const StudioConsultationsPage = React.lazy(() => import('./pages/trainer/StudioConsultationsPage').then((m) => ({ default: m.StudioConsultationsPage })));
 const StudioStorefrontPage = React.lazy(() => import('./pages/trainer/StudioStorefrontPage').then((m) => ({ default: m.StudioStorefrontPage })));
 const StudioSettingsPage = React.lazy(() => import('./pages/trainer/StudioSettingsPage').then((m) => ({ default: m.StudioSettingsPage })));
@@ -558,6 +559,14 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['trainer']}>
                   <StudioPackagesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/earnings"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioEarningsPage />
                 </ProtectedRoute>
               }
             />

@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Calendar, Check, ChevronRight, Droplets, Plus, Sparkles } from 'lucide-react';
+import { ArrowRight, Calendar, Check, ChevronRight, Droplets, Plus, Share2, Sparkles } from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { addDaysToKey, formatIndiaDate, getGreetingPeriod } from '../../lib/date';
 import { computeNutritionTotals } from '../../data/indianFoods';
+import { generateReferralCode } from '../../lib/referralEngine';
 import {
   computeDayConsistency,
   computeStreakSummary,
@@ -23,6 +24,8 @@ import { FloatingActionButton } from '../../components/ui/FloatingActionButton';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { MediaImage } from '../../components/ui/MediaImage';
 import { InputField } from '../../components/ui/InputField';
+import { ReferralCard } from '../../components/ui/ReferralCard';
+import { SocialShareCardModal } from '../../components/ui/SocialShareCardModal';
 
 export const TodayPage: React.FC = () => {
   const {
@@ -51,6 +54,7 @@ export const TodayPage: React.FC = () => {
   );
   const [quickNote, setQuickNote] = useState('');
   const [quickError, setQuickError] = useState('');
+  const [isShareCardOpen, setIsShareCardOpen] = useState(false);
 
   const waterGlasses = todayHydrationGlasses;
   const updateWater = setTodayHydrationGlasses;
@@ -728,6 +732,13 @@ export const TodayPage: React.FC = () => {
             setQuickWeightOpen(true);
           }}
         />
+        {/* Stage 4C Growth: Referral Program */}
+        <section className="pt-2">
+          <ReferralCard
+            displayName={activeUser.firstName}
+            userId={activeUser.id}
+          />
+        </section>
       </div>
 
       {/* Quick Weight Check-in Sheet */}
@@ -805,6 +816,20 @@ export const TodayPage: React.FC = () => {
             </p>
           </div>
 
+          {streak.currentStreak > 0 && (
+            <GlassButton
+              fullWidth
+              variant="primary"
+              onClick={() => {
+                setStreakSheetOpen(false);
+                setIsShareCardOpen(true);
+              }}
+            >
+              <Share2 className="w-4 h-4 mr-1.5" />
+              Share Streak Story
+            </GlassButton>
+          )}
+
           <GlassButton
             fullWidth
             variant="secondary"
@@ -827,6 +852,19 @@ export const TodayPage: React.FC = () => {
         todayKey={todayKey}
         isMilestone={celebrateStreakToday}
         onContinue={handleCloseStreakIntro}
+      />
+
+      {/* Stage 4C Viral Story & Share Modal */}
+      <SocialShareCardModal
+        isOpen={isShareCardOpen}
+        onClose={() => setIsShareCardOpen(false)}
+        cardData={{
+          type: 'streak',
+          clientName: `${activeUser.firstName} ${activeUser.lastName}`.trim(),
+          trainerName: activeCoach?.displayName,
+          streakDays: streak.currentStreak,
+          referralCode: generateReferralCode(activeUser.firstName, activeUser.id),
+        }}
       />
     </AppShell>
   );

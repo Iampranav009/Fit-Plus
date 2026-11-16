@@ -6,13 +6,17 @@ import {
   CheckCircle2,
   Copy,
   CreditCard,
+  Download,
   FileText,
+  Printer,
   Receipt,
   ShieldCheck,
+  Tag,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import type { PaymentRecord } from '../../types/domain';
 import { formatIndiaDate, formatINR } from '../../lib/date';
+import { computeGstBreakdown } from '../../lib/commerce';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { GlassSheet } from '../../components/ui/GlassSheet';
@@ -334,11 +338,36 @@ export const ClientPaymentsPage: React.FC = () => {
                   <span className="text-[#FFB06B] capitalize">{selectedReceipt.refundStatus}</span>
                 </div>
               ) : null}
+
+              {/* Stage 4C GST Tax Breakdown */}
+              {selectedReceipt.amountInr > 0 ? (() => {
+                const gst = computeGstBreakdown(selectedReceipt.amountInr);
+                return (
+                  <div className="pt-2.5 mt-2.5 border-t border-white/10 space-y-1.5 text-[12px]">
+                    <div className="flex items-center justify-between text-[#7C8393]">
+                      <span>Taxable Value (Base)</span>
+                      <span>₹{gst.baseAmountInr.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[#7C8393]">
+                      <span>CGST (9%)</span>
+                      <span>₹{gst.cgstInr.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[#7C8393]">
+                      <span>SGST (9%)</span>
+                      <span>₹{gst.sgstInr.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[#B8E66C] font-semibold pt-1 border-t border-white/5">
+                      <span>Total Amount (Inclusive)</span>
+                      <span>₹{selectedReceipt.amountInr.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                );
+              })() : null}
             </div>
 
             <p className="text-[12px] text-[#7C8393] flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-[#B8E66C] shrink-0" aria-hidden="true" />
-              Verified server-side against FitPlus package records.
+              GST Tax invoice issued via Cashfree Payment Gateway on behalf of FitPlus.
             </p>
 
             <div className="flex gap-2.5">
@@ -348,10 +377,17 @@ export const ClientPaymentsPage: React.FC = () => {
                 onClick={() => void handleCopyInvoice(selectedReceipt)}
               >
                 <Copy className="w-4 h-4" aria-hidden="true" />
-                {copiedId === selectedReceipt.id ? 'Copied receipt' : 'Copy receipt details'}
+                {copiedId === selectedReceipt.id ? 'Copied' : 'Copy details'}
               </GlassButton>
-              <GlassButton fullWidth onClick={() => setSelectedReceipt(null)}>
-                Done
+              <GlassButton
+                variant="primary"
+                fullWidth
+                onClick={() => {
+                  window.print();
+                }}
+              >
+                <Printer className="w-4 h-4" aria-hidden="true" />
+                Print Invoice
               </GlassButton>
             </div>
           </div>

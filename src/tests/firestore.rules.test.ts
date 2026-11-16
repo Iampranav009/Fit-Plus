@@ -99,12 +99,13 @@ test('firestore.rules contains hardening for all 35 Stage 4A blueprint collectio
     '/workoutTemplates/{templateId}',
     '/nutritionTemplates/{templateId}',
     '/scheduledReminders/{reminderId}',
+    '/referrals/{referralId}',
   ];
 
   for (const col of expectedCollections) {
     assert.ok(rules.includes(`match ${col}`), `Missing match block for ${col}`);
   }
-  assert.equal(Object.keys(blueprint.firestore).length, 40);
+  assert.equal(Object.keys(blueprint.firestore).length, 41);
 
   assert.ok(storageRules.includes('allow read, write: if false;'));
   assert.ok(storageRules.includes('/private/clients/{userId}/progress/{fileName}'));

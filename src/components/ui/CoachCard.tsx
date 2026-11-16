@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { BadgeCheck, MapPin, Star } from 'lucide-react';
+import { BadgeCheck, Bookmark, BookmarkCheck, Heart, MapPin, Scale, Star } from 'lucide-react';
 import type { Package, TrainerProfile, TrainerReview } from '../../types/domain';
 import { computeReviewStats } from '../../lib/commerce';
 import { formatINR } from '../../lib/date';
@@ -11,6 +11,10 @@ interface CoachCardProps {
   packages: Package[];
   reviews?: TrainerReview[];
   isDemoMode?: boolean;
+  isComparing?: boolean;
+  onToggleCompare?: () => void;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
 }
 
 export const CoachCard: React.FC<CoachCardProps> = ({
@@ -18,6 +22,10 @@ export const CoachCard: React.FC<CoachCardProps> = ({
   packages,
   reviews = [],
   isDemoMode = false,
+  isComparing = false,
+  onToggleCompare,
+  isSaved = false,
+  onToggleSave,
 }) => {
   const activePackages = packages.filter((p) => p.trainerId === trainer.id && p.status === 'active');
   const lowestPrice =
@@ -36,7 +44,23 @@ export const CoachCard: React.FC<CoachCardProps> = ({
   const isVerified = trainer.verificationStatus === 'verified' || (isDemoMode && trainer.isDemoVerified);
 
   return (
-    <article className="surface-card rounded-[22px] p-5 flex flex-col gap-4 transition-colors hover:border-white/[0.14]">
+    <article className="surface-card rounded-[22px] p-5 flex flex-col gap-4 transition-colors hover:border-white/[0.14] relative">
+      {onToggleSave && (
+        <button
+          type="button"
+          onClick={onToggleSave}
+          className={`absolute top-4 right-4 p-2 rounded-full transition-colors ${
+            isSaved
+              ? 'text-rose-400 bg-rose-500/10 hover:bg-rose-500/20'
+              : 'text-zinc-400 hover:text-white hover:bg-white/10'
+          }`}
+          title={isSaved ? 'Remove from saved coaches' : 'Save coach'}
+          aria-label={isSaved ? 'Remove from saved coaches' : 'Save coach'}
+        >
+          <Heart className={`w-4 h-4 ${isSaved ? 'fill-rose-400' : ''}`} />
+        </button>
+      )}
+
       <div className="flex items-start gap-4">
         {trainer.photoUrl ? (
           <img
@@ -53,7 +77,7 @@ export const CoachCard: React.FC<CoachCardProps> = ({
             lazy
           />
         )}
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 pr-6">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-[17px] font-semibold text-[#F5F5F7]">{trainer.displayName}</h3>
             {isVerified ? (
@@ -110,12 +134,29 @@ export const CoachCard: React.FC<CoachCardProps> = ({
           ) : null}
         </div>
 
-        <Link
-          to={`/trainers/${trainer.slug}`}
-          className="glass-control inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-[13px] text-[14px] font-semibold text-[#F5F5F7] hover:bg-[#2E3442]/80 transition-colors whitespace-nowrap shrink-0"
-        >
-          View profile
-        </Link>
+        <div className="flex items-center gap-2">
+          {onToggleCompare && (
+            <button
+              type="button"
+              onClick={onToggleCompare}
+              className={`inline-flex items-center gap-1.5 min-h-[44px] px-3 py-1.5 rounded-[13px] text-[13px] font-medium transition-colors ${
+                isComparing
+                  ? 'bg-[#FF803E]/20 text-[#FF9D5C] border border-[#FF803E]/40'
+                  : 'bg-white/[0.05] text-zinc-400 hover:text-white hover:bg-white/[0.09] border border-white/10'
+              }`}
+            >
+              <Scale className="w-3.5 h-3.5" />
+              <span>{isComparing ? 'Comparing' : 'Compare'}</span>
+            </button>
+          )}
+
+          <Link
+            to={`/trainers/${trainer.slug}`}
+            className="glass-control inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-[13px] text-[14px] font-semibold text-[#F5F5F7] hover:bg-[#2E3442]/80 transition-colors whitespace-nowrap shrink-0"
+          >
+            View profile
+          </Link>
+        </div>
       </div>
     </article>
   );

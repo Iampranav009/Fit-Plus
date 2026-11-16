@@ -22,6 +22,8 @@ const CreateOrderSchema = z.object({
   trainerId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_\-]+$/),
   clientId: z.string().max(128).regex(/^[a-zA-Z0-9_\-]+$/).optional(),
   inviteId: z.string().max(128).regex(/^[a-zA-Z0-9_\-]+$/).optional(),
+  couponCode: z.string().max(32).optional(),
+  referralCode: z.string().max(32).optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -109,7 +111,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const invoiceNumber = formatInvoiceNumber(paymentId);
     const trainerUserId = String(trainerData.userId);
 
-    if (pkgDetails.amountPaise === 0) {
+    // Stage 4C Authoritative Coupon & Referral Discounts
+    let discountInr = 0;
+    let appliedCoupon: string | undefined = undefined;
+    let appliedReferral: string | undefined = undefined;
+
+    if (parsed.data.couponCode) {
+      const code = parsed.data.couponCode.trim().toUpperCase();
+      if (code === 'WELCOME20' && pkgDetails.priceInr >= 1000) {
+        discountInr = Math.min(1000, Math.round((pkgDetails.priceInr * 20) / 100));
+        appliedCoupon = code;
+      } else if (code === 'FITPLUS500' && pkgDetails.priceInr >= 2000) {
+        discountInr = 500;
+        appliedCoupon = code;
+      } else if (code === 'TRANSFORM10' && pkgDetails.cadence === 'quarterly' && pkgDetails.priceInr >= 3000) {
+        discountInr = Math.round((pkgDetails.priceInr * 10) / 100);
+        appliedCoupon = code;
+      } else if (code.endsWith('10') && code.length >= 4) {
+        discountInr = Math.round((pkgDetails.priceInr * 10) / 100);
+        appliedCoupon = code;
+      }
+    } else if (parsed.data.referralCode) {
+      const ref = parsed.data.referralCode.trim().toUpperCase();
+      if (pkgDetails.priceInr >= 1500) {
+        discountInr = 500;
+        appliedReferral = ref;
+      }
+    }
+
+    const finalAmountInr = Math.max(0, pkgDetails.priceInr - discountInr);
+    const finalAmountPaise = finalAmountInr * 100;
+
+    if (finalAmountPaise === 0) {
       await db.collection('payments').doc(paymentId).set({
         id: paymentId,
         clientId: resolvedClientId,
@@ -122,6 +155,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         invoiceNumber,
         amountPaise: 0,
         amountInr: 0,
+        ...(discountInr > 0 ? {
+          originalAmountInr: pkgDetails.priceInr,
+          discountInr,
+          ...(appliedCoupon ? { couponCode: appliedCoupon } : {}),
+          ...(appliedReferral ? { referralCode: appliedReferral } : {}),
+        } : {}),
         currency: 'INR',
         status: 'created',
         provider: 'free_tier',
@@ -181,7 +220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cfOrder = await createCashfreeOrder({
       config: cashfreeConfig,
       orderId: cashfreeOrderId,
-      amountInr: pkgDetails.priceInr,
+      amountInr: finalAmountInr,
       customer: {
         customerId: authCtx.uid,
         customerName,
@@ -201,7 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const settlementPreview = buildTrainerSettlementPreview({
       trainerId,
-      amountInr: pkgDetails.priceInr,
+      amountInr: finalAmountInr,
       easySplitEnabled: cashfreeConfig.easySplitEnabled,
     });
 
@@ -215,8 +254,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       packageName: pkgDetails.name,
       ...(inviteId ? { inviteId } : {}),
       invoiceNumber,
-      amountPaise: pkgDetails.amountPaise,
-      amountInr: pkgDetails.priceInr,
+      amountPaise: finalAmountPaise,
+      amountInr: finalAmountInr,
+      ...(discountInr > 0 ? {
+        originalAmountInr: pkgDetails.priceInr,
+        discountInr,
+        ...(appliedCoupon ? { couponCode: appliedCoupon } : {}),
+        ...(appliedReferral ? { referralCode: appliedReferral } : {}),
+      } : {}),
       currency: 'INR',
       status: 'created',
       provider: 'cashfree',
@@ -236,8 +281,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       cashfreeEnv: cashfreeConfig.env,
       orderId: cfOrder.order_id,
       paymentSessionId: cfOrder.payment_session_id,
-      amountPaise: pkgDetails.amountPaise,
-      amountInr: pkgDetails.priceInr,
+      amountPaise: finalAmountPaise,
+      amountInr: finalAmountInr,
+      originalAmountInr: pkgDetails.priceInr,
+      discountInr,
       currency: 'INR',
       paymentId,
       invoiceNumber,

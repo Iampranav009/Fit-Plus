@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BadgeCheck } from 'lucide-react';
+import { BadgeCheck, Heart, Scale } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
 import { CoachCard } from '../../components/ui/CoachCard';
+import { CoachComparisonModal } from '../../components/ui/CoachComparisonModal';
+import { CompareDock } from '../../components/ui/CompareDock';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { GlassSearchBar } from '../../components/ui/GlassSearchBar';
@@ -19,6 +21,44 @@ export const DiscoverPage: React.FC = () => {
   const [languageFilter, setLanguageFilter] = useState('all');
   const [maxPrice, setMaxPrice] = useState<number>(10000);
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+
+  // Stage 4C Coach Comparison & Bookmarking state
+  const [comparingIds, setComparingIds] = useState<string[]>([]);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [savedTrainerIds, setSavedTrainerIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('fitplus_saved_coaches');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleSave = (trainerId: string) => {
+    setSavedTrainerIds((prev) => {
+      const next = prev.includes(trainerId)
+        ? prev.filter((id) => id !== trainerId)
+        : [...prev, trainerId];
+      try {
+        localStorage.setItem('fitplus_saved_coaches', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const toggleCompare = (trainerId: string) => {
+    setComparingIds((prev) => {
+      if (prev.includes(trainerId)) {
+        return prev.filter((id) => id !== trainerId);
+      }
+      if (prev.length >= 3) {
+        alert('You can compare up to 3 coaches side-by-side.');
+        return prev;
+      }
+      return [...prev, trainerId];
+    });
+  };
 
   const trainersSource = isCloudSynced || isDemoSandbox ? store.trainers : publicDirectory.trainers;
   const packagesSource = isCloudSynced || isDemoSandbox ? store.packages : publicDirectory.packages;
@@ -73,6 +113,9 @@ export const DiscoverPage: React.FC = () => {
         const minP = Math.min(...pkgs.map((p) => p.priceInr));
         if (minP > maxPrice) return false;
       }
+      if (showSavedOnly && !savedTrainerIds.includes(trainer.id)) {
+        return false;
+      }
       return true;
     });
   }, [
@@ -84,6 +127,8 @@ export const DiscoverPage: React.FC = () => {
     modeFilter,
     languageFilter,
     verifiedOnly,
+    showSavedOnly,
+    savedTrainerIds,
     isDemoSandbox,
     maxPrice,
   ]);
@@ -224,6 +269,20 @@ export const DiscoverPage: React.FC = () => {
                 <BadgeCheck className="w-3.5 h-3.5" aria-hidden="true" />
                 Verified coaches only
               </button>
+
+              <button
+                type="button"
+                aria-pressed={showSavedOnly}
+                onClick={() => setShowSavedOnly((s) => !s)}
+                className={`min-h-[36px] px-3 py-1 rounded-[10px] border text-[12px] font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  showSavedOnly
+                    ? 'bg-rose-500/20 border-rose-500/50 text-rose-300'
+                    : 'bg-[#101218] border-white/[0.1] text-[#A2A8B5] hover:border-white/25'
+                }`}
+              >
+                <Heart className={`w-3.5 h-3.5 ${showSavedOnly ? 'fill-rose-400' : ''}`} aria-hidden="true" />
+                Saved coaches ({savedTrainerIds.length})
+              </button>
             </div>
             <GlassButton variant="tertiary" size="sm" onClick={clearFilters}>
               {COPY.discovery.clearFilters}
@@ -270,12 +329,33 @@ export const DiscoverPage: React.FC = () => {
                   packages={packagesSource}
                   reviews={reviews}
                   isDemoMode={isDemoSandbox}
+                  isComparing={comparingIds.includes(trainer.id)}
+                  onToggleCompare={() => toggleCompare(trainer.id)}
+                  isSaved={savedTrainerIds.includes(trainer.id)}
+                  onToggleSave={() => toggleSave(trainer.id)}
                 />
               ))}
             </div>
           )}
         </section>
       </main>
+
+      {/* Floating Compare Dock */}
+      <CompareDock
+        selectedTrainers={trainersSource.filter((t) => comparingIds.includes(t.id))}
+        onRemoveTrainer={(id) => setComparingIds((prev) => prev.filter((tid) => tid !== id))}
+        onClearAll={() => setComparingIds([])}
+        onOpenCompare={() => setIsCompareModalOpen(true)}
+      />
+
+      {/* Side-by-Side Coach Comparison Modal */}
+      <CoachComparisonModal
+        isOpen={isCompareModalOpen}
+        onClose={() => setIsCompareModalOpen(false)}
+        trainers={trainersSource.filter((t) => comparingIds.includes(t.id))}
+        allPackages={packagesSource}
+        allReviews={reviews}
+      />
     </div>
   );
 };
