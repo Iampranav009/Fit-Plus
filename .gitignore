@@ -11,3 +11,4 @@ coverage/
 .aistudio/
 .vscode/
 .agents/
+test_storage_probe.ts
