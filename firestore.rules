@@ -1,0 +1,1319 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------------------------------------------------------------------------
+    // Global Safety Net (Default Deny Catch-All)
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Primitives & Static Helpers (Zero DB Reads)
+    // -------------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidOptionalId(data, key) {
+      return !(key in data) || (data[key] is string && data[key].size() <= 128 && (data[key] == '' || data[key].matches('^[a-zA-Z0-9_\\-]+$')));
+    }
+
+    function isValidDateKey(val) {
+      return val is string && val.size() == 10 && val.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidTimeHHMM(val) {
+      return val is string && val.size() == 5 && val.matches('^[0-9]{2}:[0-9]{2}$');
+    }
+
+    function isValidStringList(listVal, maxLen, maxItemLen) {
+      return listVal is list && listVal.size() <= maxLen && (listVal.size() == 0 || (listVal[0] is string && listVal[0].size() <= maxItemLen));
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Helpers (No existing() or diff() inside helpers)
+    // -------------------------------------------------------------------------
+    function isValidUser(data, userId) {
+      return data.keys().hasAll([
+          'id', 'firstName', 'lastName', 'role', 'timezone', 'locale',
+          'isAdultConfirmed', 'onboardingCompleted', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'firstName', 'lastName', 'role', 'timezone', 'locale',
+          'isAdultConfirmed', 'onboardingCompleted', 'createdAt', 'updatedAt'
+        ])
+        && data.id == userId
+        && isValidId(data.id)
+        && data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 80
+        && data.lastName is string && data.lastName.size() <= 80
+        && data.role in ['client', 'trainer']
+        && data.timezone is string && data.timezone.size() >= 2 && data.timezone.size() <= 64
+        && data.locale == 'en-IN'
+        && data.isAdultConfirmed is bool
+        && data.onboardingCompleted is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateContact(data, userId) {
+      return data.keys().hasAll(['userId', 'email', 'celebratedDateKeys', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'email', 'celebratedDateKeys', 'pendingInviteToken', 'createdAt', 'updatedAt'])
+        && data.userId == userId
+        && isValidId(data.userId)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && isValidStringList(data.celebratedDateKeys, 365, 10)
+        && (!('pendingInviteToken' in data) || (data.pendingInviteToken is string && data.pendingInviteToken.size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTrainerProfile(data, trainerId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'slug', 'displayName', 'headline', 'bio', 'coachingStyle',
+          'city', 'coachingMode', 'specialties', 'languages', 'experienceYears',
+          'avatarKey', 'coverKey', 'isDemoVerified', 'acceptingClients', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'userId', 'slug', 'displayName', 'headline', 'bio', 'coachingStyle',
+          'city', 'coachingMode', 'specialties', 'languages', 'experienceYears',
+          'avatarKey', 'coverKey', 'isDemoVerified', 'acceptingClients', 'createdAt', 'updatedAt'
+        ])
+        && data.id == trainerId
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.slug is string && data.slug.size() >= 2 && data.slug.size() <= 80 && data.slug.matches('^[a-z0-9\\-]+$')
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100
+        && data.headline is string && data.headline.size() >= 1 && data.headline.size() <= 180
+        && data.bio is string && data.bio.size() <= 1200
+        && data.coachingStyle is string && data.coachingStyle.size() <= 600
+        && data.city is string && data.city.size() >= 1 && data.city.size() <= 80
+        && data.coachingMode in ['online', 'in_person', 'hybrid']
+        && isValidStringList(data.specialties, 10, 80)
+        && isValidStringList(data.languages, 10, 40)
+        && data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 80
+        && data.avatarKey is string && data.avatarKey.size() <= 64
+        && data.coverKey is string && data.coverKey.size() <= 64
+        && data.isDemoVerified is bool
+        && data.acceptingClients is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPackage(data, packageId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'name', 'summary', 'priceInr',
+          'cadence', 'features', 'status', 'isDemoSample', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'name', 'summary', 'priceInr',
+          'cadence', 'features', 'status', 'isDemoSample', 'createdAt', 'updatedAt'
+        ])
+        && data.id == packageId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500
+        && data.priceInr is number && data.priceInr >= 0 && data.priceInr <= 1000000
+        && data.cadence in ['monthly', 'quarterly', 'free']
+        && isValidStringList(data.features, 10, 140)
+        && data.status in ['active', 'paused']
+        && data.isDemoSample is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidClientProfile(data, clientId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'firstName', 'lastName', 'primaryGoal', 'experienceLevel',
+          'daysPerWeek', 'environment', 'equipment', 'dietaryPreference',
+          'activeTrainerUserId', 'activeRelationshipId', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'userId', 'firstName', 'lastName', 'heightCm', 'weightKg', 'targetWeightKg',
+          'primaryGoal', 'experienceLevel', 'daysPerWeek', 'environment', 'equipment',
+          'dietaryPreference', 'dietaryNotes', 'coachNotes',
+          'activeTrainerUserId', 'activeRelationshipId', 'createdAt', 'updatedAt'
+        ])
+        && data.id == clientId
+        && isValidId(data.id)
+        && isValidId(data.userId)
+        && data.firstName is string && data.firstName.size() >= 1 && data.firstName.size() <= 80
+        && data.lastName is string && data.lastName.size() <= 80
+        && (!('heightCm' in data) || (data.heightCm is number && data.heightCm > 0 && data.heightCm <= 300))
+        && (!('weightKg' in data) || (data.weightKg is number && data.weightKg > 0 && data.weightKg <= 500))
+        && (!('targetWeightKg' in data) || (data.targetWeightKg is number && data.targetWeightKg > 0 && data.targetWeightKg <= 500))
+        && data.primaryGoal in ['weight_management', 'healthy_weight_gain', 'muscle_strength', 'general_fitness', 'exploring']
+        && data.experienceLevel in ['beginner', 'intermediate', 'experienced']
+        && data.daysPerWeek is number && data.daysPerWeek >= 1 && data.daysPerWeek <= 7
+        && data.environment in ['gym', 'home', 'outdoors']
+        && isValidStringList(data.equipment, 15, 60)
+        && data.dietaryPreference in ['vegetarian', 'vegan', 'non_vegetarian', 'other', 'prefer_not_to_say']
+        && (!('dietaryNotes' in data) || (data.dietaryNotes is string && data.dietaryNotes.size() <= 500))
+        && (!('coachNotes' in data) || (data.coachNotes is string && data.coachNotes.size() <= 2000))
+        && isValidOptionalId(data, 'activeTrainerUserId')
+        && isValidOptionalId(data, 'activeRelationshipId')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRelationship(data, relationshipId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
+          'status', 'startedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
+          'packageId', 'status', 'startedAt', 'endedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.id == relationshipId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'packageId')
+        && data.status in ['pending', 'active', 'ended']
+        && data.startedAt is string && data.startedAt.size() <= 64
+        && (!('endedAt' in data) || (data.endedAt is string && data.endedAt.size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInvite(data, inviteId) {
+      return data.keys().hasAll([
+          'id', 'token', 'trainerId', 'trainerUserId', 'clientLabel',
+          'status', 'expiresAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'token', 'trainerId', 'trainerUserId', 'clientLabel',
+          'suggestedPackageId', 'status', 'expiresAt', 'redeemedByClientId',
+          'redeemedByUserId', 'createdAt', 'updatedAt'
+        ])
+        && data.id == inviteId
+        && isValidId(data.id)
+        && data.token is string && data.token.size() >= 4 && data.token.size() <= 64 && data.token.matches('^[a-zA-Z0-9_\\-]+$')
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.clientLabel is string && data.clientLabel.size() >= 1 && data.clientLabel.size() <= 120
+        && isValidOptionalId(data, 'suggestedPackageId')
+        && data.status in ['active', 'redeemed', 'expired', 'revoked']
+        && data.expiresAt is string && data.expiresAt.size() <= 64
+        && isValidOptionalId(data, 'redeemedByClientId')
+        && isValidOptionalId(data, 'redeemedByUserId')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEnrollment(data, enrollmentId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerId', 'trainerUserId',
+          'packageId', 'status', 'isDemoCheckout', 'enrolledAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerId', 'trainerUserId',
+          'packageId', 'status', 'isDemoCheckout', 'enrolledAt', 'endedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.id == enrollmentId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && isValidId(data.packageId)
+        && data.status in ['active', 'ended']
+        && data.isDemoCheckout is bool
+        && data.enrolledAt is string && data.enrolledAt.size() <= 64
+        && (!('endedAt' in data) || (data.endedAt is string && data.endedAt.size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTaskTemplate(data, templateId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'title', 'category', 'instructions',
+          'durationMinutes', 'completionType', 'isRecoveryDefault',
+          'isOptionalDefault', 'archived', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'title', 'category', 'instructions',
+          'durationMinutes', 'completionType', 'targetLabel', 'isRecoveryDefault',
+          'isOptionalDefault', 'archived', 'createdAt', 'updatedAt'
+        ])
+        && data.id == templateId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.category in ['workout', 'nutrition', 'habit', 'recovery', 'check_in']
+        && data.instructions is string && data.instructions.size() <= 2000
+        && data.durationMinutes is number && data.durationMinutes >= 0 && data.durationMinutes <= 600
+        && data.completionType in ['checkbox', 'log_value', 'session_log']
+        && (!('targetLabel' in data) || (data.targetLabel is string && data.targetLabel.size() <= 80))
+        && data.isRecoveryDefault is bool
+        && data.isOptionalDefault is bool
+        && data.archived is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAssignment(data, assignmentId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'title', 'category',
+          'instructions', 'durationMinutes', 'dueTime', 'completionType',
+          'scheduledDates', 'isOptional', 'isRecovery', 'hasCustomOverride',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerId', 'trainerUserId', 'templateId',
+          'title', 'category', 'instructions', 'durationMinutes', 'dueTime',
+          'completionType', 'targetLabel', 'scheduledDates', 'isOptional',
+          'isRecovery', 'hasCustomOverride', 'overrideNote', 'createdAt', 'updatedAt'
+        ])
+        && data.id == assignmentId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerId')
+        && isValidOptionalId(data, 'trainerUserId')
+        && isValidOptionalId(data, 'templateId')
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.category in ['workout', 'nutrition', 'habit', 'recovery', 'check_in']
+        && data.instructions is string && data.instructions.size() <= 2000
+        && data.durationMinutes is number && data.durationMinutes >= 0 && data.durationMinutes <= 600
+        && data.dueTime is string && data.dueTime.size() >= 1 && data.dueTime.size() <= 24
+        && data.completionType in ['checkbox', 'log_value', 'session_log']
+        && (!('targetLabel' in data) || (data.targetLabel is string && data.targetLabel.size() <= 80))
+        && isValidStringList(data.scheduledDates, 31, 10)
+        && data.isOptional is bool
+        && data.isRecovery is bool
+        && data.hasCustomOverride is bool
+        && (!('overrideNote' in data) || (data.overrideNote is string && data.overrideNote.size() <= 300))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCompletionEvent(data, completionId) {
+      return data.keys().hasAll([
+          'id', 'assignmentId', 'clientId', 'clientUserId', 'trainerUserId',
+          'dateKey', 'completedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'assignmentId', 'clientId', 'clientUserId', 'trainerUserId',
+          'dateKey', 'completedAt', 'loggedValue', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && data.id == completionId
+        && isValidId(data.id)
+        && isValidId(data.assignmentId)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerUserId')
+        && isValidDateKey(data.dateKey)
+        && data.completedAt is string && data.completedAt.size() <= 64
+        && (!('loggedValue' in data) || (data.loggedValue is string && data.loggedValue.size() <= 120))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProgressEvent(data, eventId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'metricType', 'label', 'value', 'unit', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'metricType', 'label', 'value', 'unit', 'note', 'createdAt', 'updatedAt'
+        ])
+        && data.id == eventId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerUserId')
+        && isValidDateKey(data.dateKey)
+        && data.metricType in ['weight', 'strength', 'waist', 'steps']
+        && data.label is string && data.label.size() >= 1 && data.label.size() <= 80
+        && data.value is number && data.value >= 0 && data.value <= 1000000
+        && data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 24
+        && (!('note' in data) || (data.note is string && data.note.size() <= 400))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWorkoutPlan(data, planId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'title',
+          'weekLabel', 'coachNotes', 'days', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerId', 'trainerUserId',
+          'title', 'weekLabel', 'coachNotes', 'days', 'createdAt', 'updatedAt'
+        ])
+        && data.id == planId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerId')
+        && isValidOptionalId(data, 'trainerUserId')
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.weekLabel is string && data.weekLabel.size() >= 1 && data.weekLabel.size() <= 80
+        && data.coachNotes is string && data.coachNotes.size() <= 1000
+        && data.days is list && data.days.size() <= 7 && (data.days.size() == 0 || data.days[0] is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMealPlan(data, planId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'title',
+          'dietaryLabel', 'coachNotes', 'meals', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerId', 'trainerUserId',
+          'title', 'dietaryLabel', 'coachNotes', 'meals', 'createdAt', 'updatedAt'
+        ])
+        && data.id == planId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerId')
+        && isValidOptionalId(data, 'trainerUserId')
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.dietaryLabel is string && data.dietaryLabel.size() >= 1 && data.dietaryLabel.size() <= 80
+        && data.coachNotes is string && data.coachNotes.size() <= 1000
+        && data.meals is list && data.meals.size() <= 10 && (data.meals.size() == 0 || data.meals[0] is map)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidConsultationSlot(data, slotId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'dateKey', 'startTime', 'endTime',
+          'timezone', 'mode', 'status', 'bookedByUserId', 'activeBookingId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'dateKey', 'startTime', 'endTime',
+          'timezone', 'mode', 'status', 'bookedByUserId', 'activeBookingId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id == slotId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && isValidDateKey(data.dateKey)
+        && isValidTimeHHMM(data.startTime)
+        && isValidTimeHHMM(data.endTime)
+        && data.timezone is string && data.timezone.size() >= 2 && data.timezone.size() <= 64
+        && data.mode in ['online', 'in_person']
+        && data.status in ['available', 'booked', 'blocked']
+        && isValidOptionalId(data, 'bookedByUserId')
+        && isValidOptionalId(data, 'activeBookingId')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidBooking(data, bookingId) {
+      return data.keys().hasAll([
+          'id', 'slotId', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
+          'dateKey', 'startTime', 'endTime', 'timezone', 'topic', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'slotId', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
+          'dateKey', 'startTime', 'endTime', 'timezone', 'topic', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id == bookingId
+        && isValidId(data.id)
+        && isValidId(data.slotId)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidDateKey(data.dateKey)
+        && isValidTimeHHMM(data.startTime)
+        && isValidTimeHHMM(data.endTime)
+        && data.timezone is string && data.timezone.size() >= 2 && data.timezone.size() <= 64
+        && data.topic is string && data.topic.size() >= 1 && data.topic.size() <= 300
+        && data.status in ['booked', 'completed', 'canceled', 'rescheduled']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data, notificationId) {
+      return data.keys().hasAll([
+          'id', 'recipientUserId', 'senderUserId', 'title', 'body',
+          'category', 'read', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'recipientUserId', 'senderUserId', 'title', 'body',
+          'category', 'read', 'actionRoute', 'relatedClientId', 'createdAt', 'updatedAt'
+        ])
+        && data.id == notificationId
+        && isValidId(data.id)
+        && isValidId(data.recipientUserId)
+        && isValidId(data.senderUserId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.body is string && data.body.size() >= 1 && data.body.size() <= 500
+        && data.category in ['assignment', 'consultation', 'invite', 'streak', 'system']
+        && data.read is bool
+        && (!('actionRoute' in data) || (data.actionRoute is string && data.actionRoute.size() <= 128))
+        && isValidOptionalId(data, 'relatedClientId')
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAIPlanDraft(data, draftId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'objective', 'experienceLevel',
+          'daysPerWeek', 'environment', 'dietaryPreference', 'constraints',
+          'title', 'summary', 'workoutDays', 'nutritionOutline', 'habitCommitments',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'objective', 'experienceLevel',
+          'daysPerWeek', 'environment', 'dietaryPreference', 'constraints',
+          'title', 'summary', 'workoutDays', 'nutritionOutline', 'habitCommitments',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && data.id == draftId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.objective in ['weight_management', 'healthy_weight_gain', 'muscle_strength', 'general_fitness', 'exploring']
+        && data.experienceLevel in ['beginner', 'intermediate', 'experienced']
+        && data.daysPerWeek is number && data.daysPerWeek >= 1 && data.daysPerWeek <= 7
+        && data.environment in ['gym', 'home', 'outdoors']
+        && data.dietaryPreference in ['vegetarian', 'vegan', 'non_vegetarian', 'other', 'prefer_not_to_say']
+        && data.constraints is string && data.constraints.size() <= 800
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 800
+        && data.workoutDays is list && data.workoutDays.size() <= 7 && (data.workoutDays.size() == 0 || data.workoutDays[0] is map)
+        && isValidStringList(data.nutritionOutline, 10, 240)
+        && isValidStringList(data.habitCommitments, 10, 240)
+        && data.status in ['draft', 'approved', 'saved']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // /users/{userId} & Isolated Private PII Subcollection
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'firstName', 'lastName', 'role', 'timezone', 'isAdultConfirmed', 'onboardingCompleted', 'updatedAt'
+        ]);
+
+      allow delete: if false;
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && isOwner(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
+
+        allow create: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && isOwner(userId)
+          && isValidUserPrivateContact(incoming(), userId)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+
+        allow update: if isVerifiedUser()
+          && isValidId(userId)
+          && isValidId(docId)
+          && isOwner(userId)
+          && isValidUserPrivateContact(incoming(), userId)
+          && incoming().userId == existing().userId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'email', 'celebratedDateKeys', 'pendingInviteToken', 'updatedAt'
+          ]);
+
+        allow delete: if isValidId(userId) && isValidId(docId) && isOwner(userId);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // /trainers/{trainerId} (Public Storefront — No PII)
+    // -------------------------------------------------------------------------
+    match /trainers/{trainerId} {
+      allow get: if isValidId(trainerId) && (
+        existing().acceptingClients == true || (isSignedIn() && existing().userId == request.auth.uid)
+      );
+      allow list: if resource.data.acceptingClients == true || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isVerifiedUser()
+        && isValidId(trainerId)
+        && isValidTrainerProfile(incoming(), trainerId)
+        && incoming().userId == request.auth.uid
+        && incoming().isDemoVerified == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(trainerId)
+        && isValidTrainerProfile(incoming(), trainerId)
+        && existing().userId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().isDemoVerified == existing().isDemoVerified
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'slug', 'displayName', 'headline', 'bio', 'coachingStyle', 'city',
+          'coachingMode', 'specialties', 'languages', 'experienceYears',
+          'avatarKey', 'coverKey', 'acceptingClients', 'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /packages/{packageId}
+    // -------------------------------------------------------------------------
+    match /packages/{packageId} {
+      allow get: if isValidId(packageId) && (
+        existing().status == 'active' || (isSignedIn() && existing().trainerUserId == request.auth.uid)
+      );
+      allow list: if resource.data.status == 'active' || (isSignedIn() && resource.data.trainerUserId == request.auth.uid);
+
+      allow create: if isVerifiedUser()
+        && isValidId(packageId)
+        && isValidPackage(incoming(), packageId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(packageId)
+        && isValidPackage(incoming(), packageId)
+        && existing().trainerUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Edit package details
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'summary', 'priceInr', 'cadence', 'features', 'status', 'updatedAt']) ||
+          // Action: Toggle status
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        );
+
+      allow delete: if isValidId(packageId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /clients/{clientId} (Owner or Actively Linked Trainer via Master Gate)
+    // -------------------------------------------------------------------------
+    match /clients/{clientId} {
+      allow get: if isSignedIn() && isValidId(clientId) && (
+        existing().userId == request.auth.uid ||
+        (
+          existing().activeTrainerUserId == request.auth.uid &&
+          existing().activeRelationshipId != '' &&
+          exists(/databases/$(database)/documents/relationships/$(existing().activeRelationshipId)) &&
+          get(/databases/$(database)/documents/relationships/$(existing().activeRelationshipId)).data.status == 'active' &&
+          get(/databases/$(database)/documents/relationships/$(existing().activeRelationshipId)).data.trainerUserId == request.auth.uid &&
+          get(/databases/$(database)/documents/relationships/$(existing().activeRelationshipId)).data.clientId == clientId
+        )
+      );
+
+      allow list: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.activeTrainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(clientId)
+        && isValidClientProfile(incoming(), clientId)
+        && incoming().userId == request.auth.uid
+        && incoming().activeTrainerUserId == ''
+        && incoming().activeRelationshipId == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(clientId)
+        && isValidClientProfile(incoming(), clientId)
+        && incoming().id == existing().id
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Client updates personal details
+          (
+            existing().userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'firstName', 'lastName', 'heightCm', 'weightKg', 'targetWeightKg',
+              'primaryGoal', 'experienceLevel', 'daysPerWeek', 'environment',
+              'equipment', 'dietaryPreference', 'dietaryNotes', 'updatedAt'
+            ])
+          ) ||
+          // Action: Client binds or clears active relationship atomically
+          (
+            existing().userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['activeTrainerUserId', 'activeRelationshipId', 'updatedAt']) &&
+            (
+              (incoming().activeTrainerUserId == '' && incoming().activeRelationshipId == '') ||
+              (
+                incoming().activeRelationshipId != '' &&
+                existsAfter(/databases/$(database)/documents/relationships/$(incoming().activeRelationshipId)) &&
+                getAfter(/databases/$(database)/documents/relationships/$(incoming().activeRelationshipId)).data.clientUserId == request.auth.uid &&
+                getAfter(/databases/$(database)/documents/relationships/$(incoming().activeRelationshipId)).data.trainerUserId == incoming().activeTrainerUserId &&
+                getAfter(/databases/$(database)/documents/relationships/$(incoming().activeRelationshipId)).data.status == 'active'
+              )
+            )
+          ) ||
+          // Action: Actively linked trainer updates coach notes
+          (
+            existing().activeTrainerUserId == request.auth.uid &&
+            existing().activeRelationshipId != '' &&
+            exists(/databases/$(database)/documents/relationships/$(existing().activeRelationshipId)) &&
+            get(/databases/$(database)/documents/relationships/$(existing().activeRelationshipId)).data.status == 'active' &&
+            get(/databases/$(database)/documents/relationships/$(existing().activeRelationshipId)).data.trainerUserId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['coachNotes', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /relationships/{relationshipId} (Master Source of Truth for Coaching Links)
+    // -------------------------------------------------------------------------
+    match /relationships/{relationshipId} {
+      allow get: if isSignedIn() && isValidId(relationshipId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(relationshipId)
+        && isValidRelationship(incoming(), relationshipId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().status in ['pending', 'active']
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == incoming().trainerUserId;
+
+      allow update: if isVerifiedUser()
+        && isValidId(relationshipId)
+        && isValidRelationship(incoming(), relationshipId)
+        && existing().status != 'ended'
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().startedAt == existing().startedAt
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && (
+          // Action: Activate pending relationship
+          (existing().status == 'pending' && incoming().status == 'active' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'packageId', 'updatedAt'])) ||
+          // Action: End relationship (terminal state)
+          (incoming().status == 'ended' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'endedAt', 'updatedAt']))
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /invites/{inviteId} (List restricted strictly to owning trainer)
+    // -------------------------------------------------------------------------
+    match /invites/{inviteId} {
+      allow get: if isSignedIn() && isValidId(inviteId) && (
+        existing().trainerUserId == request.auth.uid ||
+        existing().status == 'active' ||
+        existing().redeemedByUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && resource.data.trainerUserId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(inviteId)
+        && isValidInvite(incoming(), inviteId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(inviteId)
+        && isValidInvite(incoming(), inviteId)
+        && existing().status == 'active'
+        && incoming().id == existing().id
+        && incoming().token == existing().token
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Owning trainer revokes or marks expired
+          (
+            existing().trainerUserId == request.auth.uid &&
+            incoming().status in ['revoked', 'expired'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          ) ||
+          // Action: Client redeems active invite with verified client ownership
+          (
+            incoming().status == 'redeemed' &&
+            incoming().redeemedByUserId == request.auth.uid &&
+            ('redeemedByClientId' in incoming()) &&
+            incoming().redeemedByClientId != '' &&
+            exists(/databases/$(database)/documents/clients/$(incoming().redeemedByClientId)) &&
+            get(/databases/$(database)/documents/clients/$(incoming().redeemedByClientId)).data.userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'redeemedByClientId', 'redeemedByUserId', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /enrollments/{enrollmentId}
+    // -------------------------------------------------------------------------
+    match /enrollments/{enrollmentId} {
+      allow get: if isSignedIn() && isValidId(enrollmentId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(enrollmentId)
+        && isValidEnrollment(incoming(), enrollmentId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().status == 'active'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
+        && exists(/databases/$(database)/documents/packages/$(incoming().packageId))
+        && get(/databases/$(database)/documents/packages/$(incoming().packageId)).data.trainerId == incoming().trainerId;
+
+      allow update: if isVerifiedUser()
+        && isValidId(enrollmentId)
+        && isValidEnrollment(incoming(), enrollmentId)
+        && existing().status != 'ended'
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().packageId == existing().packageId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && incoming().status == 'ended'
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'endedAt', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /templates/{templateId}
+    // -------------------------------------------------------------------------
+    match /templates/{templateId} {
+      allow get: if isSignedIn() && isValidId(templateId) && existing().trainerUserId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.trainerUserId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(templateId)
+        && isValidTaskTemplate(incoming(), templateId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(templateId)
+        && isValidTaskTemplate(incoming(), templateId)
+        && existing().trainerUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Edit template fields
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'category', 'instructions', 'durationMinutes', 'completionType',
+            'targetLabel', 'isRecoveryDefault', 'isOptionalDefault', 'archived', 'updatedAt'
+          ]) ||
+          // Action: Archive or restore template
+          incoming().diff(existing()).affectedKeys().hasOnly(['archived', 'updatedAt'])
+        );
+
+      allow delete: if isValidId(templateId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /assignments/{assignmentId}
+    // -------------------------------------------------------------------------
+    match /assignments/{assignmentId} {
+      allow get: if isSignedIn() && isValidId(assignmentId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(assignmentId)
+        && isValidAssignment(incoming(), assignmentId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == incoming().clientUserId
+        && (
+          // Self-guided client assignment
+          (incoming().clientUserId == request.auth.uid && incoming().trainerUserId == '') ||
+          // Trainer-assigned to actively linked client
+          (
+            incoming().trainerUserId == request.auth.uid &&
+            get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == request.auth.uid
+          )
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(assignmentId)
+        && isValidAssignment(incoming(), assignmentId)
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'category', 'instructions', 'durationMinutes', 'dueTime',
+          'completionType', 'targetLabel', 'scheduledDates', 'isOptional',
+          'isRecovery', 'hasCustomOverride', 'overrideNote', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(assignmentId) && isVerifiedUser() && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // /completions/{completionId}
+    // -------------------------------------------------------------------------
+    match /completions/{completionId} {
+      allow get: if isSignedIn() && isValidId(completionId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(completionId)
+        && isValidCompletionEvent(incoming(), completionId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/assignments/$(incoming().assignmentId))
+        && get(/databases/$(database)/documents/assignments/$(incoming().assignmentId)).data.clientUserId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(completionId)
+        && isValidCompletionEvent(incoming(), completionId)
+        && existing().clientUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().assignmentId == existing().assignmentId
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().dateKey == existing().dateKey
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['loggedValue', 'notes', 'updatedAt']);
+
+      allow delete: if isValidId(completionId) && isVerifiedUser() && existing().clientUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /progressEvents/{eventId}
+    // -------------------------------------------------------------------------
+    match /progressEvents/{eventId} {
+      allow get: if isSignedIn() && isValidId(eventId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(eventId)
+        && isValidProgressEvent(incoming(), eventId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(eventId)
+        && isValidProgressEvent(incoming(), eventId)
+        && existing().clientUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['value', 'note', 'updatedAt']);
+
+      allow delete: if isValidId(eventId) && isVerifiedUser() && existing().clientUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /workoutPlans/{planId} & /mealPlans/{planId}
+    // -------------------------------------------------------------------------
+    match /workoutPlans/{planId} {
+      allow get: if isSignedIn() && isValidId(planId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(planId)
+        && isValidWorkoutPlan(incoming(), planId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == incoming().clientUserId
+        && (
+          (incoming().clientUserId == request.auth.uid && incoming().trainerUserId == '') ||
+          (
+            incoming().trainerUserId == request.auth.uid &&
+            get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == request.auth.uid
+          ) ||
+          (
+            incoming().clientUserId == request.auth.uid &&
+            incoming().trainerUserId != '' &&
+            get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
+          )
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(planId)
+        && isValidWorkoutPlan(incoming(), planId)
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'weekLabel', 'coachNotes', 'days', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    match /mealPlans/{planId} {
+      allow get: if isSignedIn() && isValidId(planId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(planId)
+        && isValidMealPlan(incoming(), planId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == incoming().clientUserId
+        && (
+          (incoming().clientUserId == request.auth.uid && incoming().trainerUserId == '') ||
+          (
+            incoming().trainerUserId == request.auth.uid &&
+            get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == request.auth.uid
+          ) ||
+          (
+            incoming().clientUserId == request.auth.uid &&
+            incoming().trainerUserId != '' &&
+            get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
+          )
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(planId)
+        && isValidMealPlan(incoming(), planId)
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'dietaryLabel', 'coachNotes', 'meals', 'updatedAt']);
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /consultationSlots/{slotId} (Atomic Sync with /bookings)
+    // -------------------------------------------------------------------------
+    match /consultationSlots/{slotId} {
+      allow get: if isSignedIn() && isValidId(slotId) && (
+        existing().status == 'available' ||
+        existing().trainerUserId == request.auth.uid ||
+        existing().bookedByUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.status == 'available' ||
+        resource.data.trainerUserId == request.auth.uid ||
+        resource.data.bookedByUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(slotId)
+        && isValidConsultationSlot(incoming(), slotId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().status in ['available', 'blocked']
+        && incoming().bookedByUserId == ''
+        && incoming().activeBookingId == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(slotId)
+        && isValidConsultationSlot(incoming(), slotId)
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Trainer toggles available/blocked
+          (
+            existing().trainerUserId == request.auth.uid &&
+            existing().status != 'booked' &&
+            incoming().status in ['available', 'blocked'] &&
+            incoming().bookedByUserId == '' &&
+            incoming().activeBookingId == '' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          ) ||
+          // Action: Client books an available slot atomically with a new Booking doc
+          (
+            existing().status == 'available' &&
+            incoming().status == 'booked' &&
+            incoming().bookedByUserId == request.auth.uid &&
+            incoming().activeBookingId != '' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'bookedByUserId', 'activeBookingId', 'updatedAt']) &&
+            existsAfter(/databases/$(database)/documents/bookings/$(incoming().activeBookingId)) &&
+            getAfter(/databases/$(database)/documents/bookings/$(incoming().activeBookingId)).data.clientUserId == request.auth.uid &&
+            getAfter(/databases/$(database)/documents/bookings/$(incoming().activeBookingId)).data.slotId == slotId &&
+            getAfter(/databases/$(database)/documents/bookings/$(incoming().activeBookingId)).data.status == 'booked'
+          ) ||
+          // Action: Client or trainer releases a booked slot when canceling/rescheduling atomically
+          (
+            existing().status == 'booked' &&
+            (existing().bookedByUserId == request.auth.uid || existing().trainerUserId == request.auth.uid) &&
+            incoming().status == 'available' &&
+            incoming().bookedByUserId == '' &&
+            incoming().activeBookingId == '' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'bookedByUserId', 'activeBookingId', 'updatedAt']) &&
+            existing().activeBookingId != '' &&
+            getAfter(/databases/$(database)/documents/bookings/$(existing().activeBookingId)).data.status in ['canceled', 'rescheduled']
+          )
+        );
+
+      allow delete: if isValidId(slotId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid && existing().status != 'booked';
+    }
+
+    // -------------------------------------------------------------------------
+    // /bookings/{bookingId}
+    // -------------------------------------------------------------------------
+    match /bookings/{bookingId} {
+      allow get: if isSignedIn() && isValidId(bookingId) && (
+        existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid || resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(bookingId)
+        && isValidBooking(incoming(), bookingId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().status == 'booked'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
+        && exists(/databases/$(database)/documents/consultationSlots/$(incoming().slotId))
+        && get(/databases/$(database)/documents/consultationSlots/$(incoming().slotId)).data.trainerId == incoming().trainerId
+        && get(/databases/$(database)/documents/consultationSlots/$(incoming().slotId)).data.trainerUserId == incoming().trainerUserId
+        && getAfter(/databases/$(database)/documents/consultationSlots/$(incoming().slotId)).data.status == 'booked'
+        && getAfter(/databases/$(database)/documents/consultationSlots/$(incoming().slotId)).data.activeBookingId == bookingId;
+
+      allow update: if isVerifiedUser()
+        && isValidId(bookingId)
+        && isValidBooking(incoming(), bookingId)
+        && existing().status != 'canceled'
+        && existing().status != 'completed'
+        && incoming().id == existing().id
+        && incoming().slotId == existing().slotId
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Client or trainer cancels or marks rescheduled
+          (
+            (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid) &&
+            incoming().status in ['canceled', 'rescheduled'] &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          ) ||
+          // Action: Trainer marks consultation completed
+          (
+            existing().trainerUserId == request.auth.uid &&
+            incoming().status == 'completed' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /notifications/{notificationId}
+    // -------------------------------------------------------------------------
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && existing().recipientUserId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.recipientUserId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(notificationId)
+        && isValidNotification(incoming(), notificationId)
+        && incoming().senderUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          incoming().recipientUserId == request.auth.uid ||
+          (
+            ('relatedClientId' in incoming()) &&
+            incoming().relatedClientId != '' &&
+            exists(/databases/$(database)/documents/clients/$(incoming().relatedClientId)) &&
+            get(/databases/$(database)/documents/clients/$(incoming().relatedClientId)).data.userId == incoming().recipientUserId &&
+            get(/databases/$(database)/documents/clients/$(incoming().relatedClientId)).data.activeTrainerUserId == request.auth.uid
+          )
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(notificationId)
+        && isValidNotification(incoming(), notificationId)
+        && existing().recipientUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().recipientUserId == existing().recipientUserId
+        && incoming().senderUserId == existing().senderUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read', 'updatedAt']);
+
+      allow delete: if isValidId(notificationId) && isVerifiedUser() && existing().recipientUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /aiDrafts/{draftId}
+    // -------------------------------------------------------------------------
+    match /aiDrafts/{draftId} {
+      allow get: if isSignedIn() && isValidId(draftId) && existing().trainerUserId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.trainerUserId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(draftId)
+        && isValidAIPlanDraft(incoming(), draftId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(draftId)
+        && isValidAIPlanDraft(incoming(), draftId)
+        && existing().trainerUserId == request.auth.uid
+        && existing().status != 'saved'
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Edit draft content
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'title', 'summary', 'workoutDays', 'nutritionOutline', 'habitCommitments', 'status', 'updatedAt'
+          ]) ||
+          // Action: Approve or mark saved
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        );
+
+      allow delete: if isValidId(draftId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid;
+    }
+  }
+}

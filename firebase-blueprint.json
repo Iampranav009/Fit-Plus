@@ -1,0 +1,1523 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core authenticated user profile metadata (no PII stored directly on this document).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "firstName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "lastName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "role": {
+          "type": "string",
+          "enum": ["client", "trainer"]
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "locale": {
+          "type": "string",
+          "enum": ["en-IN"]
+        },
+        "isAdultConfirmed": {
+          "type": "boolean"
+        },
+        "onboardingCompleted": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "role",
+        "timezone",
+        "locale",
+        "isAdultConfirmed",
+        "onboardingCompleted",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateContact": {
+      "title": "UserPrivateContact",
+      "description": "Isolated PII document storing user email and private preferences under users/{userId}/private/{docId}.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "celebratedDateKeys": {
+          "type": "array",
+          "description": "Bounded list of YYYY-MM-DD celebration keys (max 365)."
+        },
+        "pendingInviteToken": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "email", "celebratedDateKeys", "createdAt", "updatedAt"]
+    },
+    "TrainerProfile": {
+      "title": "TrainerProfile",
+      "description": "Public independent coach storefront profile (strictly free of private PII).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "slug": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "pattern": "^[a-z0-9\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "headline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 1200
+        },
+        "coachingStyle": {
+          "type": "string",
+          "maxLength": 600
+        },
+        "city": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "coachingMode": {
+          "type": "string",
+          "enum": ["online", "in_person", "hybrid"]
+        },
+        "specialties": {
+          "type": "array",
+          "description": "Bounded list of coaching specialties (max 10)."
+        },
+        "languages": {
+          "type": "array",
+          "description": "Bounded list of spoken languages (max 10)."
+        },
+        "experienceYears": {
+          "type": "number"
+        },
+        "avatarKey": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "coverKey": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "isDemoVerified": {
+          "type": "boolean",
+          "description": "System-only verification flag; must remain false from client SDK writes."
+        },
+        "acceptingClients": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "slug",
+        "displayName",
+        "headline",
+        "bio",
+        "coachingStyle",
+        "city",
+        "coachingMode",
+        "specialties",
+        "languages",
+        "experienceYears",
+        "avatarKey",
+        "coverKey",
+        "isDemoVerified",
+        "acceptingClients",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Package": {
+      "title": "Package",
+      "description": "Coach-published INR coaching package.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "priceInr": {
+          "type": "number"
+        },
+        "cadence": {
+          "type": "string",
+          "enum": ["monthly", "quarterly", "free"]
+        },
+        "features": {
+          "type": "array",
+          "description": "Bounded list of package features (max 10)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "paused"]
+        },
+        "isDemoSample": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "trainerId",
+        "trainerUserId",
+        "name",
+        "summary",
+        "priceInr",
+        "cadence",
+        "features",
+        "status",
+        "isDemoSample",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ClientProfile": {
+      "title": "ClientProfile",
+      "description": "Client fitness profile, training context, dietary preference, and active relationship pointer.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "firstName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "lastName": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "heightCm": {
+          "type": "number"
+        },
+        "weightKg": {
+          "type": "number"
+        },
+        "targetWeightKg": {
+          "type": "number"
+        },
+        "primaryGoal": {
+          "type": "string",
+          "enum": [
+            "weight_management",
+            "healthy_weight_gain",
+            "muscle_strength",
+            "general_fitness",
+            "exploring"
+          ]
+        },
+        "experienceLevel": {
+          "type": "string",
+          "enum": ["beginner", "intermediate", "experienced"]
+        },
+        "daysPerWeek": {
+          "type": "number"
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["gym", "home", "outdoors"]
+        },
+        "equipment": {
+          "type": "array",
+          "description": "Bounded list of available equipment (max 15)."
+        },
+        "dietaryPreference": {
+          "type": "string",
+          "enum": ["vegetarian", "vegan", "non_vegetarian", "other", "prefer_not_to_say"]
+        },
+        "dietaryNotes": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "coachNotes": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "activeTrainerUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "activeRelationshipId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "firstName",
+        "lastName",
+        "primaryGoal",
+        "experienceLevel",
+        "daysPerWeek",
+        "environment",
+        "equipment",
+        "dietaryPreference",
+        "activeTrainerUserId",
+        "activeRelationshipId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CoachingRelationship": {
+      "title": "CoachingRelationship",
+      "description": "Master relationship record linking a trainer and a client after explicit acceptance.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "packageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "active", "ended"]
+        },
+        "startedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "endedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "trainerId",
+        "trainerUserId",
+        "clientId",
+        "clientUserId",
+        "status",
+        "startedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Invite": {
+      "title": "Invite",
+      "description": "Trainer-issued invitation token with explicit status lifecycle.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "suggestedPackageId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "redeemed", "expired", "revoked"]
+        },
+        "expiresAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "redeemedByClientId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "redeemedByUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "token",
+        "trainerId",
+        "trainerUserId",
+        "clientLabel",
+        "status",
+        "expiresAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Enrollment": {
+      "title": "Enrollment",
+      "description": "Record of a client package enrollment under a coaching relationship.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "packageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "ended"]
+        },
+        "isDemoCheckout": {
+          "type": "boolean"
+        },
+        "enrolledAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "endedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "clientUserId",
+        "trainerId",
+        "trainerUserId",
+        "packageId",
+        "status",
+        "isDemoCheckout",
+        "enrolledAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TaskTemplate": {
+      "title": "TaskTemplate",
+      "description": "Reusable trainer task template.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "enum": ["workout", "nutrition", "habit", "recovery", "check_in"]
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "durationMinutes": {
+          "type": "number"
+        },
+        "completionType": {
+          "type": "string",
+          "enum": ["checkbox", "log_value", "session_log"]
+        },
+        "targetLabel": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "isRecoveryDefault": {
+          "type": "boolean"
+        },
+        "isOptionalDefault": {
+          "type": "boolean"
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "trainerId",
+        "trainerUserId",
+        "title",
+        "category",
+        "instructions",
+        "durationMinutes",
+        "completionType",
+        "isRecoveryDefault",
+        "isOptionalDefault",
+        "archived",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Assignment": {
+      "title": "Assignment",
+      "description": "Scheduled daily commitment assigned by a trainer or created by an independent client.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "trainerUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "templateId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "category": {
+          "type": "string",
+          "enum": ["workout", "nutrition", "habit", "recovery", "check_in"]
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "durationMinutes": {
+          "type": "number"
+        },
+        "dueTime": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "completionType": {
+          "type": "string",
+          "enum": ["checkbox", "log_value", "session_log"]
+        },
+        "targetLabel": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "scheduledDates": {
+          "type": "array",
+          "description": "Bounded array of YYYY-MM-DD local date keys (max 31)."
+        },
+        "isOptional": {
+          "type": "boolean"
+        },
+        "isRecovery": {
+          "type": "boolean"
+        },
+        "hasCustomOverride": {
+          "type": "boolean"
+        },
+        "overrideNote": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "clientUserId",
+        "trainerUserId",
+        "title",
+        "category",
+        "instructions",
+        "durationMinutes",
+        "dueTime",
+        "completionType",
+        "scheduledDates",
+        "isOptional",
+        "isRecovery",
+        "hasCustomOverride",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CompletionEvent": {
+      "title": "CompletionEvent",
+      "description": "Immutable/editable completion log for a scheduled assignment date.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "assignmentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "dateKey": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "maxLength": 10
+        },
+        "completedAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "loggedValue": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "assignmentId",
+        "clientId",
+        "clientUserId",
+        "trainerUserId",
+        "dateKey",
+        "completedAt",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ProgressEvent": {
+      "title": "ProgressEvent",
+      "description": "Body measurement or strength benchmark entry logged by a client.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "dateKey": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "maxLength": 10
+        },
+        "metricType": {
+          "type": "string",
+          "enum": ["weight", "strength", "waist", "steps"]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "clientUserId",
+        "trainerUserId",
+        "dateKey",
+        "metricType",
+        "label",
+        "value",
+        "unit",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "WorkoutPlan": {
+      "title": "WorkoutPlan",
+      "description": "Structured weekly workout plan for a client.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "trainerUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "weekLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "coachNotes": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "days": {
+          "type": "array",
+          "description": "Bounded array of 7 day plans."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "clientUserId",
+        "trainerUserId",
+        "title",
+        "weekLabel",
+        "coachNotes",
+        "days",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "MealPlan": {
+      "title": "MealPlan",
+      "description": "Structured India-first meal plan for a client.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "trainerUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "dietaryLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "coachNotes": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "meals": {
+          "type": "array",
+          "description": "Bounded array of meal options (max 10)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "clientId",
+        "clientUserId",
+        "trainerUserId",
+        "title",
+        "dietaryLabel",
+        "coachNotes",
+        "meals",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ConsultationSlot": {
+      "title": "ConsultationSlot",
+      "description": "Trainer consultation availability slot with atomic booking lock.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dateKey": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "maxLength": 10
+        },
+        "startTime": {
+          "type": "string",
+          "pattern": "^[0-9]{2}:[0-9]{2}$",
+          "maxLength": 5
+        },
+        "endTime": {
+          "type": "string",
+          "pattern": "^[0-9]{2}:[0-9]{2}$",
+          "maxLength": 5
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["online", "in_person"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["available", "booked", "blocked"]
+        },
+        "bookedByUserId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "activeBookingId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "trainerId",
+        "trainerUserId",
+        "dateKey",
+        "startTime",
+        "endTime",
+        "timezone",
+        "mode",
+        "status",
+        "bookedByUserId",
+        "activeBookingId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Client consultation booking atomically linked to a ConsultationSlot.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "slotId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "dateKey": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "maxLength": 10
+        },
+        "startTime": {
+          "type": "string",
+          "pattern": "^[0-9]{2}:[0-9]{2}$",
+          "maxLength": 5
+        },
+        "endTime": {
+          "type": "string",
+          "pattern": "^[0-9]{2}:[0-9]{2}$",
+          "maxLength": 5
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "status": {
+          "type": "string",
+          "enum": ["booked", "completed", "canceled", "rescheduled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "slotId",
+        "trainerId",
+        "trainerUserId",
+        "clientId",
+        "clientUserId",
+        "dateKey",
+        "startTime",
+        "endTime",
+        "timezone",
+        "topic",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Recipient-scoped coaching or reminder notification.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "recipientUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "category": {
+          "type": "string",
+          "enum": ["assignment", "consultation", "invite", "streak", "system"]
+        },
+        "read": {
+          "type": "boolean"
+        },
+        "actionRoute": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "relatedClientId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "recipientUserId",
+        "senderUserId",
+        "title",
+        "body",
+        "category",
+        "read",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AIPlanDraft": {
+      "title": "AIPlanDraft",
+      "description": "Trainer-owned structured workout and nutrition plan draft.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "trainerUserId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "objective": {
+          "type": "string",
+          "enum": [
+            "weight_management",
+            "healthy_weight_gain",
+            "muscle_strength",
+            "general_fitness",
+            "exploring"
+          ]
+        },
+        "experienceLevel": {
+          "type": "string",
+          "enum": ["beginner", "intermediate", "experienced"]
+        },
+        "daysPerWeek": {
+          "type": "number"
+        },
+        "environment": {
+          "type": "string",
+          "enum": ["gym", "home", "outdoors"]
+        },
+        "dietaryPreference": {
+          "type": "string",
+          "enum": ["vegetarian", "vegan", "non_vegetarian", "other", "prefer_not_to_say"]
+        },
+        "constraints": {
+          "type": "string",
+          "maxLength": 800
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 800
+        },
+        "workoutDays": {
+          "type": "array",
+          "description": "Bounded array of workout days (max 7)."
+        },
+        "nutritionOutline": {
+          "type": "array",
+          "description": "Bounded array of nutrition guidance items (max 10)."
+        },
+        "habitCommitments": {
+          "type": "array",
+          "description": "Bounded array of habit suggestions (max 10)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["draft", "approved", "saved"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "trainerId",
+        "trainerUserId",
+        "objective",
+        "experienceLevel",
+        "daysPerWeek",
+        "environment",
+        "dietaryPreference",
+        "constraints",
+        "title",
+        "summary",
+        "workoutDays",
+        "nutritionOutline",
+        "habitCommitments",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Core non-PII user metadata scoped strictly to the owning Firebase Auth UID."
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateContact" },
+      "description": "Isolated PII (email) and private session state strictly readable and writable by the owning user."
+    },
+    "/trainers/{trainerId}": {
+      "schema": { "$ref": "#/entities/TrainerProfile" },
+      "description": "Public independent trainer storefront profiles (no private PII)."
+    },
+    "/packages/{packageId}": {
+      "schema": { "$ref": "#/entities/Package" },
+      "description": "INR coaching packages published by trainers."
+    },
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/ClientProfile" },
+      "description": "Client profiles accessible only by the owning client and their actively linked trainer."
+    },
+    "/relationships/{relationshipId}": {
+      "schema": { "$ref": "#/entities/CoachingRelationship" },
+      "description": "Coaching relationships linking a client and trainer after explicit acceptance."
+    },
+    "/invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/Invite" },
+      "description": "Trainer-created invitation tokens with active/redeemed/revoked lifecycle."
+    },
+    "/enrollments/{enrollmentId}": {
+      "schema": { "$ref": "#/entities/Enrollment" },
+      "description": "Client enrollments into trainer packages."
+    },
+    "/templates/{templateId}": {
+      "schema": { "$ref": "#/entities/TaskTemplate" },
+      "description": "Reusable trainer task templates."
+    },
+    "/assignments/{assignmentId}": {
+      "schema": { "$ref": "#/entities/Assignment" },
+      "description": "Daily commitments scheduled for a client."
+    },
+    "/completions/{completionId}": {
+      "schema": { "$ref": "#/entities/CompletionEvent" },
+      "description": "Assignment completion logs used to derive streaks and adherence."
+    },
+    "/progressEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/ProgressEvent" },
+      "description": "Client progress measurements (weight, strength, waist, steps)."
+    },
+    "/workoutPlans/{planId}": {
+      "schema": { "$ref": "#/entities/WorkoutPlan" },
+      "description": "Client weekly workout plans."
+    },
+    "/mealPlans/{planId}": {
+      "schema": { "$ref": "#/entities/MealPlan" },
+      "description": "Client India-first meal plans."
+    },
+    "/consultationSlots/{slotId}": {
+      "schema": { "$ref": "#/entities/ConsultationSlot" },
+      "description": "Trainer consultation slots with atomic booking sync."
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Client-trainer consultation bookings atomically linked to slots."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User-scoped notifications."
+    },
+    "/aiDrafts/{draftId}": {
+      "schema": { "$ref": "#/entities/AIPlanDraft" },
+      "description": "Trainer-owned AI plan drafts."
+    }
+  }
+}
