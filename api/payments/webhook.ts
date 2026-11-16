@@ -21,24 +21,38 @@ async function readRawRequestBody(req: VercelRequest): Promise<Buffer> {
   if (typeof withRaw.rawBody === 'string') return Buffer.from(withRaw.rawBody, 'utf8');
   if (Buffer.isBuffer(req.body)) return req.body;
   if (typeof req.body === 'string') return Buffer.from(req.body, 'utf8');
-
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  }
-  if (chunks.length > 0) {
-    return Buffer.concat(chunks);
-  }
   if (req.body && typeof req.body === 'object') {
     return Buffer.from(JSON.stringify(req.body), 'utf8');
   }
-  return Buffer.alloc(0);
+
+  if (req.readableEnded || !req.readable) {
+    return Buffer.alloc(0);
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      req.on('end', () => {
+        resolve(Buffer.concat(chunks));
+      });
+      req.on('error', () => {
+        resolve(Buffer.alloc(0));
+      });
+    } catch {
+      resolve(Buffer.alloc(0));
+    }
+  });
 }
 
 interface CashfreeWebhookPayload {
   type?: string;
+  event?: string;
   event_time?: string;
   data?: {
+    message?: string;
     order?: {
       order_id?: string;
       order_amount?: number;
@@ -97,7 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // payload may be empty or non-json test ping
     }
 
-    const eventType = String(payload?.type || '').toUpperCase();
+    const eventType = String(payload?.type || payload?.event || '').toUpperCase();
     const orderId = payload?.data?.order?.order_id || payload?.data?.refund?.order_id;
     const cfPaymentId = payload?.data?.payment?.cf_payment_id
       ? String(payload.data.payment.cf_payment_id)
@@ -112,10 +126,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       eventType === 'TEST_WEBHOOK' ||
       eventType === 'TEST' ||
       eventType === 'WEBHOOK_TEST' ||
+      eventType === 'TEST_EVENT' ||
       eventType.includes('TEST') ||
+      req.query?.test === 'true' ||
+      req.query?.test === '1' ||
+      req.headers['x-cashfree-test'] === 'true' ||
       (orderId && /(?:order_)?(?:test|sample|dummy)/i.test(orderId)) ||
-      Boolean((payload?.data as Record<string, unknown> | undefined)?.message &&
-        String((payload?.data as Record<string, unknown>).message).toLowerCase().includes('test')) ||
+      Boolean(payload?.data?.message && String(payload.data.message).toLowerCase().includes('test')) ||
       rawBody.length === 0;
 
     if (isTestEvent) {
@@ -245,6 +262,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ ok: true, event: eventType, webhookEventId });
   } catch (error) {
     console.error('Cashfree webhook error:', error);
-    return res.status(500).json({ ok: false, error: 'Webhook processing error' });
+    const message = error instanceof Error ? error.message : 'Webhook processing error';
+    return res.status(500).json({ ok: false, error: message });
   }
 }
