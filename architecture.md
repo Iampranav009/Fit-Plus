@@ -11,7 +11,7 @@ FitPlus is an India-first independent personal coaching platform built with:
 ---
 
 ## 2. Logical-to-Physical Firestore Collection Mapping
-Existing live collections from Stage 2 are preserved so existing user accounts and indexes remain intact while Stage 3 adds dedicated collections for groups, subscriptions, payments, daily activity, streaks, consent, admin governance, verification, AI logs, and reviews (30 paths total in `firebase-blueprint.json`).
+Existing live collections from Stage 2 are preserved so existing user accounts and indexes remain intact while Stage 3 and Stage 4 add dedicated collections for groups, subscriptions, payments, daily activity, streaks, consent, admin governance, verification, AI logs, reviews, live workouts, nutrition logs, achievements, check-ins, real-time chat, program templates, and scheduled reminders (40 paths total in `firebase-blueprint.json`).
 
 | Logical Concept | Physical Firestore Path | Owner / Access Model |
 | :--- | :--- | :--- |
@@ -45,6 +45,16 @@ Existing live collections from Stage 2 are preserved so existing user accounts a
 | Security audit logs | `/auditLogs/{logId}` | Admin read; **server-written only** |
 | Trainer verification queue | `/trainerVerificationRequests/{requestId}` | Trainer submit (`pending`); Admin approve/reject (`isAdmin()`) |
 | Coach reviews | `/reviews/{reviewId}` | Public read; create only if authentic `/relationships/{relationshipId}` exists |
+| Custom exercises | `/exercises/{exerciseId}` | Public built-ins + Trainer custom exercises |
+| Live workout sessions | `/workoutSessions/{sessionId}` | Client create/update with set logs, 1RM & volume; linked trainer read |
+| Persistent achievement unlocks | `/achievements/{achievementId}` | Client create (server-evaluated deduplicated milestones); linked trainer read |
+| Daily nutrition logs | `/nutritionLogs/{logId}` | Client create/update daily meals & water; linked trainer `trainerFeedback` |
+| Weekly client check-ins | `/weeklyCheckIns/{checkInId}` | Client create weekly reflection; linked trainer review & feedback |
+| Chat conversations | `/conversations/{conversationId}` | Participant read/create/update (`participantUserIds`); admin delete |
+| Chat messages | `/conversations/{conversationId}/messages/{messageId}` | Participant read/create; immutable author; read receipts |
+| Workout program templates | `/workoutTemplates/{templateId}` | Trainer create/update/delete; public or shared read |
+| Nutrition program templates | `/nutritionTemplates/{templateId}` | Trainer create/update/delete; public or shared read |
+| Scheduled reminders | `/scheduledReminders/{reminderId}` | Trainer create/manage; Indian quiet hours evaluation |
 
 ---
 
@@ -63,6 +73,7 @@ Existing live collections from Stage 2 are preserved so existing user accounts a
 ## 4. Storage Layout (`storage.rules`)
 - `/private/clients/{userId}/progress/{fileName}`: Strictly readable/writable by owning verified client (`image/*`, max 8 MB). Readable by an authorized trainer only when custom metadata contains `sharedWithTrainer == 'true'` and `authorizedTrainerUid == request.auth.uid`.
 - `/private/trainers/{userId}/credentials/{fileName}`: Owner write (`image/*` or `application/pdf`, max 10 MB); owner or admin read.
+- `/private/messages/{conversationId}/{fileName}`: Conversation participant read/write (`image/*`, max 5 MB) for chat attachments.
 
 ---
 
@@ -71,7 +82,7 @@ Existing live collections from Stage 2 are preserved so existing user accounts a
 - `GET /api/invites/resolve?token=...`: Returns sanitized non-PII invite state, trainer summary, and active packages without exposing client emails/labels.
 - `POST /api/payments/create-order`: Server-verified INR package checkout via Cashfree `POST /pg/orders` (or instant ₹0 free-tier enrollment).
 - `POST /api/payments/verify`: Queries Cashfree `GET /pg/orders/{order_id}` + `/payments` server-side before activating `subscriptions`, `enrollments`, `relationships`, and invoices.
-- `POST /api/payments/webhook`: Verifies Cashfree `x-webhook-signature` + `x-webhook-timestamp` (`Base64(HMAC-SHA256)`) on raw body with idempotency and out-of-order protection.
+- `POST /api/payments/webhook`: Verifies Cashfree `x-webhook-signature` + `x-webhook-timestamp` (`Base64(HMAC-SHA256)`) on raw body with idempotency, test-event recognition (`TEST_WEBHOOK`, `order_test_*`), and out-of-order protection.
 - `POST /api/payments/refund`: Admin-only Cashfree refund trigger (`POST /pg/orders/{order_id}/refunds`) with audit logging.
 - `POST /api/account/delete`: Verifies Firebase ID token, removes user-scoped Firestore documents, logs a deletion event to `/auditLogs`, and deletes the Firebase Auth user via Admin SDK.
 
@@ -89,3 +100,44 @@ Composite indexes support:
 - `payments` & `subscriptions` by `clientUserId` + `createdAt` and `trainerUserId` + `createdAt`
 - `trainerVerificationRequests` by `status` + `createdAt`
 - `reviews` by `trainerId` + `createdAt`
+- `workoutSessions` by `clientId` + `dateKey`
+- `nutritionLogs` by `clientId` + `dateKey`
+- `weeklyCheckIns` by `clientId` + `weekKey`
+- `achievements` by `clientId` + `unlockedAt`
+- `conversations` by `participantUserIds` (array-contains) + `updatedAt`
+- `messages` subcollection by `conversationId` + `createdAt`
+- `workoutTemplates` & `nutritionTemplates` by `trainerUserId` + `updatedAt`
+- `scheduledReminders` by `trainerUserId` + `scheduledFor` + `status`
+
+---
+
+## 7. Stage 4A Performance & Read-Efficiency Architecture
+1. **Scoped Workspace Subscriptions**:
+   - `subscribeAuthenticatedWorkspace` accepts authenticated user role (`client` vs `trainer` vs `admin`) and attaches only relevant collection queries.
+   - Public marketplace collections (`trainers`, `packages`, `reviews`) use cached one-time `getDocs` reads instead of 40+ concurrent real-time `onSnapshot` listeners.
+2. **Route-Level Code Splitting**:
+   - All application sub-routes are code-split using `React.lazy` and wrapped in `Suspense` with an Apple-inspired Liquid Glass `RouteLoadingFallback`.
+   - Client routes (`LiveWorkoutPage`, `NutritionDiaryPage`, `WeeklyCheckInPage`, `WrappedPage`, `ExerciseLibraryPage`), Trainer Studio routes, and Admin routes are loaded on-demand.
+   - Production bundle initial chunks remain lightweight (<25 kB per route chunk).
+3. **Optimistic Local Storage & Draft Safety**:
+   - Live workout in-progress sessions are auto-saved to local browser storage (`fitplus_live_workout_draft_{clientId}`) every 5 seconds to protect users against accidental tab closures or mobile browser refreshes.
+   - Completed workout sessions clear local drafts automatically upon cloud sync.
+
+---
+
+## 8. Stage 4B Coaching Operations & Automation Architecture
+1. **FitPlus Connect (In-App Messaging & WhatsApp Bridge)**:
+   - Real-time 1-to-1 coach-client chat backed by `/conversations` and subcollection `/messages`.
+   - Deterministic conversation IDs `[uidA, uidB].sort().join('__')`.
+   - Unread count badge integration into navigation bars.
+   - Rich plan reference embedding (direct links to workout and nutrition programs within chat bubbles).
+   - User-initiated WhatsApp click-to-chat bridge (`wa.me`) with pre-configured contextual coaching templates.
+2. **Visual Workout Studio & Nutrition Studio**:
+   - Multi-week visual workout builder linked to curated `exerciseLibrary.ts` (28+ movements) with live set/rep/volume calculations.
+   - Visual Indian nutrition builder linked to `indianFoods.ts` (IFCT/NIN-referenced items) with dynamic portion scaling (katori, phulka, cup, piece, 100g) and live macro totals.
+   - Gemini AI Copilot drafting pipeline with schema constraints and deterministic fallbacks.
+   - Master template library persistence in `/workoutTemplates` and `/nutritionTemplates`.
+3. **Client Pulse & Automated Retention**:
+   - Deterministic 4-state engagement algorithm: `on_track` (adherence >= 75%), `needs_attention` (inactivity >= 4 days, adherence < 50%), `follow_up_recommended` (inactivity 3 days, unreviewed check-in), and `insufficient_data` (new onboarding).
+   - Studio Overview Action Center sorting urgent coaching actions.
+   - Scheduled reminder architecture (`/scheduledReminders`) with Indian quiet hours (22:00–07:00 IST) suppression.

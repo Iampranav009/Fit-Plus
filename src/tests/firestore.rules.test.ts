@@ -30,7 +30,7 @@ test('blueprint validation sanitizes slugs, date keys, times, and bounded arrays
   assert.equal(clampStringArray(Array.from({ length: 20 }, (_, i) => `item-${i}`), 10, 40).length, 10);
 });
 
-test('firestore.rules contains hardening for all 30 Stage 3 blueprint collections', () => {
+test('firestore.rules contains hardening for all 35 Stage 4A blueprint collections', () => {
   const rulesPath = path.resolve(process.cwd(), 'firestore.rules');
   const blueprintPath = path.resolve(process.cwd(), 'firebase-blueprint.json');
   const storageRulesPath = path.resolve(process.cwd(), 'storage.rules');
@@ -52,6 +52,11 @@ test('firestore.rules contains hardening for all 30 Stage 3 blueprint collection
   assert.ok(rules.includes('incoming().isDemoVerified == false'));
   assert.ok(rules.includes('existsAfter(/databases/$(database)/documents/bookings/'));
   assert.ok(rules.includes('getAfter(/databases/$(database)/documents/consultationSlots/'));
+  assert.ok(rules.includes('function isValidCustomExercise('));
+  assert.ok(rules.includes('function isValidWorkoutSession('));
+  assert.ok(rules.includes('function isValidAchievementUnlock('));
+  assert.ok(rules.includes('function isValidNutritionLog('));
+  assert.ok(rules.includes('function isValidWeeklyCheckIn('));
 
   const expectedCollections = [
     '/users/{userId}',
@@ -84,14 +89,25 @@ test('firestore.rules contains hardening for all 30 Stage 3 blueprint collection
     '/auditLogs/{logId}',
     '/trainerVerificationRequests/{requestId}',
     '/reviews/{reviewId}',
+    '/exercises/{exerciseId}',
+    '/workoutSessions/{sessionId}',
+    '/achievements/{achievementId}',
+    '/nutritionLogs/{logId}',
+    '/weeklyCheckIns/{checkInId}',
+    '/conversations/{conversationId}',
+    '/messages/{messageId}',
+    '/workoutTemplates/{templateId}',
+    '/nutritionTemplates/{templateId}',
+    '/scheduledReminders/{reminderId}',
   ];
 
   for (const col of expectedCollections) {
     assert.ok(rules.includes(`match ${col}`), `Missing match block for ${col}`);
   }
-  assert.equal(Object.keys(blueprint.firestore).length, 30);
+  assert.equal(Object.keys(blueprint.firestore).length, 40);
 
   assert.ok(storageRules.includes('allow read, write: if false;'));
   assert.ok(storageRules.includes('/private/clients/{userId}/progress/{fileName}'));
-  assert.ok(Array.isArray(indexes.indexes) && indexes.indexes.length >= 10);
+  assert.ok(storageRules.includes('/private/messages/{conversationId}/{fileName}'));
+  assert.ok(Array.isArray(indexes.indexes) && indexes.indexes.length >= 15);
 });

@@ -62,5 +62,13 @@ service firebase.storage {
         );
       allow delete: if isVerified() && request.auth.uid == userId;
     }
+
+    // Stage 4B: Private chat message attachments (images up to 5MB)
+    match /private/messages/{conversationId}/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isVerified()
+        && isValidImageUpload();
+      allow delete: if isVerified();
+    }
   }
 }

@@ -841,6 +841,140 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidChatConversation(data, conversationId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'clientName', 'trainerId', 'trainerUserId',
+          'trainerName', 'lastMessageText', 'lastMessageAt', 'lastSenderUserId',
+          'unreadClientCount', 'unreadTrainerCount', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'clientName', 'trainerId', 'trainerUserId',
+          'trainerName', 'lastMessageText', 'lastMessageAt', 'lastSenderUserId',
+          'unreadClientCount', 'unreadTrainerCount', 'createdAt', 'updatedAt'
+        ])
+        && data.id == conversationId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && data.clientName is string && data.clientName.size() >= 1 && data.clientName.size() <= 100
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.trainerName is string && data.trainerName.size() >= 1 && data.trainerName.size() <= 100
+        && data.lastMessageText is string && data.lastMessageText.size() <= 1000
+        && data.lastMessageAt is string && data.lastMessageAt.size() <= 64
+        && isValidOptionalId(data, 'lastSenderUserId')
+        && data.unreadClientCount is number && data.unreadClientCount >= 0 && data.unreadClientCount <= 10000
+        && data.unreadTrainerCount is number && data.unreadTrainerCount >= 0 && data.unreadTrainerCount <= 10000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidChatMessage(data, messageId) {
+      return data.keys().hasAll([
+          'id', 'conversationId', 'senderUserId', 'senderRole', 'text', 'status',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'conversationId', 'senderUserId', 'senderRole', 'text', 'status',
+          'replyTo', 'attachment', 'reference', 'readAt', 'createdAt'
+        ])
+        && data.id == messageId
+        && isValidId(data.id)
+        && isValidId(data.conversationId)
+        && isValidId(data.senderUserId)
+        && data.senderRole in ['client', 'trainer', 'system']
+        && data.text is string && data.text.size() <= 2000
+        && data.status in ['sending', 'sent', 'delivered', 'read']
+        && (!('replyTo' in data) || data.replyTo is map)
+        && (!('attachment' in data) || data.attachment is map)
+        && (!('reference' in data) || data.reference is map)
+        && (!('readAt' in data) || (data.readAt is string && data.readAt.size() <= 64))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidWorkoutProgramTemplate(data, templateId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'title', 'description', 'difficulty',
+          'focus', 'durationWeeks', 'daysPerWeek', 'days', 'isPublic', 'tags',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'title', 'description', 'difficulty',
+          'focus', 'durationWeeks', 'daysPerWeek', 'days', 'isPublic', 'tags',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id == templateId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.description is string && data.description.size() <= 1000
+        && data.difficulty in ['beginner', 'intermediate', 'advanced']
+        && data.focus in ['strength', 'hypertrophy', 'fat_loss', 'endurance', 'mobility']
+        && data.durationWeeks is number && data.durationWeeks >= 1 && data.durationWeeks <= 52
+        && data.daysPerWeek is number && data.daysPerWeek >= 1 && data.daysPerWeek <= 7
+        && data.days is list && data.days.size() <= 14 && (data.days.size() == 0 || data.days[0] is map)
+        && data.isPublic is bool
+        && isValidStringList(data.tags, 10, 32)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNutritionProgramTemplate(data, templateId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'title', 'description', 'dietaryType',
+          'targetCalories', 'proteinGrams', 'carbGrams', 'fatGrams', 'slots', 'isPublic',
+          'tags', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'title', 'description', 'dietaryType',
+          'targetCalories', 'proteinGrams', 'carbGrams', 'fatGrams', 'slots', 'isPublic',
+          'tags', 'createdAt', 'updatedAt'
+        ])
+        && data.id == templateId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.description is string && data.description.size() <= 1000
+        && data.dietaryType in ['veg', 'non_veg', 'egg', 'vegan', 'jain']
+        && data.targetCalories is number && data.targetCalories >= 500 && data.targetCalories <= 10000
+        && data.proteinGrams is number && data.proteinGrams >= 0 && data.proteinGrams <= 500
+        && data.carbGrams is number && data.carbGrams >= 0 && data.carbGrams <= 1000
+        && data.fatGrams is number && data.fatGrams >= 0 && data.fatGrams <= 500
+        && data.slots is list && data.slots.size() <= 8 && (data.slots.size() == 0 || data.slots[0] is map)
+        && data.isPublic is bool
+        && isValidStringList(data.tags, 10, 32)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidScheduledReminder(data, reminderId) {
+      return data.keys().hasAll([
+          'id', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
+          'category', 'message', 'scheduledFor', 'status', 'channel',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
+          'category', 'message', 'scheduledFor', 'status', 'channel',
+          'sentAt', 'createdAt'
+        ])
+        && data.id == reminderId
+        && isValidId(data.id)
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && data.category in ['workout_reminder', 'meal_reminder', 'checkin_reminder', 'custom_nudge']
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 1000
+        && data.scheduledFor is string && data.scheduledFor.size() >= 10 && data.scheduledFor.size() <= 64
+        && data.status in ['pending', 'sent', 'cancelled']
+        && data.channel in ['in_app', 'whatsapp']
+        && (!('sentAt' in data) || (data.sentAt is string && data.sentAt.size() <= 64))
+        && data.createdAt is timestamp;
+    }
+
     // -------------------------------------------------------------------------
     // /admins/{userId} (Server-Provisioned Admins — Never Client-Writable)
     // -------------------------------------------------------------------------
@@ -2155,6 +2289,157 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /conversations/{conversationId} (Stage 4B Real-Time FitPlus Connect)
+    // -------------------------------------------------------------------------
+    match /conversations/{conversationId} {
+      allow get: if isSignedIn() && isValidId(conversationId) && (
+        existing().clientUserId == request.auth.uid ||
+        existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid ||
+        resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(conversationId)
+        && isValidChatConversation(incoming(), conversationId)
+        && (incoming().clientUserId == request.auth.uid || incoming().trainerUserId == request.auth.uid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn()
+        && isValidId(conversationId)
+        && isValidChatConversation(incoming(), conversationId)
+        && (existing().clientUserId == request.auth.uid || existing().trainerUserId == request.auth.uid)
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().trainerId == existing().trainerId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+
+      // -----------------------------------------------------------------------
+      // /conversations/{conversationId}/messages/{messageId}
+      // -----------------------------------------------------------------------
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(messageId);
+        allow list: if isSignedIn();
+
+        allow create: if isVerifiedUser()
+          && isValidId(messageId)
+          && isValidChatMessage(incoming(), messageId)
+          && incoming().senderUserId == request.auth.uid
+          && incoming().conversationId == conversationId
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/conversations/$(conversationId))
+          && (
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.clientUserId == request.auth.uid ||
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data.trainerUserId == request.auth.uid
+          );
+
+        allow update: if isSignedIn()
+          && isValidId(messageId)
+          && incoming().id == existing().id
+          && incoming().conversationId == existing().conversationId
+          && incoming().senderUserId == existing().senderUserId
+          && incoming().createdAt == existing().createdAt
+          && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'readAt']);
+
+        allow delete: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // /workoutTemplates/{templateId} (Stage 4B Workout Studio Templates)
+    // -------------------------------------------------------------------------
+    match /workoutTemplates/{templateId} {
+      allow get: if isSignedIn() && isValidId(templateId);
+      allow list: if isSignedIn();
+
+      allow create: if isVerifiedUser()
+        && isValidId(templateId)
+        && isValidWorkoutProgramTemplate(incoming(), templateId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(templateId)
+        && isValidWorkoutProgramTemplate(incoming(), templateId)
+        && existing().trainerUserId == request.auth.uid
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isVerifiedUser()
+        && isValidId(templateId)
+        && existing().trainerUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /nutritionTemplates/{templateId} (Stage 4B Nutrition Studio Templates)
+    // -------------------------------------------------------------------------
+    match /nutritionTemplates/{templateId} {
+      allow get: if isSignedIn() && isValidId(templateId);
+      allow list: if isSignedIn();
+
+      allow create: if isVerifiedUser()
+        && isValidId(templateId)
+        && isValidNutritionProgramTemplate(incoming(), templateId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(templateId)
+        && isValidNutritionProgramTemplate(incoming(), templateId)
+        && existing().trainerUserId == request.auth.uid
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isVerifiedUser()
+        && isValidId(templateId)
+        && existing().trainerUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /scheduledReminders/{reminderId} (Stage 4B Client Pulse & Automations)
+    // -------------------------------------------------------------------------
+    match /scheduledReminders/{reminderId} {
+      allow get: if isSignedIn() && isValidId(reminderId) && (
+        existing().clientUserId == request.auth.uid ||
+        existing().trainerUserId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid ||
+        resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(reminderId)
+        && isValidScheduledReminder(incoming(), reminderId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(reminderId)
+        && incoming().id == existing().id
+        && (existing().trainerUserId == request.auth.uid || existing().clientUserId == request.auth.uid)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'sentAt']);
+
+      allow delete: if isVerifiedUser()
+        && isValidId(reminderId)
+        && existing().trainerUserId == request.auth.uid;
     }
   }
 }

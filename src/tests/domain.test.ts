@@ -25,6 +25,26 @@ import {
   findEligibleReviewRelationship,
   isValidHttpMeetingLink,
 } from '../lib/commerce';
+import {
+  buildConversationId,
+  formatMessageTime,
+  formatConversationSnippetDate,
+  formatTimeIndian,
+} from '../lib/messagingEngine';
+import {
+  calculateVisualWorkoutDayMetrics,
+  calculateVisualNutritionDayMacros,
+  scaleIndianFoodItem,
+} from '../lib/coachingBuildersEngine';
+import {
+  computeClientPulse,
+  computeTrainerActionItems,
+  computeTrainerBusinessAnalytics,
+} from '../lib/pulseEngine';
+import {
+  evaluateScheduledReminders,
+  isInIndianQuietHours,
+} from '../lib/reminderScheduler';
 import { createSeedSnapshot } from '../data/demo/fixtures';
 import type { Assignment, CompletionEvent, TrainerReview } from '../types/domain';
 import healthHandler from '../../api/health';
@@ -568,6 +588,41 @@ test('Stage 3D /api/health returns HTTP 200 non-secret readiness and payment/adm
   );
   assert.equal(webhookUnconfigured.result.statusCode, 503);
 
+  // Test Webhook event handling with signed payload
+  process.env.CASHFREE_APP_ID = 'test_app_id';
+  process.env.CASHFREE_SECRET_KEY = 'test_secret_key';
+  const testPayload = JSON.stringify({
+    type: 'TEST_WEBHOOK',
+    data: { order: { order_id: 'order_test_123' } },
+  });
+  const testTimestamp = '1746427759733';
+  const testSig = crypto
+    .createHmac('sha256', 'test_secret_key')
+    .update(`${testTimestamp}${testPayload}`)
+    .digest('base64');
+
+  const webhookTestRes = createMockRes();
+  await webhookHandler(
+    {
+      method: 'POST',
+      headers: {
+        'x-webhook-signature': testSig,
+        'x-webhook-timestamp': testTimestamp,
+        'x-webhook-version': '2025-01-01',
+      },
+      rawBody: Buffer.from(testPayload, 'utf8'),
+      body: JSON.parse(testPayload),
+    } as unknown as VercelRequest,
+    webhookTestRes.res,
+  );
+  assert.equal(webhookTestRes.result.statusCode, 200);
+  assert.equal((webhookTestRes.result.body as any)?.test, true);
+  assert.equal((webhookTestRes.result.body as any)?.ok, true);
+
+  // Reset env
+  delete process.env.CASHFREE_APP_ID;
+  delete process.env.CASHFREE_SECRET_KEY;
+
   const adminDelete = createMockRes();
   await adminOverviewHandler(
     { method: 'DELETE', headers: {}, body: {} } as unknown as VercelRequest,
@@ -600,4 +655,565 @@ test('Stage 3D /api/health returns HTTP 200 non-secret readiness and payment/adm
   );
   assert.equal(monValid.result.statusCode, 200);
 });
+
+// ==========================================
+// STAGE 4A UNIT TESTS
+// ==========================================
+
+import {
+  BUILTIN_EXERCISES,
+  filterExercises,
+  findExerciseByNameOrId,
+  mergeExerciseCatalog,
+  MUSCLE_LABELS,
+} from '../data/exerciseLibrary';
+import {
+  estimateOneRepMax,
+  parseRestSeconds,
+  parseTargetSetCount,
+  parseTargetRepsNum,
+  getPreviousExerciseBest,
+  computeSessionMetrics,
+  buildInitialWorkoutExercises,
+} from '../lib/workoutEngine';
+import {
+  INDIAN_FOOD_DATABASE,
+  computeNutritionTotals,
+  scaleFoodToLoggedItem,
+} from '../data/indianFoods';
+import {
+  ACHIEVEMENT_CATALOG,
+  evaluateAchievementsState,
+} from '../lib/achievementsEngine';
+import { computeMonthlyWrappedSummary } from '../lib/wrappedEngine';
+import type {
+  ExerciseDefinition,
+  WorkoutDayPlan,
+  WorkoutExerciseLog,
+  WorkoutSession,
+  LoggedFoodItem,
+} from '../types/domain';
+
+test('Stage 4A — Exercise Library: builtins, search, filters & custom merge', () => {
+  assert.ok(BUILTIN_EXERCISES.length >= 30, 'Must have at least 30 verified Indian-accessible exercises');
+
+  // Verify each exercise has instructions, cues, mistakes and valid targets
+  for (const ex of BUILTIN_EXERCISES) {
+    assert.ok(ex.id.startsWith('ex_'), `Exercise ${ex.name} id must start with ex_`);
+    assert.ok(ex.name.length > 3, `Exercise ${ex.id} must have a descriptive name`);
+    assert.ok(ex.instructions.length >= 2, `Exercise ${ex.name} must have at least 2 clear steps`);
+    assert.ok(ex.commonMistakes.length >= 1, `Exercise ${ex.name} must list common form mistakes`);
+    assert.ok(ex.primaryMuscles.length >= 1, `Exercise ${ex.name} must target primary muscles`);
+    assert.ok(MUSCLE_LABELS[ex.primaryMuscles[0]], `Primary muscle must be in MUSCLE_LABELS`);
+  }
+
+  // Filter by muscle
+  const chestExercises = filterExercises(BUILTIN_EXERCISES, { muscle: 'chest' });
+  assert.ok(chestExercises.length >= 3, 'Must find chest exercises');
+  for (const ex of chestExercises) {
+    const targets = [...ex.primaryMuscles, ...ex.secondaryMuscles];
+    assert.ok(targets.includes('chest'));
+  }
+
+  // Filter by environment (home)
+  const homeExercises = filterExercises(BUILTIN_EXERCISES, { environment: 'home' });
+  assert.ok(homeExercises.length > 0);
+  for (const ex of homeExercises) {
+    assert.notEqual(ex.environment, 'gym', 'Home filter must exclude gym-only exercises');
+  }
+
+  // Search by keyword
+  const pushups = filterExercises(BUILTIN_EXERCISES, { search: 'push-up' });
+  assert.ok(pushups.length >= 1);
+  assert.ok(pushups.some((e) => e.name.toLowerCase().includes('push-up')));
+
+  // Lookup helper
+  const found = findExerciseByNameOrId('Goblet Squat', BUILTIN_EXERCISES);
+  assert.ok(found);
+  assert.equal(found?.id, 'ex_goblet_squat');
+
+  // Custom exercises merge
+  const customEx: ExerciseDefinition = {
+    id: 'ex_custom_desi_dand',
+    name: 'Desi Dand (Hindu Push-Up)',
+    category: 'strength',
+    environment: 'both',
+    equipment: 'bodyweight',
+    difficulty: 'intermediate',
+    primaryMuscles: ['shoulders', 'chest', 'core'],
+    secondaryMuscles: ['triceps'],
+    instructions: ['Downward dog to cobra glide.'],
+    commonMistakes: ['Sagging lower back.'],
+    safetyNotes: 'Keep movement fluid.',
+    alternativeIds: [],
+    isCustom: true,
+  };
+  const merged = mergeExerciseCatalog([customEx]);
+  assert.equal(merged.length, BUILTIN_EXERCISES.length + 1);
+  assert.equal(merged[merged.length - 1].id, 'ex_custom_desi_dand');
+});
+
+test('Stage 4A — Workout Engine: 1RM calculation, rest parsing & live session metrics', () => {
+  // 1RM estimation (Epley formula: weight * (1 + reps/30))
+  assert.equal(estimateOneRepMax(0, 10), 0);
+  assert.equal(estimateOneRepMax(100, 1), 100);
+  // 100kg for 10 reps -> 100 * (1 + 10/30) = 133.3 kg
+  assert.equal(estimateOneRepMax(100, 10), 133.3);
+  // 60kg for 6 reps -> 60 * (1 + 6/30) = 60 * 1.2 = 72 kg
+  assert.equal(estimateOneRepMax(60, 6), 72);
+
+  // Rest parser
+  assert.equal(parseRestSeconds('60s'), 60);
+  assert.equal(parseRestSeconds('90 sec'), 90);
+  assert.equal(parseRestSeconds('2 min'), 120);
+  assert.equal(parseRestSeconds(''), 45); // default fallback
+
+  // Set & rep parsers
+  assert.equal(parseTargetSetCount('4 sets'), 4);
+  assert.equal(parseTargetSetCount('3'), 3);
+  assert.equal(parseTargetRepsNum('10-12'), 10);
+  assert.equal(parseTargetRepsNum('15'), 15);
+
+  // Benchmark history lookup
+  const pastSession: WorkoutSession = {
+    id: 'sess_prev',
+    clientId: 'cl_aarav',
+    dateKey: '2026-11-10',
+    title: 'Upper Body',
+    status: 'completed',
+    startedAt: '2026-11-10T10:00:00Z',
+    durationSeconds: 2400,
+    totalVolumeKg: 4500,
+    completedSetsCount: 12,
+    prCount: 1,
+    exercises: [
+      {
+        exerciseId: 'ex_incline_db_press',
+        exerciseName: 'Incline Dumbbell Press',
+        targetSets: '3',
+        targetReps: '10',
+        restSeconds: 60,
+        sets: [
+          { setNumber: 1, reps: 10, weightKg: 20, completed: true },
+          { setNumber: 2, reps: 10, weightKg: 22.5, completed: true },
+          { setNumber: 3, reps: 8, weightKg: 22.5, completed: true },
+        ],
+      },
+    ],
+    updatedAt: '2026-11-10T11:00:00Z',
+  };
+
+  const prevBest = getPreviousExerciseBest('Incline Dumbbell Press', 'ex_incline_db_press', [pastSession], 'cl_aarav');
+  assert.equal(prevBest.bestWeightKg, 22.5);
+  assert.equal(prevBest.bestRepsAtWeight, 10);
+  assert.ok(prevBest.bestEstimated1RM > 29);
+  assert.equal(prevBest.lastSessionDate, '2026-11-10');
+
+  // Compute live session metrics & personal record detection
+  const currentExercises: WorkoutExerciseLog[] = [
+    {
+      exerciseId: 'ex_incline_db_press',
+      exerciseName: 'Incline Dumbbell Press',
+      targetSets: '3',
+      targetReps: '10',
+      restSeconds: 60,
+      sets: [
+        { setNumber: 1, reps: 10, weightKg: 22.5, completed: true },
+        { setNumber: 2, reps: 10, weightKg: 25, completed: true }, // PR! 25kg > 22.5kg
+        { setNumber: 3, reps: 8, weightKg: 25, completed: false }, // Not completed, ignored
+      ],
+    },
+  ];
+
+  const metrics = computeSessionMetrics(currentExercises, [pastSession], 'cl_aarav');
+  // Volume: (22.5 * 10) + (25 * 10) = 225 + 250 = 475 kg
+  assert.equal(metrics.totalVolumeKg, 475);
+  assert.equal(metrics.completedSetsCount, 2);
+  assert.equal(metrics.prCount, 1);
+  assert.equal(metrics.exercisesWithPRs[0].sets[1].isPersonalRecord, true);
+  assert.equal(metrics.exercisesWithPRs[0].sets[0].isPersonalRecord, false);
+
+  // Initial exercises builder from day plan
+  const dayPlan: WorkoutDayPlan = {
+    dayIndex: 0,
+    dayLabel: 'Mon',
+    focusTitle: 'Upper Push',
+    isRecoveryDay: false,
+    durationMinutes: 45,
+    coachInstructions: 'Controlled eccentric tempo.',
+    exercises: [
+      { id: 'item_1', name: 'Incline Dumbbell Press', sets: '3', reps: '10', rest: '60s' },
+    ],
+  };
+  const built = buildInitialWorkoutExercises(dayPlan, BUILTIN_EXERCISES, [pastSession], 'cl_aarav');
+  assert.equal(built.length, 1);
+  assert.equal(built[0].exerciseId, 'ex_incline_db_press');
+  assert.equal(built[0].sets.length, 3);
+  assert.equal(built[0].sets[0].weightKg, 22.5); // Pre-filled with previous best weight
+});
+
+test('Stage 4A — Indian Food Database: nutrition scaling & daily totals', () => {
+  assert.ok(INDIAN_FOOD_DATABASE.length >= 20, 'Must have at least 20 Indian staples');
+
+  // Verify nutritional integrity
+  for (const food of INDIAN_FOOD_DATABASE) {
+    assert.ok(food.id.startsWith('fd_'), `Food ${food.name} id must start with fd_`);
+    assert.ok(food.estimatedCalories > 0, `Food ${food.name} must have positive calories`);
+    assert.ok(food.estimatedProteinG >= 0, `Food ${food.name} must have non-negative protein`);
+    assert.ok(food.servingGrams > 0, `Food ${food.name} must have serving grams`);
+  }
+
+  // Food scaling
+  const paneer = INDIAN_FOOD_DATABASE.find((f) => f.id === 'fd_paneer_bhurji')!;
+  assert.ok(paneer);
+  // 1.5x portion
+  const loggedItem = scaleFoodToLoggedItem(paneer, 'lunch', 1.5, 'item_paneer_1');
+  assert.equal(loggedItem.servings, 1.5);
+  assert.equal(loggedItem.slot, 'lunch');
+  assert.equal(loggedItem.estimatedCalories, Math.round(paneer.estimatedCalories * 1.5));
+  assert.equal(loggedItem.estimatedProteinG, Math.round(paneer.estimatedProteinG * 1.5 * 10) / 10);
+  assert.equal(loggedItem.isEstimated, true);
+
+  // Daily totals calculation
+  const roti = INDIAN_FOOD_DATABASE.find((f) => f.id === 'fd_phulka')!;
+  const dal = INDIAN_FOOD_DATABASE.find((f) => f.id === 'fd_dal_tadka')!;
+  assert.ok(roti);
+  assert.ok(dal);
+  const items: LoggedFoodItem[] = [
+    scaleFoodToLoggedItem(roti, 'lunch', 2, 'item_1'), // 2 rotis
+    scaleFoodToLoggedItem(dal, 'lunch', 1, 'item_2'),  // 1 bowl dal
+  ];
+
+  const totals = computeNutritionTotals(items);
+  const expectedCal = items[0].estimatedCalories + items[1].estimatedCalories;
+  const expectedProtein = Math.round((items[0].estimatedProteinG + items[1].estimatedProteinG) * 10) / 10;
+  assert.equal(totals.calories, expectedCal);
+  assert.equal(totals.proteinG, expectedProtein);
+});
+
+test('Stage 4A — Achievements Engine: unlocks & progress evaluation', () => {
+  assert.equal(ACHIEVEMENT_CATALOG.length, 9, 'Must have exactly 9 badge definitions');
+
+  const assignments: Assignment[] = [
+    {
+      id: 'asg_1',
+      clientId: 'cl_aarav',
+      title: 'Workout',
+      category: 'workout',
+      instructions: 'Lift',
+      durationMinutes: 40,
+      dueTime: '8:00 PM',
+      completionType: 'checkbox',
+      scheduledDates: ['2026-11-14', '2026-11-15'],
+      isOptional: false,
+      isRecovery: false,
+      hasCustomOverride: false,
+      createdAt: '2026-11-01T00:00:00Z',
+    },
+  ];
+
+  const completions: CompletionEvent[] = [
+    {
+      id: 'comp_1',
+      assignmentId: 'asg_1',
+      clientId: 'cl_aarav',
+      dateKey: '2026-11-15',
+      completedAt: '2026-11-15T18:00:00Z',
+    },
+  ];
+
+  const sessions: WorkoutSession[] = [
+    {
+      id: 'sess_1',
+      clientId: 'cl_aarav',
+      dateKey: '2026-11-15',
+      title: 'First Workout',
+      status: 'completed',
+      startedAt: '2026-11-15T17:00:00Z',
+      durationSeconds: 1800,
+      totalVolumeKg: 3500,
+      completedSetsCount: 10,
+      prCount: 1,
+      exercises: [],
+      updatedAt: '2026-11-15T18:00:00Z',
+    },
+  ];
+
+  const evalResult = evaluateAchievementsState({
+    clientId: 'cl_aarav',
+    todayKey: '2026-11-15',
+    assignments,
+    completions,
+    approvedRecoveryDates: [],
+    workoutSessions: sessions,
+    progressEvents: [],
+    existingUnlocks: [],
+  });
+
+  // Should have earned first_workout and personal_record badges
+  assert.ok(evalResult.newlyUnlocked.some((u) => u.badgeId === 'first_workout'));
+  assert.ok(evalResult.newlyUnlocked.some((u) => u.badgeId === 'personal_record'));
+
+  // If already unlocked, newlyUnlocked must deduplicate and return 0
+  const reEval = evaluateAchievementsState({
+    clientId: 'cl_aarav',
+    todayKey: '2026-11-15',
+    assignments,
+    completions,
+    approvedRecoveryDates: [],
+    workoutSessions: sessions,
+    progressEvents: [],
+    existingUnlocks: evalResult.newlyUnlocked,
+  });
+  assert.equal(reEval.newlyUnlocked.length, 0, 'Must deduplicate already unlocked badges');
+});
+
+test('Stage 4A — FitPlus Wrapped: monthly aggregation & privacy controls', () => {
+  const sessions: WorkoutSession[] = [
+    {
+      id: 'sess_nov_1',
+      clientId: 'cl_aarav',
+      dateKey: '2026-11-05',
+      title: 'Legs & Core',
+      status: 'completed',
+      startedAt: '2026-11-05T09:00:00Z',
+      durationSeconds: 2700, // 45 mins
+      totalVolumeKg: 5200,
+      completedSetsCount: 15,
+      prCount: 2,
+      exercises: [
+        {
+          exerciseId: 'ex_goblet_squat',
+          exerciseName: 'Goblet Squat (Dumbbell or Kettlebell)',
+          targetSets: '3',
+          targetReps: '12',
+          restSeconds: 60,
+          sets: [
+            { setNumber: 1, reps: 12, weightKg: 20, completed: true },
+            { setNumber: 2, reps: 12, weightKg: 20, completed: true },
+            { setNumber: 3, reps: 12, weightKg: 22.5, completed: true },
+          ],
+        },
+      ],
+      updatedAt: '2026-11-05T10:00:00Z',
+    },
+  ];
+
+  const summary = computeMonthlyWrappedSummary({
+    clientId: 'cl_aarav',
+    monthKey: '2026-11',
+    todayKey: '2026-11-15',
+    assignments: [],
+    completions: [],
+    approvedRecoveryDates: [],
+    workoutSessions: sessions,
+    achievements: [],
+    progressEvents: [],
+    includeWeightChange: false, // Default privacy OFF
+  });
+
+  assert.equal(summary.monthKey, '2026-11');
+  assert.equal(summary.workoutsCompleted, 1);
+  assert.equal(summary.totalTrainingMinutes, 45);
+  assert.equal(summary.totalVolumeKg, 5200);
+  assert.equal(summary.prsAchieved, 2);
+  assert.equal(summary.topExercise, 'Goblet Squat (Dumbbell or Kettlebell)');
+  assert.equal(summary.optionalWeightChangeKg, undefined, 'Weight change must be undefined when privacy toggle is OFF');
+});
+
+test('Stage 4B — Messaging Engine: conversation IDs, Indian time formatting, and WhatsApp chat links', () => {
+  const convId = buildConversationId('cl_aarav', 'trn_arjun');
+  assert.equal(convId, 'conv_cl_aarav_trn_arjun');
+
+  const testIso = '2026-11-16T09:30:00.000Z';
+  const formattedTime = formatTimeIndian(testIso);
+  assert.ok(formattedTime.includes(':'), 'Time should format with hours and minutes');
+
+  const waUrl = buildWhatsAppChatUrl('+919876543210', 'Namaste Aarav! Coach Arjun here.');
+  assert.ok(waUrl && waUrl.startsWith('https://wa.me/919876543210'));
+  assert.ok(waUrl.includes('Namaste%20Aarav'));
+});
+
+test('Stage 4B — Coaching Builders: visual workout day metrics and nutrition macro scaling', () => {
+  const sampleDay = {
+    dayIndex: 0,
+    dayLabel: 'Day 1',
+    focusTitle: 'Push Day',
+    isRecoveryDay: false,
+    durationMinutes: 50,
+    coachInstructions: 'Controlled eccentric tempo.',
+    exercises: [
+      {
+        id: 'ex_1',
+        name: 'Incline DB Press',
+        targetSets: 4,
+        targetReps: '8-10',
+        restSeconds: 90,
+      },
+      {
+        id: 'ex_2',
+        name: 'Cable Flyes',
+        targetSets: 3,
+        targetReps: '12-15',
+        restSeconds: 60,
+      },
+    ],
+  };
+
+  const workoutMetrics = calculateVisualWorkoutDayMetrics(sampleDay);
+  assert.equal(workoutMetrics.exerciseCount, 2);
+  assert.equal(workoutMetrics.totalSets, 7);
+  assert.ok(workoutMetrics.estimatedMinutes >= 15);
+
+  const paneerFood = INDIAN_FOOD_DATABASE.find((f) => f.id === 'fd_paneer_bhurji');
+  assert.ok(paneerFood, 'Paneer bhurji must exist in Indian food database');
+  const scaled = scaleIndianFoodItem(paneerFood, 2);
+  assert.equal(scaled.servings, 2);
+  assert.equal(scaled.estimatedCalories, paneerFood.estimatedCalories * 2);
+  assert.equal(scaled.estimatedProteinG, paneerFood.estimatedProteinG * 2);
+
+  const mealTotals = calculateVisualNutritionDayMacros([
+    {
+      slot: 'lunch',
+      title: 'Lunch',
+      items: [scaled],
+    },
+  ]);
+  assert.equal(mealTotals.calories, paneerFood.estimatedCalories * 2);
+  assert.equal(mealTotals.proteinG, paneerFood.estimatedProteinG * 2);
+});
+
+test('Stage 4B — Client Pulse & Action Items: status classification and priority ranking', () => {
+  const mockClient = {
+    id: 'cl_test',
+    userId: 'usr_test',
+    firstName: 'Dev',
+    lastName: 'Sharma',
+    primaryGoal: 'muscle_strength' as const,
+    experienceLevel: 'intermediate' as const,
+    environment: 'gym' as const,
+    daysPerWeek: 4,
+    equipment: ['dumbbells'],
+    dietaryPreference: 'vegetarian' as const,
+    targetWeightKg: 75,
+    gender: 'male' as const,
+    createdAt: '2026-10-01T00:00:00Z',
+  };
+
+  // Client with 0 completions should trigger attention
+  const pulse = computeClientPulse({
+    client: mockClient,
+    assignments: [
+      {
+        id: 'asg_1',
+        clientId: 'cl_test',
+        title: 'Workout',
+        category: 'workout',
+        instructions: 'Lift',
+        durationMinutes: 45,
+        dueTime: '08:00',
+        completionType: 'checkbox',
+        isOptional: false,
+        isRecovery: false,
+        hasCustomOverride: false,
+        scheduledDates: ['2026-11-10', '2026-11-12', '2026-11-14'],
+        createdAt: '2026-11-01T00:00:00Z',
+      },
+    ],
+    completions: [],
+    todayKey: '2026-11-16',
+    workoutSessions: [],
+    weeklyCheckIns: [],
+  });
+
+  assert.ok(
+    pulse.status === 'needs_attention' || pulse.status === 'follow_up_recommended',
+    'Client with missing workouts should require attention',
+  );
+  assert.ok(pulse.attentionReasons.length > 0);
+
+  // Trainer action items ranking
+  const actionItems = computeTrainerActionItems({
+    clients: [mockClient],
+    assignments: [],
+    completions: [],
+    todayKey: '2026-11-16',
+    workoutSessions: [],
+    weeklyCheckIns: [
+      {
+        id: 'wci_1',
+        clientId: 'cl_test',
+        weekKey: '2026-11-15',
+        dateKey: '2026-11-15',
+        energyLevel: 3,
+        sleepQuality: 3,
+        workoutDifficulty: 4,
+        hungerLevel: 3,
+        createdAt: '2026-11-15T20:00:00Z',
+        updatedAt: '2026-11-15T20:00:00Z',
+      },
+    ],
+    subscriptions: [],
+    conversations: [
+      {
+        id: 'conv_1',
+        clientId: 'cl_test',
+        clientUserId: 'usr_test',
+        clientName: 'Dev Sharma',
+        trainerId: 'trn_arjun',
+        trainerUserId: 'usr_trainer_arjun',
+        trainerName: 'Coach Arjun',
+        unreadCountClient: 0,
+        unreadCountTrainer: 2,
+        createdAt: '2026-11-01T00:00:00Z',
+        updatedAt: '2026-11-16T08:00:00Z',
+      },
+    ],
+  });
+
+  assert.ok(actionItems.length >= 2, 'Should generate actions for unread chat and pending check-in');
+  assert.equal(actionItems[0].priority, 'high', 'Highest priority action should be ranked first');
+});
+
+test('Stage 4B — Automation & Reminders: quiet hours evaluation and idempotency dispatch', () => {
+  const pastReminder = {
+    id: 'rem_past',
+    recipientUserId: 'usr_client_aarav',
+    category: 'workout' as const,
+    title: 'Hydration Target',
+    body: 'Time to drink your afternoon water target!',
+    scheduledFor: '2026-11-16T12:00:00Z',
+    triggerStatus: 'scheduled' as const,
+    idempotencyKey: 'rem_hydration_20261116',
+    channel: 'in_app' as const,
+    createdAt: '2026-11-16T08:00:00Z',
+  };
+
+  const futureReminder = {
+    id: 'rem_future',
+    recipientUserId: 'usr_client_aarav',
+    category: 'check_in' as const,
+    title: 'Sunday Check-in',
+    body: 'Log your weekly check-in.',
+    scheduledFor: '2026-11-20T18:00:00Z',
+    triggerStatus: 'scheduled' as const,
+    idempotencyKey: 'rem_checkin_20261120',
+    channel: 'in_app' as const,
+    createdAt: '2026-11-16T08:00:00Z',
+  };
+
+  const evalResult = evaluateScheduledReminders({
+    reminders: [pastReminder, futureReminder],
+    nowIso: '2026-11-16T14:00:00Z',
+    enforceQuietHours: false,
+  });
+
+  assert.equal(evalResult.dispatchedReminders.length, 1);
+  assert.equal(evalResult.dispatchedReminders[0].id, 'rem_past');
+  assert.equal(evalResult.dispatchedReminders[0].triggerStatus, 'sent');
+  assert.equal(evalResult.generatedNotifications.length, 1);
+  assert.equal(evalResult.generatedNotifications[0].recipientUserId, 'usr_client_aarav');
+});
+
+
 

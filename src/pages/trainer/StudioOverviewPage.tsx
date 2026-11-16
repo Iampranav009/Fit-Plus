@@ -1,10 +1,24 @@
 import React, { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Calendar, Plus, UserPlus } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  Calendar,
+  Plus,
+  UserPlus,
+  MessageSquare,
+  Dumbbell,
+  Apple,
+  Sparkles,
+  TrendingUp,
+  Clock,
+  CheckCircle2,
+} from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { formatIndiaDate, formatINR } from '../../lib/date';
 import { computeClientAdherencePercent } from '../../lib/streak';
+import { computeTrainerActionItems, computeTrainerBusinessAnalytics } from '../../lib/pulseEngine';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { EmptyState } from '../../components/ui/EmptyState';
@@ -22,8 +36,41 @@ export const StudioOverviewPage: React.FC = () => {
     linkedClientsForActiveTrainer,
     pendingRelationshipsForActiveTrainer,
     getClientApprovedRecoveryDates,
+    unreadMessagesCount,
   } = useApp();
   const navigate = useNavigate();
+
+  const trainerActionItems = useMemo(() => {
+    return computeTrainerActionItems({
+      clients: linkedClientsForActiveTrainer,
+      assignments: store.assignments,
+      completions: store.completions,
+      todayKey,
+      workoutSessions: store.workoutSessions ?? [],
+      weeklyCheckIns: store.weeklyCheckIns ?? [],
+      subscriptions,
+      conversations: store.conversations ?? [],
+    });
+  }, [
+    linkedClientsForActiveTrainer,
+    store.assignments,
+    store.completions,
+    todayKey,
+    store.workoutSessions,
+    store.weeklyCheckIns,
+    subscriptions,
+    store.conversations,
+  ]);
+
+  const businessAnalytics = useMemo(() => {
+    return computeTrainerBusinessAnalytics({
+      clients: linkedClientsForActiveTrainer,
+      packages: store.packages,
+      subscriptions,
+      payments,
+      bookings: store.bookings,
+    });
+  }, [linkedClientsForActiveTrainer, store.packages, subscriptions, payments, store.bookings]);
 
   const clientMetrics = useMemo(() => {
     return linkedClientsForActiveTrainer.map((client) => {
@@ -122,6 +169,35 @@ export const StudioOverviewPage: React.FC = () => {
             <GlassButton
               variant="glass"
               size="sm"
+              onClick={() => navigate('/studio/messages')}
+            >
+              <MessageSquare className="w-4 h-4 text-[#FF803E]" aria-hidden="true" />
+              <span>Messages</span>
+              {unreadMessagesCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-[#FF803E] text-white text-[10px] font-bold">
+                  {unreadMessagesCount}
+                </span>
+              )}
+            </GlassButton>
+            <GlassButton
+              variant="glass"
+              size="sm"
+              onClick={() => navigate('/studio/workout-builder')}
+            >
+              <Dumbbell className="w-4 h-4 text-[#FF803E]" aria-hidden="true" />
+              <span>Workout Studio</span>
+            </GlassButton>
+            <GlassButton
+              variant="glass"
+              size="sm"
+              onClick={() => navigate('/studio/nutrition-builder')}
+            >
+              <Apple className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+              <span>Nutrition Studio</span>
+            </GlassButton>
+            <GlassButton
+              variant="glass"
+              size="sm"
               onClick={() => navigate('/studio/clients')}
             >
               <UserPlus className="w-4 h-4" aria-hidden="true" />
@@ -133,6 +209,58 @@ export const StudioOverviewPage: React.FC = () => {
             </GlassButton>
           </div>
         </div>
+
+        {/* Action Center (Stage 4B) */}
+        {trainerActionItems.length > 0 && (
+          <section className="p-5 rounded-[22px] bg-gradient-to-br from-[#1C2029]/90 to-[#14171F]/90 border border-white/10 shadow-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FF803E] animate-pulse" />
+                <h2 className="text-sm font-bold text-white tracking-tight uppercase tracking-wider">
+                  Trainer Action Center ({trainerActionItems.length})
+                </h2>
+              </div>
+              <span className="text-[11px] text-white/40">Requires coach attention</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {trainerActionItems.slice(0, 6).map((item) => (
+                <div
+                  key={item.id}
+                  className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all ${
+                    item.priority === 'high'
+                      ? 'bg-rose-500/[0.04] border-rose-500/20 hover:border-rose-500/40'
+                      : 'bg-white/[0.02] border-white/5 hover:border-white/15'
+                  }`}
+                >
+                  <div className="space-y-1 mb-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white truncate">{item.title}</span>
+                      <span
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                          item.priority === 'high'
+                            ? 'bg-rose-500/20 text-rose-300'
+                            : 'bg-amber-500/20 text-amber-300'
+                        }`}
+                      >
+                        {item.priority}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-white/60 line-clamp-2">{item.description}</p>
+                  </div>
+
+                  <button
+                    onClick={() => navigate(item.actionUrl)}
+                    className="w-full py-1.5 px-3 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] text-xs font-semibold text-white flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <span>{item.actionLabel}</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-[#FF803E]" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 4 Derived KPI Cards */}
         <section
@@ -162,7 +290,7 @@ export const StudioOverviewPage: React.FC = () => {
             value={formatINR(isCloudSynced ? capturedRevenueInr : demoPackageValue)}
             subtitle={
               isCloudSynced
-                ? `${trainerActiveSubscriptions.length} active subscription${trainerActiveSubscriptions.length === 1 ? '' : 's'}`
+                ? `${trainerActiveSubscriptions.length} active · Cashfree T+2 Rolling`
                 : 'Example monthly total'
             }
           />

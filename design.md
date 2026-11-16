@@ -54,3 +54,62 @@ Ambient depth is achieved with subtle radial lighting blending charcoal (`#10121
 - Spring curves: crisp damped springs (`stiffness: 380, damping: 32`) for controls and sheets; smooth 600ms easing for SVG progress rings and counters.
 - `prefers-reduced-motion: reduce` suppresses decorative movement while preserving instant state clarity.
 - Every interactive target meets `>= 44×44px` hitbox sizing, keyboard focus visibility, and WCAG AA foreground contrast.
+
+---
+
+## 7. Stage 4A UI & Interactive Experience Refinements
+
+### Live Workout Experience (`LiveWorkoutPage`)
+- **Top Control Bar**: Minimalist session header with back escape hatch, elapsed session stopwatch (`tabular-nums`), pause/resume toggle, and high-visibility Finish action.
+- **Dynamic Rest Countdown Banner**: Highlighted ember-orange banner with countdown timer, ±15s fine-adjustment controls, skip trigger, and haptic pulse upon rest expiration.
+- **Exercise Stepper Carousel**: Horizontal sticky strip with per-exercise completion badges (`#1`, `#2`, ...), progress counters (`2/3 sets`), and active selection indicators.
+- **Anatomical Target Visualizer (`AnatomyMuscleSvg`)**: Vector SVG rendering anterior and posterior human muscular systems highlighting primary (`#FF803E`) and secondary (`#FFB06B`) target muscle groups with zero external image asset dependencies.
+- **Live Set Tracking Grid**: Numeric inputs for weight (kg) and reps, instant one-rep max estimation (`Epley formula`), personal record detection, and tap-to-complete check buttons with light tactile haptic vibration.
+- **Exercise Substitution Sheet**: In-line modal showing approved alternatives matching the current target muscle group and equipment availability.
+
+### Indian Nutrition Diary (`NutritionDiaryPage`)
+- **NIN / IFCT Nutritional Disclaimer Banner**: Persistent contextual banner clarifying that values are verified dietary estimates aligned with ICMR-NIN / IFCT standards for guidance rather than clinical prescriptions.
+- **Meal Slot Buckets**: Dedicated cards for Breakfast, Lunch, Evening Snack, Dinner, and Additional Items with per-slot completion checkmarks.
+- **Indian Food Catalog Picker**: Searchable modal featuring 23+ home staples with portion multipliers (0.5x, 1x, 1.5x, 2x) and instant macro calculations.
+- **Quick-Add Custom Food Item**: Fallback form enabling members to log mom's recipes or uncataloged regional dishes.
+
+### FitPlus Wrapped (`WrappedPage`)
+- **Nocturnal Liquid-Glass Canvas Card Generator**: Native HTML5 Canvas rendering of monthly milestones (`workoutsCompleted`, `totalVolumeKg`, `consistencyPercent`, `longestStreakDays`, `topExercise`).
+- **Aspect Ratio Selector**: One-click toggle between 9:16 (Instagram Story / WhatsApp Status, 1080×1920) and 4:5 (Instagram Feed, 1080×1350).
+- **Privacy-First Architecture**: Optional weight changes, photos, and personal notes are **default OFF** with explicit opt-in toggles.
+
+### Achievement Celebrations (`AchievementUnlockModal`)
+- **Medallion Renderers**: 9 distinct custom SVG medallions representing milestones (First Workout, Personal Record, 7-Day Streak, 14-Day Streak, 30-Day Streak, 60-Day Streak, 100-Day Streak, 10 Active Days, 30 Active Days).
+- **Celebration Modal**: Animated backdrop with spring entrance, contextual haptic feedback (`triggerHaptic('success')`), and clear dismissal controls.
+
+---
+
+## 8. Stage 4B Coaching Operations & Messaging UI
+
+### FitPlus Connect (`MessagesPage`, `ChatConversationList`, `ChatMessageBubble`, `ChatComposer`)
+- **Apple Messages Aesthetic**: Clean 2-column layout (conversation list + active message stream) with floating glass composer.
+- **Message Bubbles**:
+  - *Sent Messages*: Gradient fill (`from-brand-primary to-orange-500`) with dark `#101218` high-contrast typography, timestamp, and read-receipt double checkmarks.
+  - *Received Messages*: Semi-translucent glass cards (`bg-glass border border-glass-border`) with light `#F5F5F7` text.
+- **Plan Reference Cards**: Interactive mini-cards embedded inside bubbles displaying program title, day count, and a direct "View Routine" button.
+- **Image Attachments**: Rounded thumbnail with subtle border and one-tap fullscreen zoom modal.
+- **Composer Controls**: Auto-growing textarea, attachment icon, plan picker icon, and circular spring-animated send button with tactile haptic trigger.
+
+### Workout Studio Builder (`StudioWorkoutBuilderPage`)
+- **Multi-Week Program Tabs**: Minimalist glass tab bar allowing trainers to switch between Program Weeks (Week 1, Week 2, etc.) and Training Days (Push, Pull, Legs, Recovery).
+- **Live Day Metrics Bar**: Sticky summary header calculating total sets, estimated completion duration (minutes), and primary target muscle breakdown in real time.
+- **Exercise Card Design**: Individual exercise modules with drag-and-drop-ready layout, set/rep counter pills, rest duration dropdown, RPE selector, and coaching tip inputs.
+
+### Nutrition Studio Builder (`StudioNutritionBuilderPage`)
+- **Authentic Indian Meal Slots**: Structured cards for Breakfast, Mid-Morning, Lunch, Evening Snack, Dinner, and Post-Workout.
+- **Live Macro Summary Header**: Multi-bar visual gauge displaying real-time Calories, Protein (g), Carbohydrates (g), and Fat (g) compared against daily target benchmarks.
+- **Indian Portion Selectors**: Specialized unit dropdowns supporting standard Indian kitchen measurements (`katori`, `phulka`, `piece`, `cup`, `bowl`, `100g`) with instant recalculation.
+
+### Client Pulse & Studio Action Center (`StudioOverviewPage`, `StudioClientsPage`)
+- **Status Indicator Badges**:
+  - `On Track`: Emerald green badge with pulse glow (`#B8E66C`).
+  - `Needs Attention`: Crimson warning badge (`#FF6B70`) with high-priority sorting.
+  - `Follow-up Recommended`: Amber badge (`#FFB06B`) for unreviewed check-ins.
+  - `Insufficient Data`: Subtle slate badge (`#A2A8B5`) for newly onboarded clients.
+- **Action Cards**: Elevated `#1C2029` cards featuring client avatar, urgency badge, contextual reason, and one-click quick CTAs (`Message`, `Review Check-In`, `WhatsApp`).
+

@@ -1,12 +1,17 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import {
+  Apple,
+  BookOpen,
   Calendar,
+  ClipboardCheck,
   ClipboardList,
   Compass,
   Dumbbell,
+  Flame,
   Home,
   LayoutDashboard,
+  MessageSquare,
   MoreHorizontal,
   Package,
   Plus,
@@ -20,6 +25,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { GlassButton } from '../ui/GlassButton';
 import { SkeletonBlock } from '../ui/FitnessIllustrations';
+import { AchievementUnlockModal } from '../ui/AchievementUnlockModal';
 import { GlassSidebar, GlassTopHeader, type NavItem } from './GlassNavigation';
 import { GlassTabBar } from './GlassTabBar';
 
@@ -34,7 +40,15 @@ export const AppShell: React.FC<AppShellProps> = ({
   headerRight,
   pageTitle,
 }) => {
-  const { store, activeUser, isCloudSynced, setDemoSimulationFlags } = useApp();
+  const {
+    store,
+    activeUser,
+    isCloudSynced,
+    setDemoSimulationFlags,
+    newlyUnlockedAchievement,
+    dismissUnlockedAchievement,
+    unreadMessagesCount,
+  } = useApp();
   const location = useLocation();
 
   const isTrainerRoute = location.pathname.startsWith('/studio');
@@ -42,19 +56,36 @@ export const AppShell: React.FC<AppShellProps> = ({
     (n) => n.recipientUserId === activeUser.id && !n.read,
   ).length;
 
-  const clientNav: NavItem[] = [
+  const clientDesktopNav: NavItem[] = [
     { to: '/app/home', label: 'Today', icon: Home },
+    { to: '/app/messages', label: 'Messages', icon: MessageSquare, badge: unreadMessagesCount },
+    { to: '/app/workout', label: 'Workout', icon: Flame },
     { to: '/app/plan', label: 'Plan', icon: Dumbbell },
+    { to: '/app/nutrition', label: 'Nutrition', icon: Apple },
+    { to: '/app/exercises', label: 'Exercises', icon: BookOpen },
     { to: '/app/progress', label: 'Progress', icon: TrendingUp },
+    { to: '/app/check-in', label: 'Check-in', icon: ClipboardCheck },
     { to: '/app/coach', label: 'Coach', icon: Compass },
+    { to: '/app/profile', label: 'You', icon: User },
+  ];
+
+  const clientMobileNav: NavItem[] = [
+    { to: '/app/home', label: 'Today', icon: Home },
+    { to: '/app/messages', label: 'Chat', icon: MessageSquare, badge: unreadMessagesCount },
+    { to: '/app/workout', label: 'Workout', icon: Flame, accent: true },
+    { to: '/app/progress', label: 'Progress', icon: TrendingUp },
     { to: '/app/profile', label: 'You', icon: User },
   ];
 
   const trainerDesktopNav: NavItem[] = [
     { to: '/studio/overview', label: 'Overview', icon: LayoutDashboard },
+    { to: '/studio/messages', label: 'Messages', icon: MessageSquare, badge: unreadMessagesCount },
     { to: '/studio/clients', label: 'Clients', icon: Users },
+    { to: '/studio/workout-builder', label: 'Workout Studio', icon: Dumbbell },
+    { to: '/studio/nutrition-builder', label: 'Nutrition Studio', icon: Apple },
     { to: '/studio/assign', label: 'Assign', icon: Plus },
     { to: '/studio/templates', label: 'Templates', icon: ClipboardList },
+    { to: '/studio/exercises', label: 'Exercise Library', icon: BookOpen },
     { to: '/studio/ai-builder', label: 'AI Builder', icon: Sparkles },
     { to: '/studio/packages', label: 'Packages', icon: Package },
     { to: '/studio/consultations', label: 'Schedule', icon: Calendar },
@@ -70,8 +101,8 @@ export const AppShell: React.FC<AppShellProps> = ({
     { to: '/studio/settings', label: 'More', icon: MoreHorizontal },
   ];
 
-  const navItems = isTrainerRoute ? trainerDesktopNav : clientNav;
-  const mobileTabs = isTrainerRoute ? trainerMobileNav : clientNav;
+  const navItems = isTrainerRoute ? trainerDesktopNav : clientDesktopNav;
+  const mobileTabs = isTrainerRoute ? trainerMobileNav : clientMobileNav;
 
   const workspaceLabel = isTrainerRoute
     ? isCloudSynced
@@ -145,6 +176,11 @@ export const AppShell: React.FC<AppShellProps> = ({
       </div>
 
       <GlassTabBar items={mobileTabs} />
+
+      <AchievementUnlockModal
+        unlock={newlyUnlockedAchievement}
+        onDismiss={dismissUnlockedAchievement}
+      />
     </div>
   );
 };

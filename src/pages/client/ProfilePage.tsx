@@ -125,44 +125,111 @@ export const ProfilePage: React.FC = () => {
           <GlassButton type="submit">Save changes</GlassButton>
         </form>
 
+        {/* Stage 4A Shortcuts & Features */}
         <section className="rounded-[22px] surface-card divide-y divide-white/[0.08] overflow-hidden">
           <Link
-            to="/app/settings"
+            to="/app/wrapped"
+            className="p-4 flex items-center justify-between gap-3 hover:bg-white/[0.03] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#FF803E]/15 border border-[#FF803E]/30 flex items-center justify-center text-[#FF803E]">
+                ✨
+              </div>
+              <div>
+                <p className="text-[15px] font-semibold text-[#F5F5F7] flex items-center gap-2">
+                  <span>FitPlus Wrapped</span>
+                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#FF803E]/20 text-[#FF803E] uppercase font-bold">
+                    New
+                  </span>
+                </p>
+                <p className="text-[13px] text-[#7C8393]">
+                  Your monthly training story, consistency records & shareable cards
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[#7C8393]" aria-hidden="true" />
+          </Link>
+
+          <Link
+            to="/app/check-in"
             className="p-4 flex items-center justify-between gap-3 hover:bg-white/[0.03] transition-colors"
           >
             <div>
-              <p className="text-[15px] font-medium text-[#F5F5F7]">
-                Role preview switcher, timezone & QA states
-              </p>
+              <p className="text-[15px] font-medium text-[#F5F5F7]">Weekly Check-in & Review</p>
               <p className="text-[13px] text-[#7C8393]">
-                Preview Trainer Studio, recovery day, no-task day, or independent client
+                Reflect on weekly energy, sleep, hunger and read your coach's guidance
               </p>
             </div>
             <ChevronRight className="w-4 h-4 text-[#7C8393]" aria-hidden="true" />
           </Link>
 
-          <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <Link
+            to="/app/nutrition"
+            className="p-4 flex items-center justify-between gap-3 hover:bg-white/[0.03] transition-colors"
+          >
             <div>
-              <p className="text-[15px] font-medium text-[#F5F5F7]">{COPY.client.resetDemo}</p>
-              <p className="text-[12px] text-[#7C8393]">{COPY.states.resetWarning}</p>
+              <p className="text-[15px] font-medium text-[#F5F5F7]">Daily Nutrition Diary</p>
+              <p className="text-[13px] text-[#7C8393]">
+                Estimated Indian meal tracking, macro estimates & hydration sync
+              </p>
             </div>
-            <div className="flex gap-2">
-              <GlassButton variant="secondary" size="sm" onClick={resetDemoState}>
-                {COPY.client.resetDemo}
-              </GlassButton>
-              <GlassButton
-                variant="tertiary"
-                size="sm"
-                onClick={() => {
-                  signOutDemo();
-                  navigate('/auth');
-                }}
-              >
-                {COPY.client.signOutDemo}
-              </GlassButton>
+            <ChevronRight className="w-4 h-4 text-[#7C8393]" aria-hidden="true" />
+          </Link>
+
+          <Link
+            to="/app/exercises"
+            className="p-4 flex items-center justify-between gap-3 hover:bg-white/[0.03] transition-colors"
+          >
+            <div>
+              <p className="text-[15px] font-medium text-[#F5F5F7]">Exercise Library</p>
+              <p className="text-[13px] text-[#7C8393]">
+                Browse 30+ structured exercises with anatomical muscle diagrams and cues
+              </p>
             </div>
-          </div>
+            <ChevronRight className="w-4 h-4 text-[#7C8393]" aria-hidden="true" />
+          </Link>
         </section>
+
+        {!isCloudSynced ? (
+          <section className="rounded-[22px] surface-card divide-y divide-white/[0.08] overflow-hidden">
+            <Link
+              to="/app/settings"
+              className="p-4 flex items-center justify-between gap-3 hover:bg-white/[0.03] transition-colors"
+            >
+              <div>
+                <p className="text-[15px] font-medium text-[#F5F5F7]">
+                  Role preview switcher, timezone & QA states
+                </p>
+                <p className="text-[13px] text-[#7C8393]">
+                  Preview Trainer Studio, recovery day, no-task day, or independent client
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-[#7C8393]" aria-hidden="true" />
+            </Link>
+
+            <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="text-[15px] font-medium text-[#F5F5F7]">{COPY.client.resetDemo}</p>
+                <p className="text-[12px] text-[#7C8393]">{COPY.states.resetWarning}</p>
+              </div>
+              <div className="flex gap-2">
+                <GlassButton variant="secondary" size="sm" onClick={resetDemoState}>
+                  {COPY.client.resetDemo}
+                </GlassButton>
+                <GlassButton
+                  variant="tertiary"
+                  size="sm"
+                  onClick={() => {
+                    signOutDemo();
+                    navigate('/auth');
+                  }}
+                >
+                  {COPY.client.signOutDemo}
+                </GlassButton>
+              </div>
+            </div>
+          </section>
+        ) : null}
       </div>
     </AppShell>
   );

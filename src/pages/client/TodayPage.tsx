@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Calendar, ChevronRight, Droplets, Plus, Sparkles } from 'lucide-react';
+import { ArrowRight, Calendar, Check, ChevronRight, Droplets, Plus, Sparkles } from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { addDaysToKey, formatIndiaDate, getGreetingPeriod } from '../../lib/date';
+import { computeNutritionTotals } from '../../data/indianFoods';
 import {
   computeDayConsistency,
   computeStreakSummary,
@@ -33,6 +34,7 @@ export const TodayPage: React.FC = () => {
     isCloudSynced,
     todayHydrationGlasses,
     setTodayHydrationGlasses,
+    nutritionLogs,
     celebrateStreakToday,
     dismissStreakCelebration,
     toggleAssignmentCompletion,
@@ -124,6 +126,16 @@ export const TodayPage: React.FC = () => {
     () => store.mealPlans.find((m) => m.clientId === activeClient?.id),
     [store.mealPlans, activeClient?.id],
   );
+
+  const todayNutrition = useMemo(() => {
+    return nutritionLogs.find(
+      (l) => (!activeClient || l.clientId === activeClient.id) && l.dateKey === todayKey,
+    );
+  }, [nutritionLogs, activeClient, todayKey]);
+
+  const nutritionTotals = useMemo(() => {
+    return computeNutritionTotals(todayNutrition?.items || []);
+  }, [todayNutrition]);
 
   const nextConsultation = useMemo(() => {
     if (!activeClient) return undefined;
@@ -367,13 +379,24 @@ export const TodayPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <Link
-              to={`/app/tasks/${primarySpotlight.id}`}
-              className="glass-control min-h-[44px] px-4 rounded-[12px] text-[13px] font-semibold text-[#F5F5F7] hover:border-[#FF803E]/60 inline-flex items-center gap-1.5 shrink-0 transition-colors"
-            >
-              {spotlightDone ? 'Review' : 'Open'}
-              <ArrowRight className="w-3.5 h-3.5 text-[#FF803E]" aria-hidden="true" />
-            </Link>
+            <div className="flex items-center gap-2 shrink-0">
+              {primarySpotlight.category === 'workout' && !spotlightDone && (
+                <Link
+                  to="/app/workout"
+                  className="px-3.5 py-2 rounded-[12px] bg-gradient-to-r from-[#FF803E] to-[#E15A1C] text-white text-[13px] font-semibold hover:brightness-105 shadow-md shadow-[#FF803E]/20 inline-flex items-center gap-1.5 transition-all"
+                >
+                  <span>Start Live Workout</span>
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </Link>
+              )}
+              <Link
+                to={`/app/tasks/${primarySpotlight.id}`}
+                className="glass-control min-h-[44px] px-3.5 rounded-[12px] text-[13px] font-semibold text-[#F5F5F7] hover:border-[#FF803E]/60 inline-flex items-center gap-1.5 shrink-0 transition-colors"
+              >
+                {spotlightDone ? 'Review' : 'Open'}
+                <ArrowRight className="w-3.5 h-3.5 text-[#FF803E]" aria-hidden="true" />
+              </Link>
+            </div>
           </section>
         ) : null}
 
@@ -468,48 +491,88 @@ export const TodayPage: React.FC = () => {
             </div>
           </div>
 
-          {mealPlan && mealPlan.meals.length > 0 ? (
-            <Link
-              to="/app/plan"
-              className="surface-card rounded-[20px] p-4 sm:p-5 flex items-center justify-between gap-3 hover:border-white/20 transition-colors"
-            >
-              <div className="flex items-center gap-3.5 min-w-0">
-                <MediaImage
-                  assetKey={mealPlan.meals[0].imageKey || 'foodBreakfast'}
-                  alt={mealPlan.meals[0].title}
-                  aspectClass="w-12 h-12 rounded-[14px] shrink-0"
-                />
-                <div className="min-w-0">
-                  <p className="text-[12px] text-[#B8E66C] font-medium">
-                    Nutrition plan · {mealPlan.meals.length} meals
-                  </p>
-                  <p className="text-[15px] font-semibold text-[#F5F5F7] truncate mt-0.5">
-                    {mealPlan.meals[0].title}
-                  </p>
-                  <p className="text-[12px] text-[#7C8393] truncate">
-                    {mealPlan.dietaryLabel} · Tap to view swaps
-                  </p>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-[#7C8393] shrink-0" aria-hidden="true" />
-            </Link>
-          ) : (
-            <div className="surface-card rounded-[20px] p-4 sm:p-5 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <MediaImage
-                  assetKey="foodLunch"
-                  alt=""
-                  aspectClass="w-12 h-12 rounded-[14px] shrink-0"
-                />
-                <div className="min-w-0">
-                  <p className="text-[12px] text-[#B8E66C] font-medium">Everyday Indian meals</p>
-                  <p className="text-[14px] text-[#A2A8B5]">
-                    Connect with a coach to customize meal templates.
-                  </p>
-                </div>
+          <Link
+            to="/app/nutrition"
+            className="surface-card rounded-[20px] p-4 sm:p-5 flex items-center justify-between gap-3 hover:border-white/20 transition-colors"
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <MediaImage
+                assetKey="foodBreakfast"
+                alt=""
+                aspectClass="w-12 h-12 rounded-[14px] shrink-0"
+              />
+              <div className="min-w-0">
+                <p className="text-[12px] text-[#B8E66C] font-medium flex items-center gap-1">
+                  <span>Daily Nutrition Diary</span>
+                  {todayNutrition?.trainerFeedback ? (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#FF803E]/20 text-[#FF803E] font-bold">
+                      Coach Note
+                    </span>
+                  ) : null}
+                </p>
+                <p className="text-[15px] font-semibold text-[#F5F5F7] truncate mt-0.5">
+                  {todayNutrition?.items?.length
+                    ? `Est. ${nutritionTotals.calories} kcal · ${nutritionTotals.proteinG}g protein`
+                    : 'Tap to log Indian meals & macros'}
+                </p>
+                <p className="text-[12px] text-[#7C8393] truncate">
+                  {todayNutrition?.items?.length
+                    ? `${todayNutrition.items.length} items logged today`
+                    : 'Track dal, roti, paneer, eggs & whey'}
+                </p>
               </div>
             </div>
-          )}
+            <ChevronRight className="w-4 h-4 text-[#7C8393] shrink-0" aria-hidden="true" />
+          </Link>
+        </section>
+
+        {/* Stage 4A: Weekly Reflection & Wrapped Spotlight */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Link
+            to="/app/check-in"
+            className="surface-card rounded-[20px] p-4 sm:p-5 flex items-center justify-between gap-3 hover:border-white/20 transition-colors"
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-12 h-12 rounded-[14px] bg-[#B8E66C]/15 border border-[#B8E66C]/30 flex items-center justify-center text-[#B8E66C] shrink-0">
+                <Check className="w-6 h-6 stroke-[2.5]" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[12px] text-[#B8E66C] font-semibold uppercase tracking-wider">
+                  Weekly Reflection
+                </p>
+                <p className="text-[15px] font-bold text-white truncate mt-0.5">
+                  Coach Accountability Check-in
+                </p>
+                <p className="text-[12px] text-[#7C8393] truncate">
+                  Log energy, sleep, hunger and read weekly coach review
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[#7C8393] shrink-0" />
+          </Link>
+
+          <Link
+            to="/app/wrapped"
+            className="surface-card rounded-[20px] p-4 sm:p-5 flex items-center justify-between gap-3 hover:border-white/20 transition-colors"
+          >
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="w-12 h-12 rounded-[14px] bg-[#FF803E]/15 border border-[#FF803E]/30 flex items-center justify-center text-[#FF803E] shrink-0">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[12px] text-[#FF803E] font-semibold uppercase tracking-wider">
+                  FitPlus Wrapped
+                </p>
+                <p className="text-[15px] font-bold text-white truncate mt-0.5">
+                  Your Monthly Training Story
+                </p>
+                <p className="text-[12px] text-[#7C8393] truncate">
+                  View volume records & generate shareable cards
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-[#7C8393] shrink-0" />
+          </Link>
         </section>
 
         {/* 6. Weekly 7-Day Consistency Summary */}

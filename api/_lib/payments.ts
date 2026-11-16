@@ -139,21 +139,37 @@ export function verifyCashfreeWebhookSignature(params: {
 }): boolean {
   const timestamp = params.timestamp.trim();
   const signature = params.signature.trim();
-  const secretKey = params.secretKey.trim();
+  const secretKey = (params.secretKey || '').trim().replace(/^["']|["']$/g, '');
   if (!timestamp || !params.rawBody || !signature || !secretKey) {
     return false;
   }
-  const bodyStr = Buffer.isBuffer(params.rawBody)
-    ? params.rawBody.toString('utf8')
-    : params.rawBody;
-  if (!bodyStr) return false;
 
-  const expected = crypto
+  const rawBuffer = Buffer.isBuffer(params.rawBody)
+    ? params.rawBody
+    : Buffer.from(params.rawBody, 'utf8');
+
+  if (rawBuffer.length === 0) {
+    return false;
+  }
+
+  // Exact byte concatenation: timestamp (as utf8 bytes) + rawBody bytes
+  const expectedFromBuffer = crypto
+    .createHmac('sha256', secretKey)
+    .update(Buffer.concat([Buffer.from(timestamp, 'utf8'), rawBuffer]))
+    .digest('base64');
+
+  if (timingSafeStringEquals(expectedFromBuffer, signature)) {
+    return true;
+  }
+
+  // Fallback string-based concatenation: timestamp + bodyStr
+  const bodyStr = rawBuffer.toString('utf8');
+  const expectedFromStr = crypto
     .createHmac('sha256', secretKey)
     .update(`${timestamp}${bodyStr}`)
     .digest('base64');
 
-  return timingSafeStringEquals(expected, signature);
+  return timingSafeStringEquals(expectedFromStr, signature);
 }
 
 export function buildDeterministicWebhookEventId(params: {

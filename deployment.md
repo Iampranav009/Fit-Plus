@@ -11,6 +11,7 @@
 
 FitPlus deploys as a **Vite React SPA** combined with **Vercel Node.js Serverless Functions** under `/api/*`:
 
+- **Node.js Runtime Requirement**: Node.js `>=22.x` is required by `firebase-admin@14.5.1`. Configured via `"engines": { "node": ">=22.x" }` in `package.json`.
 - `vercel.json` configures:
   - `framework: "vite"`, `buildCommand: "npm run build"`, `outputDirectory: "dist"`
   - Negative-lookahead SPA rewrite to `/index.html` that excludes `/api/*`, `/assets/*`, `manifest.webmanifest`, `sw.js`, `robots.txt`, `sitemap.xml`, and static file extensions (`.js`, `.css`, `.png`, `.svg`, `.json`, etc.) so direct visits and refreshes on `/discover`, `/auth`, `/welcome`, `/demo`, `/admin`, `/join/:token`, `/trainers/:slug`, `/app/*`, and `/studio/*` return HTTP 200 without breaking serverless API routes.
@@ -81,3 +82,6 @@ Before going live with production traffic, complete these one-time Firebase Cons
    - Direct browser refresh on `/discover`, `/auth`, `/welcome`, `/demo`, `/payments/result`, `/join/FIT-ARJUN-2026`, and `/join/FIT-EXP-000` loads the SPA with HTTP 200 (no Vercel 404).
    - Unknown paths (e.g., `/non-existent-page`) render the branded FitPlus 404 page inside the SPA.
    - Sign in with Google and Email/Password, verify email gate behavior, test Sandbox Cashfree checkout + `/payments/result`, and verify `/admin` access with the configured platform admin account.
+   - **Cashfree Webhook Endpoint Test**: In Cashfree Merchant Dashboard -> **Payment Gateway** -> **Developers** -> **Webhooks**:
+     - Register `https://fitplus-kappa.vercel.app/api/payments/webhook` with version `2025-01-01`.
+     - Click **Send Test Webhook**. Dashboard reports **Success (HTTP 200)**.

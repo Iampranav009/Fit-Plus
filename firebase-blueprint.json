@@ -749,6 +749,109 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "clientId", "clientUserId", "trainerUserId", "weekKey", "dateKey", "energyLevel", "sleepQuality", "workoutDifficulty", "hungerLevel", "createdAt", "updatedAt"]
+    },
+    "ChatConversation": {
+      "title": "ChatConversation",
+      "description": "One-to-one conversation between an active trainer and client.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "clientUserId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "clientName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "clientAvatar": { "type": "string", "maxLength": 120 },
+        "trainerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "trainerUserId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "trainerName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "trainerAvatar": { "type": "string", "maxLength": 120 },
+        "lastMessageText": { "type": "string", "maxLength": 500 },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "lastMessageSenderId": { "type": "string", "maxLength": 128 },
+        "unreadCountClient": { "type": "number", "minimum": 0 },
+        "unreadCountTrainer": { "type": "number", "minimum": 0 },
+        "isBlocked": { "type": "boolean" },
+        "blockedByUserId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "clientUserId", "trainerId", "trainerUserId", "unreadCountClient", "unreadCountTrainer", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Individual message inside a FitPlus Connect conversation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "conversationId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderUserId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderRole": { "type": "string", "enum": ["client", "trainer"] },
+        "text": { "type": "string", "maxLength": 2000 },
+        "attachment": { "type": "object" },
+        "reference": { "type": "object" },
+        "replyTo": { "type": "object" },
+        "status": { "type": "string", "enum": ["sending", "sent", "delivered", "read", "error"] },
+        "readByRecipient": { "type": "boolean" },
+        "readAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "conversationId", "senderUserId", "senderRole", "status", "readByRecipient", "createdAt"]
+    },
+    "WorkoutProgramTemplate": {
+      "title": "WorkoutProgramTemplate",
+      "description": "Multi-week workout program template authored by a trainer in Workout Studio.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "trainerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "trainerUserId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "maxLength": 80 },
+        "tags": { "type": "array" },
+        "weekCount": { "type": "number", "minimum": 1, "maximum": 52 },
+        "days": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "trainerId", "title", "weekCount", "days", "createdAt", "updatedAt"]
+    },
+    "NutritionProgramTemplate": {
+      "title": "NutritionProgramTemplate",
+      "description": "Visual Indian meal program template authored by a trainer in Nutrition Studio.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "trainerId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "trainerUserId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "dietaryType": { "type": "string", "enum": ["vegetarian", "vegan", "eggitarian", "non_vegetarian"] },
+        "targetKcal": { "type": "number", "minimum": 500, "maximum": 6000 },
+        "targetProteinG": { "type": "number", "minimum": 10, "maximum": 400 },
+        "hydrationTargetGlasses": { "type": "number", "minimum": 1, "maximum": 30 },
+        "slots": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "trainerId", "title", "dietaryType", "targetKcal", "targetProteinG", "slots", "createdAt", "updatedAt"]
+    },
+    "ScheduledReminder": {
+      "title": "ScheduledReminder",
+      "description": "Scheduled reminder or notification event for client engagement.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "recipientUserId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "category": { "type": "string", "enum": ["workout", "check_in", "consultation", "subscription", "chat"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "body": { "type": "string", "maxLength": 500 },
+        "scheduledFor": { "type": "string", "format": "date-time" },
+        "triggerStatus": { "type": "string", "enum": ["scheduled", "sent", "cancelled"] },
+        "idempotencyKey": { "type": "string", "maxLength": 128 },
+        "channel": { "type": "string", "enum": ["in_app", "whatsapp_manual", "push"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "recipientUserId", "category", "title", "body", "scheduledFor", "triggerStatus", "idempotencyKey", "channel", "createdAt"]
     }
   },
   "firestore": {
@@ -891,6 +994,26 @@
     "/weeklyCheckIns/{checkInId}": {
       "schema": { "$ref": "#/entities/WeeklyCheckIn" },
       "description": "Structured weekly client check-in reflections and coach review notes."
+    },
+    "/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/ChatConversation" },
+      "description": "One-to-one coach-client messaging channel under FitPlus Connect."
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Messages inside a FitPlus Connect conversation."
+    },
+    "/workoutTemplates/{templateId}": {
+      "schema": { "$ref": "#/entities/WorkoutProgramTemplate" },
+      "description": "Trainer authored reusable multi-week workout program templates."
+    },
+    "/nutritionTemplates/{templateId}": {
+      "schema": { "$ref": "#/entities/NutritionProgramTemplate" },
+      "description": "Trainer authored reusable visual Indian nutrition program templates."
+    },
+    "/scheduledReminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/ScheduledReminder" },
+      "description": "Scheduled reminder notifications with deduplication."
     }
   }
 }

@@ -37,7 +37,26 @@ import type {
   User,
   UserRole,
   WorkoutPlan,
+  AchievementBadgeId,
+  AchievementUnlock,
+  ExerciseDefinition,
+  LoggedFoodItem,
+  MuscleGroup,
+  NutritionDiaryEntry,
+  NutritionMealSlot,
+  WeeklyCheckIn,
+  WorkoutExerciseLog,
+  WorkoutSession,
+  WorkoutSetLog,
+  WrappedMonthlySummary,
+  ChatConversation,
+  ChatMessage,
+  WorkoutProgramTemplate,
+  NutritionProgramTemplate,
+  ScheduledReminder,
 } from '../types/domain';
+import { mergeExerciseCatalog } from '../data/exerciseLibrary';
+import { evaluateAchievementsState, ACHIEVEMENT_CATALOG } from '../lib/achievementsEngine';
 import { findEligibleReviewRelationship } from '../lib/commerce';
 import { demoRepository } from '../data/repository';
 import { createSeedSnapshot, STORE_SCHEMA_VERSION } from '../data/demo/fixtures';
@@ -320,6 +339,51 @@ interface AppContextValue {
       | { action: 'toggle_trainer_publish'; trainerId: string; isPublished: boolean }
       | { action: 'delete_review'; reviewId: string },
   ) => Promise<{ ok: boolean; error?: string }>;
+
+  // Stage 4A — Live Workout, Exercise Library, Nutrition Diary, Check-ins, Wrapped & Achievements
+  customExercises: ExerciseDefinition[];
+  allExercises: ExerciseDefinition[];
+  workoutSessions: WorkoutSession[];
+  achievements: AchievementUnlock[];
+  nutritionLogs: NutritionDiaryEntry[];
+  weeklyCheckIns: WeeklyCheckIn[];
+  newlyUnlockedAchievement: AchievementUnlock | null;
+  dismissUnlockedAchievement: () => void;
+  saveCustomExercise: (exercise: Omit<ExerciseDefinition, 'id' | 'createdAt'> & { id?: string }) => void;
+  deleteCustomExercise: (exerciseId: string) => void;
+  completeWorkoutSession: (session: Omit<WorkoutSession, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
+  saveNutritionDiaryEntry: (entry: Omit<NutritionDiaryEntry, 'id' | 'updatedAt'> & { id?: string }) => void;
+  saveNutritionTrainerFeedback: (logId: string, feedback: string) => void;
+  submitWeeklyCheckIn: (
+    checkIn: Omit<WeeklyCheckIn, 'id' | 'createdAt' | 'updatedAt'> & { id?: string },
+    photoFile?: File | null,
+  ) => Promise<void>;
+  saveWeeklyCheckInTrainerFeedback: (checkInId: string, feedback: string) => void;
+
+  // Stage 4B — FitPlus Connect, Builders & Client Pulse
+  conversations: ChatConversation[];
+  activeConversationMessages: ChatMessage[];
+  unreadMessagesCount: number;
+  workoutTemplates: WorkoutProgramTemplate[];
+  nutritionTemplates: NutritionProgramTemplate[];
+  scheduledReminders: ScheduledReminder[];
+  activeConversationId: string | null;
+  setActiveConversationId: (conversationId: string | null) => void;
+  sendMessage: (params: {
+    conversationId: string;
+    text: string;
+    replyTo?: ChatMessage['replyTo'];
+    attachment?: ChatMessage['attachment'];
+    reference?: ChatMessage['reference'];
+  }) => Promise<void>;
+  markConversationRead: (conversationId: string) => Promise<void>;
+  saveWorkoutTemplate: (template: Omit<WorkoutProgramTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
+  deleteWorkoutTemplate: (templateId: string) => void;
+  saveNutritionTemplate: (template: Omit<NutritionProgramTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
+  deleteNutritionTemplate: (templateId: string) => void;
+  createScheduledReminder: (reminder: Omit<ScheduledReminder, 'id' | 'createdAt'> & { id?: string }) => void;
+  updateScheduledReminderStatus: (reminderId: string, status: ScheduledReminder['triggerStatus']) => void;
+  deleteScheduledReminder: (reminderId: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -379,6 +443,11 @@ function createEmptyCloudSnapshot(
     bookings: [],
     notifications: [],
     aiDrafts: [],
+    customExercises: [],
+    workoutSessions: [],
+    achievements: [],
+    nutritionLogs: [],
+    weeklyCheckIns: [],
   };
 }
 
@@ -448,6 +517,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [demoHydrationMap, setDemoHydrationMap] = useState<Record<string, number>>({});
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [celebrateStreakToday, setCelebrateStreakToday] = useState(false);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>('conv_aarav_arjun');
+  const [activeConversationMessages, setActiveConversationMessages] = useState<ChatMessage[]>([]);
 
   const workspaceUnsubRef = useRef<(() => void) | null>(null);
 
@@ -546,6 +617,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             bookings: patch.bookings ?? prev.bookings,
             notifications: patch.notifications ?? prev.notifications,
             aiDrafts: patch.aiDrafts ?? prev.aiDrafts,
+            customExercises: patch.customExercises ?? prev.customExercises ?? [],
+            workoutSessions: patch.workoutSessions ?? prev.workoutSessions ?? [],
+            achievements: patch.achievements ?? prev.achievements ?? [],
+            nutritionLogs: patch.nutritionLogs ?? prev.nutritionLogs ?? [],
+            weeklyCheckIns: patch.weeklyCheckIns ?? prev.weeklyCheckIns ?? [],
+            conversations: patch.conversations ?? prev.conversations ?? [],
+            workoutTemplates: patch.workoutTemplates ?? prev.workoutTemplates ?? [],
+            nutritionTemplates: patch.nutritionTemplates ?? prev.nutritionTemplates ?? [],
+            scheduledReminders: patch.scheduledReminders ?? prev.scheduledReminders ?? [],
             session: {
               ...prev.session,
               activeUserId: nextUser?.id ?? prev.session.activeUserId,
@@ -561,7 +641,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         });
       },
-      { isPlatformAdmin: boot.isPlatformAdmin },
+      { isPlatformAdmin: boot.isPlatformAdmin, role: boot.user.role },
     );
 
     return boot;
@@ -902,8 +982,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const activeCoach = useMemo(() => {
     if (!activeRelationship) return undefined;
-    return store.trainers.find((t) => t.id === activeRelationship.trainerId);
-  }, [activeRelationship, store.trainers]);
+    return (
+      store.trainers.find((t) => t.id === activeRelationship.trainerId) ||
+      publicDirectory.trainers.find((t) => t.id === activeRelationship.trainerId)
+    );
+  }, [activeRelationship, store.trainers, publicDirectory.trainers]);
 
   // Role-scoped selector: Trainer sees ONLY clients with an active coaching relationship linked to them.
   const linkedClientsForActiveTrainer = useMemo(() => {
@@ -3331,6 +3414,577 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [isCloudSynced, firebaseUser, pushToast],
   );
 
+  const [newlyUnlockedAchievement, setNewlyUnlockedAchievement] = useState<AchievementUnlock | null>(null);
+
+  const dismissUnlockedAchievement = useCallback(() => {
+    setNewlyUnlockedAchievement(null);
+  }, []);
+
+  const allExercises = useMemo(() => {
+    return mergeExerciseCatalog(store.customExercises ?? []);
+  }, [store.customExercises]);
+
+  const saveCustomExercise = useCallback(
+    (exerciseInput: Omit<ExerciseDefinition, 'id' | 'createdAt'> & { id?: string }) => {
+      if (!activeTrainer) return;
+      const id = exerciseInput.id || uid('ex_custom');
+      const now = new Date().toISOString();
+      const exercise: ExerciseDefinition = {
+        ...exerciseInput,
+        id,
+        isCustom: true,
+        trainerId: activeTrainer.id,
+        trainerUserId: activeTrainer.userId || (firebaseUser ? firebaseUser.uid : ''),
+        createdAt: exerciseInput.id ? undefined : now,
+      };
+
+      persist((prev) => {
+        const existing = prev.customExercises ?? [];
+        const idx = existing.findIndex((e) => e.id === id);
+        const updated = idx >= 0 ? existing.map((e, i) => (i === idx ? exercise : e)) : [...existing, exercise];
+        return {
+          ...prev,
+          customExercises: updated,
+        };
+      });
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.upsertCustomExerciseDoc(exercise),
+          'Unable to save custom exercise to cloud.',
+        );
+      }
+      pushToast(exerciseInput.id ? 'Exercise updated.' : 'Custom exercise created.');
+    },
+    [activeTrainer, persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const deleteCustomExercise = useCallback(
+    (exerciseId: string) => {
+      persist((prev) => ({
+        ...prev,
+        customExercises: (prev.customExercises ?? []).filter((e) => e.id !== exerciseId),
+      }));
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.deleteCustomExerciseDoc(exerciseId),
+          'Unable to delete custom exercise from cloud.',
+        );
+      }
+      pushToast('Exercise removed.');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const completeWorkoutSession = useCallback(
+    (sessionInput: Omit<WorkoutSession, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+      if (!activeClient) return;
+      const id = sessionInput.id || uid('sess');
+      const now = new Date().toISOString();
+      const trainerUserId = activeCoach && !isFixtureId(activeCoach.id) ? activeCoach.userId : '';
+
+      const session: WorkoutSession = {
+        ...sessionInput,
+        id,
+        clientId: activeClient.id,
+        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id,
+        trainerUserId,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      persist((prev) => {
+        const existing = prev.workoutSessions ?? [];
+        return {
+          ...prev,
+          workoutSessions: [session, ...existing.filter((s) => s.id !== id)],
+        };
+      });
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.upsertWorkoutSessionDoc(session),
+          'Unable to sync workout session to cloud.',
+        );
+      }
+
+      // Auto-complete workout assignment for today/session dateKey if exists and pending
+      const matchingAssignment = store.assignments.find(
+        (a) =>
+          a.clientId === activeClient.id &&
+          a.category === 'workout' &&
+          !store.completions.some((c) => c.assignmentId === a.id && c.dateKey === session.dateKey),
+      );
+      if (matchingAssignment) {
+        toggleAssignmentCompletion(matchingAssignment.id, session.dateKey, {
+          loggedValue: `${session.exercises.length} exercises, ${session.totalVolumeKg} kg volume`,
+          notes: session.notes,
+        });
+      }
+
+      // Evaluate achievements
+      const allSessions = [session, ...(store.workoutSessions ?? []).filter((s) => s.id !== id)];
+      const unlockedList = store.achievements ?? [];
+
+      const evalResult = evaluateAchievementsState({
+        clientId: activeClient.id,
+        todayKey,
+        assignments: store.assignments,
+        completions: store.completions,
+        approvedRecoveryDates: getClientApprovedRecoveryDates(activeClient.id),
+        workoutSessions: allSessions,
+        progressEvents: store.progressEvents,
+        existingUnlocks: unlockedList,
+      });
+
+      if (evalResult.newlyUnlocked.length > 0) {
+        const clientUid = isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id;
+        const newUnlocksToPersist: AchievementUnlock[] = evalResult.newlyUnlocked.map((u) => ({
+          ...u,
+          clientUserId: clientUid,
+        }));
+
+        persist((prev) => ({
+          ...prev,
+          achievements: [...(prev.achievements ?? []), ...newUnlocksToPersist],
+        }));
+
+        if (isCloudSynced && firebaseUser) {
+          for (const unlock of newUnlocksToPersist) {
+            runCloudWrite(fsService.createAchievementUnlockDoc(unlock));
+          }
+        }
+
+        setNewlyUnlockedAchievement(newUnlocksToPersist[0]);
+      }
+
+      pushToast('Workout session logged successfully!');
+    },
+    [
+      activeClient,
+      activeCoach,
+      activeUser.id,
+      isCloudSynced,
+      firebaseUser,
+      persist,
+      runCloudWrite,
+      store.assignments,
+      store.completions,
+      store.workoutSessions,
+      store.progressEvents,
+      store.achievements,
+      todayKey,
+      getClientApprovedRecoveryDates,
+      toggleAssignmentCompletion,
+      pushToast,
+    ],
+  );
+
+  const saveNutritionDiaryEntry = useCallback(
+    (entryInput: Omit<NutritionDiaryEntry, 'id' | 'updatedAt' | 'clientId'> & { id?: string; clientId?: string }) => {
+      if (!activeClient) return;
+      const id = entryInput.id || uid('nutri');
+      const now = new Date().toISOString();
+      const trainerUserId = activeCoach && !isFixtureId(activeCoach.id) ? activeCoach.userId : '';
+
+      const entry: NutritionDiaryEntry = {
+        ...entryInput,
+        id,
+        clientId: entryInput.clientId || activeClient.id,
+        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id,
+        trainerUserId,
+        updatedAt: now,
+      };
+
+      persist((prev) => {
+        const existing = prev.nutritionLogs ?? [];
+        const idx = existing.findIndex((e) => e.id === id || (e.clientId === activeClient.id && e.dateKey === entry.dateKey));
+        const updated = idx >= 0 ? existing.map((e, i) => (i === idx ? entry : e)) : [entry, ...existing];
+        return {
+          ...prev,
+          nutritionLogs: updated,
+        };
+      });
+
+      // Synchronize water glasses with todayHydrationGlasses if for today
+      if (entry.dateKey === todayKey) {
+        setTodayHydrationGlasses(entry.waterGlasses);
+      }
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.upsertNutritionDiaryDoc(entry),
+          'Unable to save nutrition log to cloud.',
+        );
+      }
+      pushToast('Nutrition diary saved.');
+    },
+    [activeClient, activeCoach, activeUser.id, isCloudSynced, firebaseUser, persist, todayKey, setTodayHydrationGlasses, runCloudWrite, pushToast],
+  );
+
+  const saveNutritionTrainerFeedback = useCallback(
+    (logId: string, feedback: string) => {
+      const now = new Date().toISOString();
+      persist((prev) => ({
+        ...prev,
+        nutritionLogs: (prev.nutritionLogs ?? []).map((l) =>
+          l.id === logId ? { ...l, trainerFeedback: feedback, trainerFeedbackAt: now, updatedAt: now } : l,
+        ),
+      }));
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.saveNutritionTrainerFeedbackDoc({ logId, feedback }),
+          'Unable to save feedback to cloud.',
+        );
+      }
+      pushToast('Nutrition feedback shared with client.');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const submitWeeklyCheckIn = useCallback(
+    async (
+      checkInInput: Omit<WeeklyCheckIn, 'id' | 'createdAt' | 'updatedAt' | 'clientId'> & { id?: string; clientId?: string },
+      photoFile?: File | null,
+    ) => {
+      if (!activeClient) return;
+      const id = checkInInput.id || uid('wci');
+      const now = new Date().toISOString();
+      const trainerUserId = activeCoach && !isFixtureId(activeCoach.id) ? activeCoach.userId : '';
+
+      let photoPath: string | undefined = checkInInput.photoPath;
+      if (photoFile && isCloudSynced && firebaseUser) {
+        try {
+          const res = await fsService.uploadWeeklyCheckInPhoto({
+            clientId: activeClient.id,
+            clientUserId: firebaseUser.uid,
+            weekKey: checkInInput.weekKey,
+            file: photoFile,
+          });
+          photoPath = res.downloadUrl;
+        } catch {
+          pushToast('Photo upload failed; submitting check-in details without photo.', 'error');
+        }
+      }
+
+      const checkIn: WeeklyCheckIn = {
+        ...checkInInput,
+        id,
+        clientId: checkInInput.clientId || activeClient.id,
+        clientUserId: isCloudSynced && firebaseUser ? firebaseUser.uid : activeUser.id,
+        trainerUserId,
+        photoPath,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      persist((prev) => {
+        const existing = prev.weeklyCheckIns ?? [];
+        const idx = existing.findIndex((c) => c.id === id || (c.clientId === activeClient.id && c.weekKey === checkIn.weekKey));
+        const updated = idx >= 0 ? existing.map((c, i) => (i === idx ? checkIn : c)) : [checkIn, ...existing];
+        return {
+          ...prev,
+          weeklyCheckIns: updated,
+        };
+      });
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.createWeeklyCheckInDoc(checkIn),
+          'Unable to submit weekly check-in to cloud.',
+        );
+      }
+      pushToast('Weekly check-in submitted to your coach.');
+    },
+    [activeClient, activeCoach, activeUser.id, isCloudSynced, firebaseUser, persist, runCloudWrite, pushToast],
+  );
+
+  const saveWeeklyCheckInTrainerFeedback = useCallback(
+    (checkInId: string, feedback: string) => {
+      const now = new Date().toISOString();
+      persist((prev) => ({
+        ...prev,
+        weeklyCheckIns: (prev.weeklyCheckIns ?? []).map((c) =>
+          c.id === checkInId ? { ...c, trainerFeedback: feedback, trainerReviewedAt: now, updatedAt: now } : c,
+        ),
+      }));
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.saveWeeklyCheckInTrainerFeedbackDoc({ checkInId, feedback }),
+          'Unable to save check-in feedback to cloud.',
+        );
+      }
+      pushToast('Check-in review sent to client.');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const unreadMessagesCount = useMemo(() => {
+    const convs = store.conversations ?? [];
+    const role = store.session.activeRole;
+    return convs.reduce((acc, c) => acc + (role === 'trainer' ? c.unreadCountTrainer : c.unreadCountClient), 0);
+  }, [store.conversations, store.session.activeRole]);
+
+  useEffect(() => {
+    if (!activeConversationId) {
+      setActiveConversationMessages([]);
+      return;
+    }
+    if (isCloudSynced && firebaseUser) {
+      const unsub = fsService.subscribeConversationMessages(
+        activeConversationId,
+        (messages) => setActiveConversationMessages(messages),
+      );
+      return () => unsub();
+    } else {
+      const localMsgs = (store.messages ?? []).filter((m) => m.conversationId === activeConversationId);
+      setActiveConversationMessages(localMsgs);
+    }
+  }, [activeConversationId, isCloudSynced, firebaseUser, store.messages]);
+
+  const sendMessage = useCallback(
+    async (params: {
+      conversationId: string;
+      text: string;
+      replyTo?: ChatMessage['replyTo'];
+      attachment?: ChatMessage['attachment'];
+      reference?: ChatMessage['reference'];
+    }) => {
+      const now = new Date().toISOString();
+      const currentRole = store.session.activeRole;
+      const currentSenderRole: 'client' | 'trainer' = currentRole === 'trainer' ? 'trainer' : 'client';
+      const currentSenderId = activeUser?.id || (currentSenderRole === 'trainer' ? 'usr_trainer_arjun' : 'usr_client_aarav');
+      const senderName = activeUser ? `${activeUser.firstName} ${activeUser.lastName}`.trim() : (currentSenderRole === 'trainer' ? 'Coach Arjun' : 'Aarav Sharma');
+      const msgId = uid('msg');
+
+      const newMsg: ChatMessage = {
+        id: msgId,
+        conversationId: params.conversationId,
+        senderUserId: currentSenderId,
+        senderRole: currentSenderRole,
+        senderName,
+        text: params.text,
+        status: 'sent',
+        readByRecipient: false,
+        replyTo: params.replyTo,
+        attachment: params.attachment,
+        reference: params.reference,
+        createdAt: now,
+      };
+
+      const snippet = params.text
+        ? params.text.slice(0, 100)
+        : params.attachment
+          ? '📷 Image attachment'
+          : 'Shared a plan';
+
+      persist((prev) => {
+        const prevMsgs = prev.messages ?? [];
+        const prevConvs = prev.conversations ?? [];
+        return {
+          ...prev,
+          messages: [...prevMsgs, newMsg],
+          conversations: prevConvs.map((c) =>
+            c.id === params.conversationId
+              ? {
+                  ...c,
+                  lastMessageText: snippet,
+                  lastMessageAt: now,
+                  lastMessageSenderId: currentSenderId,
+                  unreadCountTrainer: currentSenderRole === 'client' ? c.unreadCountTrainer + 1 : c.unreadCountTrainer,
+                  unreadCountClient: currentSenderRole === 'trainer' ? c.unreadCountClient + 1 : c.unreadCountClient,
+                  updatedAt: now,
+                }
+              : c,
+          ),
+        };
+      });
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.sendMessageDoc({
+            conversationId: params.conversationId,
+            senderUserId: firebaseUser.uid,
+            senderRole: currentSenderRole,
+            senderName,
+            text: params.text,
+            replyTo: params.replyTo,
+            attachment: params.attachment,
+            reference: params.reference,
+          }),
+          'Unable to send message to cloud.',
+        );
+      }
+    },
+    [store.session.activeRole, activeUser, persist, isCloudSynced, firebaseUser, runCloudWrite],
+  );
+
+  const markConversationRead = useCallback(
+    async (conversationId: string) => {
+      const currentRole = store.session.activeRole;
+      const effectiveRole: 'client' | 'trainer' = currentRole === 'trainer' ? 'trainer' : 'client';
+      const now = new Date().toISOString();
+      persist((prev) => ({
+        ...prev,
+        conversations: (prev.conversations ?? []).map((c) =>
+          c.id === conversationId
+            ? {
+                ...c,
+                ...(effectiveRole === 'trainer' ? { unreadCountTrainer: 0 } : { unreadCountClient: 0 }),
+                updatedAt: now,
+              }
+            : c,
+        ),
+      }));
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.markConversationReadDoc(conversationId, effectiveRole),
+          'Unable to update read status in cloud.',
+        );
+      }
+    },
+    [store.session.activeRole, persist, isCloudSynced, firebaseUser, runCloudWrite],
+  );
+
+  const saveWorkoutTemplate = useCallback(
+    (template: Omit<WorkoutProgramTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+      const now = new Date().toISOString();
+      const id = template.id || uid('wtpl');
+      const fullTemplate: WorkoutProgramTemplate = {
+        ...template,
+        id,
+        createdAt: template.id ? (store.workoutTemplates?.find((t) => t.id === id)?.createdAt || now) : now,
+        updatedAt: now,
+      };
+
+      persist((prev) => {
+        const existing = prev.workoutTemplates ?? [];
+        const index = existing.findIndex((t) => t.id === id);
+        const updated = index >= 0 ? existing.map((t) => (t.id === id ? fullTemplate : t)) : [fullTemplate, ...existing];
+        return { ...prev, workoutTemplates: updated };
+      });
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.upsertWorkoutTemplateDoc(fullTemplate), 'Unable to save workout template to cloud.');
+      }
+      pushToast('Workout program template saved.');
+    },
+    [persist, store.workoutTemplates, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const deleteWorkoutTemplate = useCallback(
+    (templateId: string) => {
+      persist((prev) => ({
+        ...prev,
+        workoutTemplates: (prev.workoutTemplates ?? []).filter((t) => t.id !== templateId),
+      }));
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.deleteWorkoutTemplateDoc(templateId), 'Unable to delete workout template from cloud.');
+      }
+      pushToast('Workout template removed.', 'info');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const saveNutritionTemplate = useCallback(
+    (template: Omit<NutritionProgramTemplate, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
+      const now = new Date().toISOString();
+      const id = template.id || uid('ntpl');
+      const fullTemplate: NutritionProgramTemplate = {
+        ...template,
+        id,
+        createdAt: template.id ? (store.nutritionTemplates?.find((t) => t.id === id)?.createdAt || now) : now,
+        updatedAt: now,
+      };
+
+      persist((prev) => {
+        const existing = prev.nutritionTemplates ?? [];
+        const index = existing.findIndex((t) => t.id === id);
+        const updated = index >= 0 ? existing.map((t) => (t.id === id ? fullTemplate : t)) : [fullTemplate, ...existing];
+        return { ...prev, nutritionTemplates: updated };
+      });
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.upsertNutritionTemplateDoc(fullTemplate), 'Unable to save nutrition template to cloud.');
+      }
+      pushToast('Nutrition plan template saved.');
+    },
+    [persist, store.nutritionTemplates, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const deleteNutritionTemplate = useCallback(
+    (templateId: string) => {
+      persist((prev) => ({
+        ...prev,
+        nutritionTemplates: (prev.nutritionTemplates ?? []).filter((t) => t.id !== templateId),
+      }));
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.deleteNutritionTemplateDoc(templateId), 'Unable to delete nutrition template from cloud.');
+      }
+      pushToast('Nutrition template removed.', 'info');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const createScheduledReminder = useCallback(
+    (reminder: Omit<ScheduledReminder, 'id' | 'createdAt'> & { id?: string }) => {
+      const now = new Date().toISOString();
+      const id = reminder.id || uid('rem');
+      const fullReminder: ScheduledReminder = {
+        ...reminder,
+        id,
+        createdAt: now,
+      };
+
+      persist((prev) => ({
+        ...prev,
+        scheduledReminders: [...(prev.scheduledReminders ?? []), fullReminder],
+      }));
+
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.createScheduledReminderDoc(fullReminder), 'Unable to schedule reminder in cloud.');
+      }
+      pushToast('Reminder scheduled.');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const updateScheduledReminderStatus = useCallback(
+    (reminderId: string, status: ScheduledReminder['triggerStatus']) => {
+      persist((prev) => ({
+        ...prev,
+        scheduledReminders: (prev.scheduledReminders ?? []).map((r) =>
+          r.id === reminderId ? { ...r, triggerStatus: status } : r,
+        ),
+      }));
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(
+          fsService.updateScheduledReminderStatusDoc(reminderId, status),
+          'Unable to update reminder status in cloud.',
+        );
+      }
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite],
+  );
+
+  const deleteScheduledReminder = useCallback(
+    (reminderId: string) => {
+      persist((prev) => ({
+        ...prev,
+        scheduledReminders: (prev.scheduledReminders ?? []).filter((r) => r.id !== reminderId),
+      }));
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.deleteScheduledReminderDoc(reminderId), 'Unable to delete reminder from cloud.');
+      }
+      pushToast('Reminder removed.', 'info');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
   useEffect(() => {
     setCelebrateStreakToday(false);
   }, [activeUser?.id]);
@@ -3440,6 +4094,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateNotificationPrefs,
     fetchAdminOverview,
     moderateAdminContent,
+    customExercises: store.customExercises ?? [],
+    allExercises,
+    workoutSessions: store.workoutSessions ?? [],
+    achievements: store.achievements ?? [],
+    nutritionLogs: store.nutritionLogs ?? [],
+    weeklyCheckIns: store.weeklyCheckIns ?? [],
+    newlyUnlockedAchievement,
+    dismissUnlockedAchievement,
+    saveCustomExercise,
+    deleteCustomExercise,
+    completeWorkoutSession,
+    saveNutritionDiaryEntry,
+    saveNutritionTrainerFeedback,
+    submitWeeklyCheckIn,
+    saveWeeklyCheckInTrainerFeedback,
+    conversations: store.conversations ?? [],
+    activeConversationMessages,
+    unreadMessagesCount,
+    workoutTemplates: store.workoutTemplates ?? [],
+    nutritionTemplates: store.nutritionTemplates ?? [],
+    scheduledReminders: store.scheduledReminders ?? [],
+    activeConversationId,
+    setActiveConversationId,
+    sendMessage,
+    markConversationRead,
+    saveWorkoutTemplate,
+    deleteWorkoutTemplate,
+    saveNutritionTemplate,
+    deleteNutritionTemplate,
+    createScheduledReminder,
+    updateScheduledReminderStatus,
+    deleteScheduledReminder,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

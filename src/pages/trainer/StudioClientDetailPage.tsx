@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Sparkles } from 'lucide-react';
+import { ArrowLeft, Check, ClipboardCheck, Dumbbell, MessageSquare, Plus, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import * as fsService from '../../data/firestoreService';
@@ -27,6 +27,11 @@ export const StudioClientDetailPage: React.FC = () => {
     toggleClientRecoveryDay,
     isClientLinkedToActiveTrainer,
     updateClientCoachNotes,
+    workoutSessions,
+    nutritionLogs,
+    weeklyCheckIns,
+    saveNutritionTrainerFeedback,
+    saveWeeklyCheckInTrainerFeedback,
   } = useApp();
 
   const isLinked = isClientLinkedToActiveTrainer(id);
@@ -35,6 +40,10 @@ export const StudioClientDetailPage: React.FC = () => {
   const [notes, setNotes] = useState(client?.coachNotes || '');
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [sharedPhotoUrls, setSharedPhotoUrls] = useState<Record<string, string>>({});
+  const [editingNutriId, setEditingNutriId] = useState<string | null>(null);
+  const [nutriFeedbackText, setNutriFeedbackText] = useState('');
+  const [editingCheckInId, setEditingCheckInId] = useState<string | null>(null);
+  const [checkInFeedbackText, setCheckInFeedbackText] = useState('');
 
   useEffect(() => {
     setNotes(client?.coachNotes || '');
@@ -70,6 +79,30 @@ export const StudioClientDetailPage: React.FC = () => {
   const goal = useMemo(
     () => store.goals.find((g) => g.clientId === id),
     [store.goals, id],
+  );
+
+  const clientWorkoutSessions = useMemo(
+    () =>
+      workoutSessions
+        .filter((s) => s.clientId === id)
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+    [workoutSessions, id],
+  );
+
+  const clientNutritionLogs = useMemo(
+    () =>
+      nutritionLogs
+        .filter((l) => l.clientId === id)
+        .sort((a, b) => b.dateKey.localeCompare(a.dateKey)),
+    [nutritionLogs, id],
+  );
+
+  const clientWeeklyCheckIns = useMemo(
+    () =>
+      weeklyCheckIns
+        .filter((c) => c.clientId === id)
+        .sort((a, b) => b.dateKey.localeCompare(a.dateKey)),
+    [weeklyCheckIns, id],
   );
 
   useEffect(() => {
@@ -393,6 +426,238 @@ export const StudioClientDetailPage: React.FC = () => {
             </ul>
           )}
         </section>
+
+        {/* Live Workout Sessions */}
+        {clientWorkoutSessions.length > 0 && (
+          <section className="surface-card rounded-[22px] p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Dumbbell className="w-5 h-5 text-[#FF803E]" />
+              <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Live workout sessions</h2>
+            </div>
+            <div className="space-y-2.5">
+              {clientWorkoutSessions.slice(0, 5).map((sess) => (
+                <div
+                  key={sess.id}
+                  className="rounded-[16px] surface-elevated p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-white text-sm">{sess.title}</p>
+                      {sess.prCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded bg-[#F59E0B]/20 text-[#F59E0B] font-bold text-[10px]">
+                          {sess.prCount} PR{sess.prCount > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-white/50 mt-0.5">
+                      {formatIndiaDate(sess.dateKey, 'short')} · {Math.round(sess.durationSeconds / 60)} mins
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4 font-mono text-white/80">
+                    <div>
+                      <span className="text-white/40 block text-[10px] uppercase font-sans">Sets</span>
+                      <span className="font-bold text-[#B8E66C]">{sess.completedSetsCount}</span>
+                    </div>
+                    <div>
+                      <span className="text-white/40 block text-[10px] uppercase font-sans">Volume</span>
+                      <span className="font-bold text-[#FF803E]">{sess.totalVolumeKg.toLocaleString()} kg</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Daily Nutrition Reviews & Coach Feedback */}
+        {clientNutritionLogs.length > 0 && (
+          <section className="surface-card rounded-[22px] p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <UtensilsCrossed className="w-5 h-5 text-[#B8E66C]" />
+              <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Daily nutrition logs</h2>
+            </div>
+
+            <div className="space-y-3">
+              {clientNutritionLogs.slice(0, 4).map((log) => (
+                <div key={log.id} className="rounded-[16px] surface-elevated p-4 space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <div>
+                      <p className="font-semibold text-white text-sm">{formatIndiaDate(log.dateKey, 'short')}</p>
+                      <p className="text-white/50">
+                        {log.items.length} items logged · {log.waterGlasses} water glasses
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingNutriId(editingNutriId === log.id ? null : log.id);
+                        setNutriFeedbackText(log.trainerFeedback || '');
+                      }}
+                      className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 text-xs font-medium transition-colors"
+                    >
+                      {log.trainerFeedback ? 'Edit Feedback' : 'Add Coach Feedback'}
+                    </button>
+                  </div>
+
+                  {/* Summary of items */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {log.items.slice(0, 6).map((item) => (
+                      <span
+                        key={item.id}
+                        className="px-2 py-0.5 rounded-md bg-white/5 text-white/70 text-[11px]"
+                      >
+                        {item.name} (~{item.estimatedCalories} kcal)
+                      </span>
+                    ))}
+                    {log.items.length > 6 && (
+                      <span className="text-[11px] text-white/40 self-center">
+                        +{log.items.length - 6} more
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Feedback Form / Display */}
+                  {editingNutriId === log.id ? (
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <textarea
+                        rows={2}
+                        value={nutriFeedbackText}
+                        onChange={(e) => setNutriFeedbackText(e.target.value)}
+                        placeholder="Write nutrition guidance or praise for this day..."
+                        className="w-full p-2.5 rounded-xl bg-[#101218] border border-white/10 text-xs text-white focus:border-[#FF803E] focus:outline-none resize-none"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingNutriId(null)}
+                          className="px-3 py-1 rounded-lg text-white/50 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                        <GlassButton
+                          size="sm"
+                          onClick={() => {
+                            saveNutritionTrainerFeedback(log.id, nutriFeedbackText);
+                            setEditingNutriId(null);
+                          }}
+                        >
+                          Save Feedback
+                        </GlassButton>
+                      </div>
+                    </div>
+                  ) : log.trainerFeedback ? (
+                    <div className="p-2.5 rounded-lg bg-[#FF803E]/10 border border-[#FF803E]/20 text-[#FFB06B] italic">
+                      "{log.trainerFeedback}"
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Weekly Check-in Reviews */}
+        {clientWeeklyCheckIns.length > 0 && (
+          <section className="surface-card rounded-[22px] p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-[#FF803E]" />
+              <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Weekly check-ins</h2>
+            </div>
+
+            <div className="space-y-3">
+              {clientWeeklyCheckIns.map((ci) => (
+                <div key={ci.id} className="rounded-[16px] surface-elevated p-4 space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <div>
+                      <p className="font-semibold text-white text-sm">Week of {formatIndiaDate(ci.weekKey, 'short')}</p>
+                      <p className="text-white/50">
+                        {ci.weightKg ? `${ci.weightKg} kg · ` : ''}Submitted {formatIndiaDate(ci.dateKey, 'short')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCheckInId(editingCheckInId === ci.id ? null : ci.id);
+                        setCheckInFeedbackText(ci.trainerFeedback || '');
+                      }}
+                      className="px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 text-xs font-medium transition-colors"
+                    >
+                      {ci.trainerFeedback ? 'Edit Review' : 'Add Coach Review'}
+                    </button>
+                  </div>
+
+                  {/* Ratings */}
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div className="p-1.5 rounded-lg bg-white/5">
+                      <span className="text-white/40 block text-[10px]">Energy</span>
+                      <span className="font-bold text-[#F59E0B] font-mono">{ci.energyLevel}/5</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/5">
+                      <span className="text-white/40 block text-[10px]">Sleep</span>
+                      <span className="font-bold text-[#70C8ED] font-mono">{ci.sleepQuality}/5</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/5">
+                      <span className="text-white/40 block text-[10px]">Difficulty</span>
+                      <span className="font-bold text-[#FF803E] font-mono">{ci.workoutDifficulty}/5</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white/5">
+                      <span className="text-white/40 block text-[10px]">Hunger</span>
+                      <span className="font-bold text-[#B8E66C] font-mono">{ci.hungerLevel}/5</span>
+                    </div>
+                  </div>
+
+                  {/* Client Reflections */}
+                  {(ci.scheduleChallenges || ci.generalFeedback) && (
+                    <div className="space-y-1 text-white/80 p-2.5 rounded-lg bg-[#14171F]">
+                      {ci.scheduleChallenges && (
+                        <p><span className="text-white/40 font-semibold">Challenges: </span>{ci.scheduleChallenges}</p>
+                      )}
+                      {ci.generalFeedback && (
+                        <p><span className="text-white/40 font-semibold">Notes: </span>{ci.generalFeedback}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Feedback Form / Display */}
+                  {editingCheckInId === ci.id ? (
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <textarea
+                        rows={2}
+                        value={checkInFeedbackText}
+                        onChange={(e) => setCheckInFeedbackText(e.target.value)}
+                        placeholder="Write check-in review for client..."
+                        className="w-full p-2.5 rounded-xl bg-[#101218] border border-white/10 text-xs text-white focus:border-[#FF803E] focus:outline-none resize-none"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingCheckInId(null)}
+                          className="px-3 py-1 rounded-lg text-white/50 hover:text-white"
+                        >
+                          Cancel
+                        </button>
+                        <GlassButton
+                          size="sm"
+                          onClick={() => {
+                            saveWeeklyCheckInTrainerFeedback(ci.id, checkInFeedbackText);
+                            setEditingCheckInId(null);
+                          }}
+                        >
+                          Save Review
+                        </GlassButton>
+                      </div>
+                    </div>
+                  ) : ci.trainerFeedback ? (
+                    <div className="p-2.5 rounded-lg bg-[#FF803E]/10 border border-[#FF803E]/20 text-[#FFB06B] italic">
+                      "{ci.trainerFeedback}"
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Coach Notes */}
         <form

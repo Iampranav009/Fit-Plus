@@ -371,6 +371,11 @@ export interface StoreSnapshot {
   achievements?: AchievementUnlock[];
   nutritionLogs?: NutritionDiaryEntry[];
   weeklyCheckIns?: WeeklyCheckIn[];
+  conversations?: ChatConversation[];
+  messages?: ChatMessage[];
+  workoutTemplates?: WorkoutProgramTemplate[];
+  nutritionTemplates?: NutritionProgramTemplate[];
+  scheduledReminders?: ScheduledReminder[];
 }
 
 export type DayCompletionStatus =
@@ -692,6 +697,7 @@ export interface WorkoutSession {
   prCount: number;
   exercises: WorkoutExerciseLog[];
   notes?: string;
+  createdAt?: string;
   updatedAt: string;
 }
 
@@ -809,6 +815,194 @@ export interface WrappedMonthlySummary {
   topExercise?: string;
   optionalWeightChangeKg?: number;
 }
+
+// ==========================================
+// STAGE 4B DOMAIN MODELS
+// ==========================================
+
+export interface ChatMessageAttachment {
+  id?: string;
+  url: string;
+  type?: 'image' | 'video' | 'file';
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+  storagePath?: string;
+  caption?: string;
+  dimensions?: { width: number; height: number };
+}
+
+export interface ChatMessageReference {
+  id?: string;
+  type: 'workout_day' | 'meal_plan' | 'assignment' | 'check_in' | 'package';
+  title: string;
+  subtitle?: string;
+  targetRoute?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderUserId: string;
+  senderRole: 'client' | 'trainer' | 'system';
+  senderName?: string;
+  text: string;
+  attachment?: ChatMessageAttachment;
+  reference?: ChatMessageReference;
+  replyTo?: {
+    messageId: string;
+    senderName: string;
+    snippet: string;
+  };
+  status: 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+  readByRecipient: boolean;
+  readAt?: string;
+  createdAt: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  clientId: string;
+  clientUserId: string;
+  clientName: string;
+  clientAvatar?: string;
+  trainerId: string;
+  trainerUserId: string;
+  trainerName: string;
+  trainerAvatar?: string;
+  lastMessageText?: string;
+  lastMessageAt?: string;
+  lastMessageSenderId?: string;
+  unreadCountClient: number;
+  unreadCountTrainer: number;
+  isBlocked?: boolean;
+  blockedByUserId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VisualWorkoutExerciseItem extends Partial<ExerciseItem> {
+  id: string;
+  name: string;
+  exerciseId?: string;
+  targetSets?: number;
+  targetReps?: string;
+  restSeconds?: number;
+  weightTargetKg?: number;
+  coachNotes?: string;
+  isWarmup?: boolean;
+  isCooldown?: boolean;
+  alternatives?: string[];
+  intensityNote?: string;
+}
+
+export interface VisualWorkoutDayPlan {
+  dayIndex: number;
+  dayLabel: string;
+  focusTitle: string;
+  isRecoveryDay: boolean;
+  durationMinutes: number;
+  coachInstructions: string;
+  exercises: VisualWorkoutExerciseItem[];
+}
+
+export interface WorkoutProgramTemplate {
+  id: string;
+  trainerId: string;
+  trainerUserId?: string;
+  title: string;
+  description: string;
+  category: string;
+  tags: string[];
+  weekCount: number;
+  days: VisualWorkoutDayPlan[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VisualMealFoodItem {
+  id: string;
+  foodId?: string;
+  name: string;
+  hindiOrRegional?: string;
+  servingLabel: string;
+  servings: number;
+  estimatedCalories: number;
+  estimatedProteinG: number;
+  estimatedCarbsG: number;
+  estimatedFatG: number;
+  notes?: string;
+}
+
+export interface VisualMealSlotPlan {
+  slot: NutritionMealSlot;
+  title: string;
+  items: VisualMealFoodItem[];
+  alternatives?: string[];
+  notes?: string;
+}
+
+export interface NutritionProgramTemplate {
+  id: string;
+  trainerId: string;
+  trainerUserId?: string;
+  title: string;
+  description: string;
+  dietaryType: 'vegetarian' | 'vegan' | 'eggitarian' | 'non_vegetarian';
+  targetKcal: number;
+  targetProteinG: number;
+  hydrationTargetGlasses: number;
+  slots: VisualMealSlotPlan[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClientPulseStatus =
+  | 'on_track'
+  | 'needs_attention'
+  | 'follow_up_recommended'
+  | 'insufficient_data';
+
+export interface ClientPulseMetrics {
+  status: ClientPulseStatus;
+  adherencePercent: number;
+  lastActiveDateKey?: string;
+  daysInactive: number;
+  missedWorkoutsCount: number;
+  pendingCheckInReview: boolean;
+  subscriptionDaysLeft?: number;
+  attentionReasons: string[];
+}
+
+export interface TrainerBusinessAnalytics {
+  activeClientsCount: number;
+  newEnrollmentsMonth: number;
+  averageAdherencePercent: number;
+  renewalRatePercent: number;
+  monthlyCapturedRevenueInr: number;
+  monthlySettlementStatus: string;
+  packagePerformance: Array<{
+    packageId: string;
+    packageName: string;
+    activeCount: number;
+    revenueInr: number;
+  }>;
+  consultationUtilizationPercent: number;
+}
+
+export interface ScheduledReminder {
+  id: string;
+  recipientUserId: string;
+  category: 'workout' | 'check_in' | 'consultation' | 'subscription' | 'chat';
+  title: string;
+  body: string;
+  scheduledFor: string;
+  triggerStatus: 'scheduled' | 'sent' | 'cancelled';
+  idempotencyKey: string;
+  channel: 'in_app' | 'whatsapp_manual' | 'push';
+  createdAt: string;
+}
+
 
 
 

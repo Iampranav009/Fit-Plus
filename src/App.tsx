@@ -10,46 +10,63 @@ import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
 
 // Public pages
-import { LandingPage } from './pages/public/LandingPage';
-import { WelcomePage } from './pages/public/WelcomePage';
-import { AuthPage } from './pages/public/AuthPage';
-import { InvitePage } from './pages/public/InvitePage';
-import { DiscoverPage } from './pages/public/DiscoverPage';
-import { TrainerPublicProfilePage } from './pages/public/TrainerPublicProfilePage';
-import { PaymentResultPage } from './pages/public/PaymentResultPage';
+const LandingPage = React.lazy(() => import('./pages/public/LandingPage').then((m) => ({ default: m.LandingPage })));
+const WelcomePage = React.lazy(() => import('./pages/public/WelcomePage').then((m) => ({ default: m.WelcomePage })));
+const AuthPage = React.lazy(() => import('./pages/public/AuthPage').then((m) => ({ default: m.AuthPage })));
+const InvitePage = React.lazy(() => import('./pages/public/InvitePage').then((m) => ({ default: m.InvitePage })));
+const DiscoverPage = React.lazy(() => import('./pages/public/DiscoverPage').then((m) => ({ default: m.DiscoverPage })));
+const TrainerPublicProfilePage = React.lazy(() => import('./pages/public/TrainerPublicProfilePage').then((m) => ({ default: m.TrainerPublicProfilePage })));
+const PaymentResultPage = React.lazy(() => import('./pages/public/PaymentResultPage').then((m) => ({ default: m.PaymentResultPage })));
 
 // Onboarding pages
-import { RoleSelectPage } from './pages/onboarding/RoleSelectPage';
-import { ClientOnboardingPage } from './pages/onboarding/ClientOnboardingPage';
-import { TrainerOnboardingPage } from './pages/onboarding/TrainerOnboardingPage';
+const RoleSelectPage = React.lazy(() => import('./pages/onboarding/RoleSelectPage').then((m) => ({ default: m.RoleSelectPage })));
+const ClientOnboardingPage = React.lazy(() => import('./pages/onboarding/ClientOnboardingPage').then((m) => ({ default: m.ClientOnboardingPage })));
+const TrainerOnboardingPage = React.lazy(() => import('./pages/onboarding/TrainerOnboardingPage').then((m) => ({ default: m.TrainerOnboardingPage })));
 
 // Client pages
-import { TodayPage } from './pages/client/TodayPage';
-import { TaskDetailPage } from './pages/client/TaskDetailPage';
-import { PlanPage } from './pages/client/PlanPage';
-import { ProgressPage } from './pages/client/ProgressPage';
-import { CoachPage } from './pages/client/CoachPage';
-import { ConsultationsPage } from './pages/client/ConsultationsPage';
-import { ProfilePage } from './pages/client/ProfilePage';
-import { SettingsPage } from './pages/client/SettingsPage';
-import { NotificationsPage } from './pages/client/NotificationsPage';
-import { ClientPaymentsPage } from './pages/client/ClientPaymentsPage';
+const TodayPage = React.lazy(() => import('./pages/client/TodayPage').then((m) => ({ default: m.TodayPage })));
+const LiveWorkoutPage = React.lazy(() => import('./pages/client/LiveWorkoutPage').then((m) => ({ default: m.LiveWorkoutPage })));
+const ExerciseLibraryPage = React.lazy(() => import('./pages/client/ExerciseLibraryPage').then((m) => ({ default: m.ExerciseLibraryPage })));
+const NutritionDiaryPage = React.lazy(() => import('./pages/client/NutritionDiaryPage').then((m) => ({ default: m.NutritionDiaryPage })));
+const WeeklyCheckInPage = React.lazy(() => import('./pages/client/WeeklyCheckInPage').then((m) => ({ default: m.WeeklyCheckInPage })));
+const WrappedPage = React.lazy(() => import('./pages/client/WrappedPage').then((m) => ({ default: m.WrappedPage })));
+const TaskDetailPage = React.lazy(() => import('./pages/client/TaskDetailPage').then((m) => ({ default: m.TaskDetailPage })));
+const PlanPage = React.lazy(() => import('./pages/client/PlanPage').then((m) => ({ default: m.PlanPage })));
+const ProgressPage = React.lazy(() => import('./pages/client/ProgressPage').then((m) => ({ default: m.ProgressPage })));
+const CoachPage = React.lazy(() => import('./pages/client/CoachPage').then((m) => ({ default: m.CoachPage })));
+const ConsultationsPage = React.lazy(() => import('./pages/client/ConsultationsPage').then((m) => ({ default: m.ConsultationsPage })));
+const ProfilePage = React.lazy(() => import('./pages/client/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const SettingsPage = React.lazy(() => import('./pages/client/SettingsPage').then((m) => ({ default: m.SettingsPage })));
+const NotificationsPage = React.lazy(() => import('./pages/client/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
+const ClientPaymentsPage = React.lazy(() => import('./pages/client/ClientPaymentsPage').then((m) => ({ default: m.ClientPaymentsPage })));
+
+// Shared pages
+const MessagesPage = React.lazy(() => import('./pages/shared/MessagesPage').then((m) => ({ default: m.MessagesPage })));
 
 // Trainer Studio pages
-import { StudioOverviewPage } from './pages/trainer/StudioOverviewPage';
-import { StudioClientsPage } from './pages/trainer/StudioClientsPage';
-import { StudioClientDetailPage } from './pages/trainer/StudioClientDetailPage';
-import { StudioAssignPage } from './pages/trainer/StudioAssignPage';
-import { StudioTemplatesPage } from './pages/trainer/StudioTemplatesPage';
-import { StudioAIBuilderPage } from './pages/trainer/StudioAIBuilderPage';
-import { StudioPackagesPage } from './pages/trainer/StudioPackagesPage';
-import { StudioConsultationsPage } from './pages/trainer/StudioConsultationsPage';
-import { StudioStorefrontPage } from './pages/trainer/StudioStorefrontPage';
-import { StudioSettingsPage } from './pages/trainer/StudioSettingsPage';
-import { StudioNotificationsPage } from './pages/trainer/StudioNotificationsPage';
+const StudioOverviewPage = React.lazy(() => import('./pages/trainer/StudioOverviewPage').then((m) => ({ default: m.StudioOverviewPage })));
+const StudioClientsPage = React.lazy(() => import('./pages/trainer/StudioClientsPage').then((m) => ({ default: m.StudioClientsPage })));
+const StudioClientDetailPage = React.lazy(() => import('./pages/trainer/StudioClientDetailPage').then((m) => ({ default: m.StudioClientDetailPage })));
+const StudioAssignPage = React.lazy(() => import('./pages/trainer/StudioAssignPage').then((m) => ({ default: m.StudioAssignPage })));
+const StudioTemplatesPage = React.lazy(() => import('./pages/trainer/StudioTemplatesPage').then((m) => ({ default: m.StudioTemplatesPage })));
+const StudioWorkoutBuilderPage = React.lazy(() => import('./pages/trainer/StudioWorkoutBuilderPage').then((m) => ({ default: m.StudioWorkoutBuilderPage })));
+const StudioNutritionBuilderPage = React.lazy(() => import('./pages/trainer/StudioNutritionBuilderPage').then((m) => ({ default: m.StudioNutritionBuilderPage })));
+const StudioAIBuilderPage = React.lazy(() => import('./pages/trainer/StudioAIBuilderPage').then((m) => ({ default: m.StudioAIBuilderPage })));
+const StudioPackagesPage = React.lazy(() => import('./pages/trainer/StudioPackagesPage').then((m) => ({ default: m.StudioPackagesPage })));
+const StudioConsultationsPage = React.lazy(() => import('./pages/trainer/StudioConsultationsPage').then((m) => ({ default: m.StudioConsultationsPage })));
+const StudioStorefrontPage = React.lazy(() => import('./pages/trainer/StudioStorefrontPage').then((m) => ({ default: m.StudioStorefrontPage })));
+const StudioSettingsPage = React.lazy(() => import('./pages/trainer/StudioSettingsPage').then((m) => ({ default: m.StudioSettingsPage })));
+const StudioNotificationsPage = React.lazy(() => import('./pages/trainer/StudioNotificationsPage').then((m) => ({ default: m.StudioNotificationsPage })));
 
 // Admin page
-import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+const AdminDashboardPage = React.lazy(() => import('./pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })));
+
+const RouteLoadingFallback: React.FC = () => (
+  <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 gap-3">
+    <div className="w-8 h-8 rounded-full border-2 border-[#FF803E]/30 border-t-[#FF803E] animate-spin" />
+    <span className="text-xs text-white/50 font-medium">Preparing view…</span>
+  </div>
+);
 
 const AuthLoadingSplash: React.FC = () => (
   <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6 gap-4">
@@ -274,7 +291,8 @@ export default function App() {
         <AppProvider>
           <BrowserRouter>
             <OfflineIndicator />
-            <Routes>
+            <React.Suspense fallback={<RouteLoadingFallback />}>
+              <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/welcome" element={<WelcomePage />} />
@@ -321,6 +339,54 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['client']}>
                   <TodayPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/workout"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <LiveWorkoutPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/workout/:dayIndex"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <LiveWorkoutPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/exercises"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <ExerciseLibraryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/nutrition"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <NutritionDiaryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/check-in"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <WeeklyCheckInPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/app/wrapped"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <WrappedPage />
                 </ProtectedRoute>
               }
             />
@@ -396,6 +462,14 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/app/messages"
+              element={
+                <ProtectedRoute allowedRoles={['client']}>
+                  <MessagesPage />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Trainer Studio Routes */}
             <Route path="/studio" element={<Navigate to="/studio/overview" replace />} />
@@ -404,6 +478,30 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['trainer']}>
                   <StudioOverviewPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/messages"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <MessagesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/workout-builder"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioWorkoutBuilderPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/nutrition-builder"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <StudioNutritionBuilderPage />
                 </ProtectedRoute>
               }
             />
@@ -436,6 +534,14 @@ export default function App() {
               element={
                 <ProtectedRoute allowedRoles={['trainer']}>
                   <StudioTemplatesPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/studio/exercises"
+              element={
+                <ProtectedRoute allowedRoles={['trainer']}>
+                  <ExerciseLibraryPage />
                 </ProtectedRoute>
               }
             />
@@ -500,7 +606,8 @@ export default function App() {
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
-          <ToastContainer />
+        </React.Suspense>
+        <ToastContainer />
         </BrowserRouter>
       </AppProvider>
     </MotionConfig>

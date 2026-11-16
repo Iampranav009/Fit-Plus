@@ -48,7 +48,108 @@ Verify against `npm run build` + `NODE_ENV=production PORT=3100 npx tsx server.t
 
 ---
 
-## 4. Manual End-to-End Verification Checklist (Stage 3A)
+## 4. Stage 4A Automated Testing & Verification Checklist
+
+### Automated Unit Test Coverage (`src/tests/domain.test.ts`)
+- **Exercise Library Engine:**
+  - Built-in exercise count: >= 30 verified Indian-accessible exercises
+  - Data structure checks: IDs (`ex_*`), step-by-step instructions, common mistakes, primary/secondary muscles
+  - Muscle group filtering: primary and secondary muscle targeting matches
+  - Equipment filtering: bodyweight vs equipment vs home/gym compatibility
+  - Custom exercise merge: trainer-created exercises seamlessly merge with built-ins
+- **Live Workout Engine:**
+  - 1RM calculation: Epley formula accuracy (`weight * (1 + reps/30)`)
+  - Rest parsing: supports seconds, minutes, and fallback default values
+  - Historical benchmarks: lookup across past sessions by exercise name and ID
+  - Metrics calculation: volume (`sum(weight * reps)`), completed set counts, personal record detection
+- **Indian Nutrition Engine:**
+  - Database integrity: >= 20 Indian staples with positive calories, macros, and serving grams
+  - Food scaling: portion multiplier (0.5x, 1x, 1.5x, 2x) accurately scales kcal and macros
+  - Daily totals: aggregated calories, protein, carbs, and fat across meal items
+- **Achievements Engine:**
+  - Catalog verification: 9 badge definitions with targets and icons
+  - Unlock triggers: first workout, PR milestones, streak tiers (7, 14, 30, 60, 100 days), active days
+  - Deduplication: previously unlocked badges are never duplicated in notifications
+- **FitPlus Wrapped:**
+  - Monthly aggregation: training minutes, volume, PR counts, consistency percent, top exercise
+  - Privacy enforcement: optional weight changes and personal notes are strictly undefined when toggles are OFF
+
+### Manual QA Verification Checklist
+1. **Live Workout Execution (`/app/workout`):**
+   - Click "Start Live Workout" from Today or Plan page.
+   - Verify exercise stepper carousel displays exercise numbers and set counts.
+   - Enter weights and reps; click checkmark to complete set; verify rest countdown starts automatically.
+   - Click "Substitute" and select an approved alternative; verify replacement reflects on the card.
+   - Click "Finish" and verify celebration dialog with total volume, elapsed time, and sets completed.
+   - Refresh page mid-workout; verify session restores seamlessly from local draft.
+2. **Indian Nutrition Diary (`/app/nutrition`):**
+   - View macro and hydration dashboard (Energy, Protein, Carbs, Fat, Hydration).
+   - Click "Add Food", search for "roti", "paneer", or "dal", choose portion size, and add to Breakfast/Lunch.
+   - Log water intake and confirm sync with today's hydration ring.
+   - Sign in as trainer and view client's diary in `/studio/clients/:id`; add coach feedback and confirm client sees it.
+3. **Weekly Check-in (`/app/check-in`):**
+   - Submit a weekly reflection with 1–5 ratings for energy, sleep, difficulty, and hunger.
+   - Optionally attach a progress photo and submit; confirm coach sees check-in in client detail view.
+4. **FitPlus Wrapped (`/app/wrapped`):**
+   - Switch between months; verify metrics update reactively.
+   - Toggle Story (9:16) vs Post (4:5) format and verify Canvas card re-renders instantly.
+   - Confirm weight change toggle defaults to OFF. Click "Download PNG" and verify clean 1080px export.
+5. **Exercise Library (`/app/exercises`):**
+   - Filter by muscle group, environment, and equipment.
+   - Click an exercise to inspect cues, common mistakes, and anatomical muscle highlighting diagram.
+   - As trainer in `/studio/exercises`, create a custom exercise and verify it appears in catalog.
+
+---
+
+## 5. Stage 4B Automated Testing & Verification Matrix
+
+### Automated Unit Test Suite (`npm test` — 25 Tests Passing)
+- **Checkpoint 4B.0: Cashfree Webhook Defect Resolution:**
+  - Test event recognition (`TEST_WEBHOOK`, `order_test_*`) returning HTTP 200 `{ ok: true, test: true }`.
+  - HMAC-SHA256 signature verification with raw byte buffers and `crypto.timingSafeEqual`.
+  - Unsigned requests and tampered signatures correctly rejected with HTTP 401.
+  - Idempotent deduplication of repeat webhook events.
+- **Checkpoint 4B.1: FitPlus Connect (In-App Messaging & WhatsApp Bridge):**
+  - `buildConversationId`: Canonical lexicographical ID generation (`[uidA, uidB].sort().join('__')`).
+  - Indian time formatters: `formatMessageTime` and `formatTimeIndian` adhering to IST AM/PM formatting.
+  - `buildWhatsAppChatUrl`: E.164 phone number sanitation and URI encoding.
+- **Checkpoint 4B.2: Workout Studio & Nutrition Studio Builders:**
+  - Workout Day metrics: total sets, estimated workout duration accounting for rest countdowns.
+  - Indian Food Scaling: portion multiplier calculations across `katori`, `phulka`, and `100g` measures.
+  - Macro Totals: aggregated Calories, Protein, Carbohydrates, and Fats across meal slots.
+- **Checkpoint 4B.3: Client Pulse, Action Center & Scheduled Automations:**
+  - Client Pulse status: `on_track` (adherence >= 75%), `needs_attention` (inactivity >= 4 days or 0 workouts logged), `follow_up_recommended` (inactivity 3 days or pending check-in), and `insufficient_data` (new client).
+  - Trainer Action Center: priority ranking of high-urgency client tasks.
+  - Indian Quiet Hours: `isInIndianQuietHours` accurately detects 22:00 to 07:00 IST.
+- **Firestore Blueprint & Security Rules Synchronization:**
+  - Exact alignment of 40 managed collections across `firebase-blueprint.json`, `firestore.rules`, and `firestore.indexes.json`.
+
+### Manual QA Checklist for Stage 4B
+1. **FitPlus Connect Messaging (`/app/messages` & `/studio/messages`):**
+   - Open chat thread between client and coach; send a message and verify instant real-time delivery.
+   - Attach an image photo; verify upload completes and thumbnail displays with zoom modal.
+   - Attach a Workout or Nutrition plan card; verify one-click navigation to the routine.
+   - Send a quote reply; verify the referenced message snippet appears above the new message.
+   - Verify unread message count displays as glowing orange pill on navigation bars.
+2. **WhatsApp Bridge (`WhatsAppShareModal`):**
+   - Click WhatsApp icon next to a client; select "Workout Plan Assigned" template.
+   - Verify generated `wa.me` link opens with clean, personalized message text and deep link.
+3. **Workout Studio Builder (`/studio/workout-builder`):**
+   - Create a 4-week program; add Push Day; search and add Bench Press and Overhead Press.
+   - Adjust sets, reps, rest seconds; verify live total sets and estimated time update instantly.
+   - Click "AI Assistant" to generate a draft; verify structured day schedules populate cleanly.
+   - Save as Master Template; verify it persists in `/workoutTemplates`.
+4. **Nutrition Studio Builder (`/studio/nutrition-builder`):**
+   - Create a diet plan; add Paneer Bhurji and Phulka to Breakfast and Dal Tadka to Lunch.
+   - Adjust portion sizes; verify Calories, Protein, Carbs, and Fats scale dynamically.
+   - Save as Master Template; verify it persists in `/nutritionTemplates`.
+5. **Client Pulse & Studio Action Center (`/studio`):**
+   - Inspect Trainer Action Center on Studio Overview page; verify urgent tasks appear at the top.
+   - Check Client Roster on `/studio/clients`; verify status pills (`On Track`, `Attention`, `Follow-up`, `New`) reflect recent workout and check-in history.
+
+---
+
+## 6. Manual End-to-End Verification Checklist (Stage 3A)
 
 1. **Direct Routing & Refresh:** Open `/discover`, `/auth`, `/welcome`, `/join/FIT-ARJUN-2026`, `/join/FIT-EXP-000`, and `/unknown-route` directly in the browser and refresh each page. Confirm zero Vercel 404s and confirm `/unknown-route` renders the branded FitPlus 404 page.
 2. **Email/Password Registration & Verification Gate:** Create an account on `/auth` with 18+ consent checked. Confirm the Verify Email Gate blocks onboarding and workspace routes until the email verification link is confirmed and `"I've verified — continue"` is clicked.

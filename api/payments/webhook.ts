@@ -76,14 +76,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  if (!isFirebaseAdminConfigured()) {
-    return res.status(503).json({
-      ok: false,
-      code: 'server/admin-unconfigured',
-      error: 'Firebase Admin credentials are not configured on this server.',
-    });
-  }
-
   try {
     const rawBody = await readRawRequestBody(req);
     const sigHeader = req.headers['x-webhook-signature'];
@@ -122,8 +114,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? String(payload.data.payment.payment_group)
       : undefined;
 
+    // Acknowledge Cashfree dashboard test events immediately without creating or altering payments
+    const isTestEvent =
+      eventType === 'TEST_WEBHOOK' ||
+      eventType === 'TEST' ||
+      eventType === 'WEBHOOK_TEST' ||
+      eventType.includes('TEST') ||
+      (orderId && /(?:order_)?(?:test|sample|dummy)/i.test(orderId)) ||
+      Boolean((payload.data as Record<string, unknown> | undefined)?.message &&
+        String((payload.data as Record<string, unknown>).message).toLowerCase().includes('test'));
+
+    if (isTestEvent) {
+      return res.status(200).json({
+        ok: true,
+        test: true,
+        version: req.headers['x-webhook-version'] || cashfreeConfig.apiVersion,
+        message: 'Cashfree test webhook verified and acknowledged successfully.',
+      });
+    }
+
     if (!orderId) {
       return res.status(200).json({ ok: true, ignored: true });
+    }
+
+    if (!isFirebaseAdminConfigured()) {
+      return res.status(503).json({
+        ok: false,
+        code: 'server/admin-unconfigured',
+        error: 'Firebase Admin credentials are not configured on this server.',
+      });
     }
 
     const { db } = getFirebaseAdminContext();

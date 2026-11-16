@@ -9,6 +9,7 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   accent?: boolean;
+  badge?: number;
 }
 
 interface GlassNavigationProps {
@@ -66,7 +67,12 @@ export const GlassSidebar: React.FC<{
                     />
                   ) : null}
                   <Icon className="relative z-10 w-[18px] h-[18px] shrink-0" aria-hidden="true" />
-                  <span className="relative z-10">{item.label}</span>
+                  <span className="relative z-10 flex-1 truncate">{item.label}</span>
+                  {item.badge && item.badge > 0 ? (
+                    <span className="relative z-10 px-1.5 py-0.2 rounded-full bg-[#FF803E] text-white text-[11px] font-bold">
+                      {item.badge > 9 ? '9+' : item.badge}
+                    </span>
+                  ) : null}
                 </>
               )}
             </NavLink>

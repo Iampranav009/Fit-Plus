@@ -4,7 +4,9 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -52,6 +54,7 @@ import {
   sanitizeSlug,
   sanitizeTimeHHMM,
 } from '../lib/firestoreValidation';
+import { getTodayKey } from '../lib/date';
 import type {
   AIPlanDraft,
   Assignment,
@@ -67,10 +70,12 @@ import type {
   ConsultationSlot,
   DailyActivity,
   Enrollment,
+  ExerciseDefinition,
   Invite,
   MealPlan,
   Notification,
   NotificationPrefs,
+  NutritionDiaryEntry,
   Package,
   PaymentRecord,
   ProgressEvent,
@@ -82,7 +87,15 @@ import type {
   TrainerVerificationRequest,
   User,
   UserRole,
+  WeeklyCheckIn,
   WorkoutPlan,
+  WorkoutSession,
+  AchievementUnlock,
+  ChatConversation,
+  ChatMessage,
+  WorkoutProgramTemplate,
+  NutritionProgramTemplate,
+  ScheduledReminder,
 } from '../types/domain';
 
 const BOOTSTRAP_ADMIN_EMAIL = 'pranavshindeji5001@gmail.com';
@@ -139,6 +152,15 @@ export interface LiveFirestoreSlice {
   consents: ConsentRecord[];
   verificationRequests: TrainerVerificationRequest[];
   auditLogs: AuditLogEntry[];
+  customExercises: ExerciseDefinition[];
+  workoutSessions: WorkoutSession[];
+  achievements: AchievementUnlock[];
+  nutritionLogs: NutritionDiaryEntry[];
+  weeklyCheckIns: WeeklyCheckIn[];
+  conversations: ChatConversation[];
+  workoutTemplates: WorkoutProgramTemplate[];
+  nutritionTemplates: NutritionProgramTemplate[];
+  scheduledReminders: ScheduledReminder[];
   onboardingCompleted: boolean;
   celebratedDateKeys: string[];
   pendingInviteToken?: string;
@@ -1601,6 +1623,31 @@ export async function getStorageFileDownloadUrl(photoPath: string): Promise<stri
   return getDownloadURL(storageRef(storage, photoPath));
 }
 
+export async function uploadWeeklyCheckInPhoto(params: {
+  clientId: string;
+  clientUserId: string;
+  weekKey: string;
+  file: File;
+}): Promise<{ downloadUrl: string; photoPath: string }> {
+  const allowedTypes = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(params.file.type)) {
+    throw new Error('Please upload a JPG, PNG, or WebP image.');
+  }
+  if (params.file.size <= 0 || params.file.size > 5 * 1024 * 1024) {
+    throw new Error('Check-in photos must be smaller than 5 MB.');
+  }
+  const safeUid = assertValidId(params.clientUserId, 'userId');
+  const ext = params.file.type.includes('png') ? 'png' : params.file.type.includes('webp') ? 'webp' : 'jpg';
+  const fileName = `wci_${params.weekKey}_${Date.now().toString(36)}.${ext}`;
+  const photoPath = `private/clients/${safeUid}/checkins/${fileName}`;
+  const ref = storageRef(storage, photoPath);
+  await uploadBytes(ref, params.file, {
+    contentType: params.file.type,
+  });
+  const downloadUrl = await getDownloadURL(ref);
+  return { downloadUrl, photoPath };
+}
+
 export async function uploadTrainerPhotoToStorage(params: {
   uid: string;
   file: File;
@@ -1845,6 +1892,449 @@ export async function resolveTrainerVerificationRequest(params: {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Stage 4A CRUD Operations: Exercises, Workouts, Achievements, Nutrition, Check-ins
+// -----------------------------------------------------------------------------
+export async function upsertCustomExerciseDoc(exercise: ExerciseDefinition): Promise<void> {
+  const id = assertValidId(exercise.id, 'exerciseId');
+  const trainerId = assertValidId(exercise.trainerId || '', 'trainerId');
+  const trainerUserId = assertValidId(exercise.trainerUserId || '', 'trainerUserId');
+  const payload = {
+    id,
+    name: clampNonEmptyString(exercise.name, 140, 'Custom Exercise'),
+    category: exercise.category || 'strength',
+    environment: exercise.environment || 'both',
+    equipment: exercise.equipment || 'bodyweight',
+    difficulty: exercise.difficulty || 'beginner',
+    primaryMuscles: clampStringArray(exercise.primaryMuscles, 6, 32),
+    secondaryMuscles: clampStringArray(exercise.secondaryMuscles, 6, 32),
+    instructions: clampStringArray(exercise.instructions, 10, 300),
+    commonMistakes: clampStringArray(exercise.commonMistakes, 10, 240),
+    safetyNotes: clampString(exercise.safetyNotes, BLUEPRINT_LIMITS.exerciseSafetyNotesMax),
+    alternativeIds: clampStringArray(exercise.alternativeIds, 10, 128),
+    isCustom: true,
+    trainerId,
+    trainerUserId,
+    updatedAt: serverTimestamp(),
+  };
+  try {
+    const ref = doc(db, 'exercises', id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      await updateDoc(ref, payload);
+    } else {
+      await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `exercises/${id}`);
+  }
+}
+
+export async function deleteCustomExerciseDoc(exerciseId: string): Promise<void> {
+  const safeId = assertValidId(exerciseId, 'exerciseId');
+  try {
+    await deleteDoc(doc(db, 'exercises', safeId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `exercises/${safeId}`);
+  }
+}
+
+export async function upsertWorkoutSessionDoc(session: WorkoutSession): Promise<void> {
+  const id = assertValidId(session.id, 'sessionId');
+  const clientId = assertValidId(session.clientId, 'clientId');
+  const clientUserId = assertValidId(session.clientUserId || '', 'clientUserId');
+  const payload = stripUndefined({
+    id,
+    clientId,
+    clientUserId,
+    trainerUserId: sanitizeOptionalId(session.trainerUserId),
+    assignmentId: sanitizeOptionalId(session.assignmentId),
+    planId: sanitizeOptionalId(session.planId),
+    dayIndex: typeof session.dayIndex === 'number' ? Math.max(0, Math.min(6, session.dayIndex)) : undefined,
+    title: clampNonEmptyString(session.title, 140, 'Workout Session'),
+    dateKey: sanitizeDateKey(session.dateKey, getTodayKey('Asia/Kolkata')),
+    status: session.status || 'completed',
+    startedAt: session.startedAt || new Date().toISOString(),
+    completedAt: session.completedAt || undefined,
+    durationSeconds: Math.max(0, Math.min(86400, Math.round(session.durationSeconds || 0))),
+    totalVolumeKg: Math.max(0, Math.min(500000, Math.round(session.totalVolumeKg || 0))),
+    completedSetsCount: Math.max(0, Math.min(500, Math.round(session.completedSetsCount || 0))),
+    prCount: Math.max(0, Math.min(100, Math.round(session.prCount || 0))),
+    exercises: Array.isArray(session.exercises) ? session.exercises.slice(0, 20) : [],
+    notes: session.notes ? clampString(session.notes, BLUEPRINT_LIMITS.workoutNotesMax) : undefined,
+    updatedAt: serverTimestamp(),
+  });
+  try {
+    const ref = doc(db, 'workoutSessions', id);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      await updateDoc(ref, payload);
+    } else {
+      await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `workoutSessions/${id}`);
+  }
+}
+
+export async function createAchievementUnlockDoc(unlock: AchievementUnlock): Promise<void> {
+  const id = assertValidId(unlock.id, 'achievementId');
+  const clientId = assertValidId(unlock.clientId, 'clientId');
+  const clientUserId = assertValidId(unlock.clientUserId || '', 'clientUserId');
+  const ref = doc(db, 'achievements', id);
+  try {
+    const snap = await getDoc(ref);
+    if (snap.exists()) return;
+    await setDoc(
+      ref,
+      stripUndefined({
+        id,
+        badgeId: unlock.badgeId,
+        clientId,
+        clientUserId,
+        title: clampNonEmptyString(unlock.title, 140, 'Achievement Unlocked'),
+        description: clampNonEmptyString(unlock.description, BLUEPRINT_LIMITS.achievementDescMax, 'Milestone reached'),
+        unlockedAt: unlock.unlockedAt || new Date().toISOString(),
+        metricSnapshot: unlock.metricSnapshot ? clampString(unlock.metricSnapshot, BLUEPRINT_LIMITS.metricSnapshotMax) : undefined,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `achievements/${id}`);
+  }
+}
+
+export async function upsertNutritionDiaryDoc(entry: NutritionDiaryEntry): Promise<void> {
+  const id = assertValidId(entry.id, 'logId');
+  const clientId = assertValidId(entry.clientId, 'clientId');
+  const clientUserId = assertValidId(entry.clientUserId || '', 'clientUserId');
+  const ref = doc(db, 'nutritionLogs', id);
+  try {
+    const snap = await getDoc(ref);
+    const payload = stripUndefined({
+      id,
+      clientId,
+      clientUserId,
+      trainerUserId: sanitizeOptionalId(entry.trainerUserId),
+      dateKey: sanitizeDateKey(entry.dateKey, getTodayKey('Asia/Kolkata')),
+      completedSlots: clampStringArray(entry.completedSlots, 5, 24),
+      items: Array.isArray(entry.items) ? entry.items.slice(0, 30) : [],
+      waterGlasses: Math.max(0, Math.min(24, Math.round(entry.waterGlasses || 0))),
+      personalNotes: entry.personalNotes ? clampString(entry.personalNotes, BLUEPRINT_LIMITS.nutritionNotesMax) : undefined,
+      updatedAt: serverTimestamp(),
+    });
+    if (snap.exists()) {
+      await updateDoc(ref, payload);
+    } else {
+      await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `nutritionLogs/${id}`);
+  }
+}
+
+export async function saveNutritionTrainerFeedbackDoc(params: {
+  logId: string;
+  feedback: string;
+}): Promise<void> {
+  const id = assertValidId(params.logId, 'logId');
+  try {
+    await updateDoc(doc(db, 'nutritionLogs', id), {
+      trainerFeedback: clampString(params.feedback, BLUEPRINT_LIMITS.trainerFeedbackMax),
+      trainerFeedbackAt: new Date().toISOString(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `nutritionLogs/${id}`);
+  }
+}
+
+export async function createWeeklyCheckInDoc(checkIn: WeeklyCheckIn): Promise<void> {
+  const id = assertValidId(checkIn.id, 'checkInId');
+  const clientId = assertValidId(checkIn.clientId, 'clientId');
+  const clientUserId = assertValidId(checkIn.clientUserId || '', 'clientUserId');
+  const payload = stripUndefined({
+    id,
+    clientId,
+    clientUserId,
+    trainerUserId: sanitizeOptionalId(checkIn.trainerUserId),
+    weekKey: sanitizeDateKey(checkIn.weekKey, getTodayKey('Asia/Kolkata')),
+    dateKey: sanitizeDateKey(checkIn.dateKey, getTodayKey('Asia/Kolkata')),
+    weightKg: typeof checkIn.weightKg === 'number' && checkIn.weightKg > 0 ? checkIn.weightKg : undefined,
+    energyLevel: Math.max(1, Math.min(5, Math.round(checkIn.energyLevel || 3))),
+    sleepQuality: Math.max(1, Math.min(5, Math.round(checkIn.sleepQuality || 3))),
+    workoutDifficulty: Math.max(1, Math.min(5, Math.round(checkIn.workoutDifficulty || 3))),
+    hungerLevel: Math.max(1, Math.min(5, Math.round(checkIn.hungerLevel || 3))),
+    scheduleChallenges: checkIn.scheduleChallenges ? clampString(checkIn.scheduleChallenges, BLUEPRINT_LIMITS.checkInChallengesMax) : undefined,
+    generalFeedback: checkIn.generalFeedback ? clampString(checkIn.generalFeedback, 1000) : undefined,
+    photoPath: checkIn.photoPath ? clampString(checkIn.photoPath, 300) : undefined,
+    shareWithTrainer: typeof checkIn.shareWithTrainer === 'boolean' ? checkIn.shareWithTrainer : undefined,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  try {
+    await setDoc(doc(db, 'weeklyCheckIns', id), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `weeklyCheckIns/${id}`);
+  }
+}
+
+export async function saveWeeklyCheckInTrainerFeedbackDoc(params: {
+  checkInId: string;
+  feedback: string;
+}): Promise<void> {
+  const id = assertValidId(params.checkInId, 'checkInId');
+  try {
+    await updateDoc(doc(db, 'weeklyCheckIns', id), {
+      trainerFeedback: clampString(params.feedback, BLUEPRINT_LIMITS.trainerFeedbackMax),
+      trainerReviewedAt: new Date().toISOString(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `weeklyCheckIns/${id}`);
+  }
+}
+
+export function subscribeConversationMessages(
+  conversationId: string,
+  onUpdate: (messages: ChatMessage[]) => void,
+  onError?: (err: unknown) => void,
+): () => void {
+  const convId = assertValidId(conversationId, 'conversationId');
+  const q = query(
+    collection(db, 'conversations', convId, 'messages'),
+    orderBy('createdAt', 'asc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const messages: ChatMessage[] = snap.docs.map((s) => {
+        const d = s.data();
+        return {
+          id: s.id,
+          conversationId: convId,
+          senderUserId: String(d.senderUserId || ''),
+          senderRole: (d.senderRole as ChatMessage['senderRole']) || 'client',
+          senderName: String(d.senderName || ''),
+          text: String(d.text || ''),
+          status: (d.status as ChatMessage['status']) || 'sent',
+          readByRecipient: Boolean(d.readByRecipient),
+          readAt: typeof d.readAt === 'string' ? d.readAt : undefined,
+          replyTo: d.replyTo ? (d.replyTo as ChatMessage['replyTo']) : undefined,
+          attachment: d.attachment ? (d.attachment as ChatMessage['attachment']) : undefined,
+          reference: d.reference ? (d.reference as ChatMessage['reference']) : undefined,
+          createdAt: tsToIso(d.createdAt),
+        };
+      });
+      onUpdate(messages);
+    },
+    (err) => {
+      if (onError) onError(err);
+      handleFirestoreError(err, OperationType.LIST, `conversations/${convId}/messages`);
+    }
+  );
+}
+
+export async function sendMessageDoc(params: {
+  conversationId: string;
+  senderUserId: string;
+  senderRole: 'client' | 'trainer' | 'system';
+  senderName: string;
+  text: string;
+  replyTo?: ChatMessage['replyTo'];
+  attachment?: ChatMessage['attachment'];
+  reference?: ChatMessage['reference'];
+}): Promise<string> {
+  const convId = assertValidId(params.conversationId, 'conversationId');
+  const senderUid = assertValidId(params.senderUserId, 'senderUserId');
+  const msgId = `msg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  
+  const msgPayload = stripUndefined({
+    id: msgId,
+    conversationId: convId,
+    senderUserId: senderUid,
+    senderRole: params.senderRole,
+    senderName: clampString(params.senderName, 100),
+    text: clampString(params.text || '', 2000),
+    status: 'sent',
+    readByRecipient: false,
+    replyTo: params.replyTo,
+    attachment: params.attachment,
+    reference: params.reference,
+    createdAt: serverTimestamp(),
+  });
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'conversations', convId, 'messages', msgId), msgPayload);
+
+  const convRef = doc(db, 'conversations', convId);
+  const snippet = params.text ? clampString(params.text, 140) : (params.attachment ? '📷 Image attachment' : 'Shared a plan');
+  
+  batch.update(convRef, {
+    lastMessageText: snippet,
+    lastMessageAt: new Date().toISOString(),
+    lastMessageSenderId: senderUid,
+    ...(params.senderRole === 'client' 
+      ? { unreadCountTrainer: increment(1) } 
+      : { unreadCountClient: increment(1) }),
+    updatedAt: serverTimestamp(),
+  });
+
+  try {
+    await batch.commit();
+    return msgId;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `conversations/${convId}/messages/${msgId}`);
+    return msgId;
+  }
+}
+
+export async function markConversationReadDoc(
+  conversationId: string,
+  userRole: 'client' | 'trainer'
+): Promise<void> {
+  const convId = assertValidId(conversationId, 'conversationId');
+  try {
+    await updateDoc(doc(db, 'conversations', convId), {
+      ...(userRole === 'client' ? { unreadCountClient: 0 } : { unreadCountTrainer: 0 }),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `conversations/${convId}`);
+  }
+}
+
+export async function uploadChatAttachmentPhoto(params: {
+  conversationId: string;
+  senderUserId: string;
+  file: File;
+}): Promise<{ url: string; storagePath: string; fileSize: number }> {
+  const allowedTypes = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(params.file.type)) {
+    throw new Error('Please upload a JPG, PNG, or WebP image.');
+  }
+  if (params.file.size <= 0 || params.file.size > 5 * 1024 * 1024) {
+    throw new Error('Chat attachments must be smaller than 5 MB.');
+  }
+  const convId = assertValidId(params.conversationId, 'conversationId');
+  const ext = params.file.type.includes('png') ? 'png' : params.file.type.includes('webp') ? 'webp' : 'jpg';
+  const fileName = `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
+  const storagePath = `private/messages/${convId}/${fileName}`;
+  const ref = storageRef(storage, storagePath);
+  await uploadBytes(ref, params.file, { contentType: params.file.type });
+  const url = await getDownloadURL(ref);
+  return { url, storagePath, fileSize: params.file.size };
+}
+
+export async function upsertWorkoutTemplateDoc(template: WorkoutProgramTemplate): Promise<void> {
+  const id = assertValidId(template.id, 'templateId');
+  const payload = stripUndefined({
+    id,
+    trainerId: assertValidId(template.trainerId, 'trainerId'),
+    trainerUserId: sanitizeOptionalId(template.trainerUserId),
+    title: clampString(template.title, 140),
+    description: clampString(template.description, 1000),
+    category: clampString(template.category || 'General', 50),
+    tags: Array.isArray(template.tags) ? template.tags.slice(0, 10) : [],
+    weekCount: Math.max(1, Math.min(52, template.weekCount || 4)),
+    days: Array.isArray(template.days) ? template.days.slice(0, 14) : [],
+    createdAt: template.createdAt ? new Date(template.createdAt) : serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  try {
+    await setDoc(doc(db, 'workoutTemplates', id), payload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `workoutTemplates/${id}`);
+  }
+}
+
+export async function deleteWorkoutTemplateDoc(templateId: string): Promise<void> {
+  const id = assertValidId(templateId, 'templateId');
+  try {
+    await deleteDoc(doc(db, 'workoutTemplates', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `workoutTemplates/${id}`);
+  }
+}
+
+export async function upsertNutritionTemplateDoc(template: NutritionProgramTemplate): Promise<void> {
+  const id = assertValidId(template.id, 'templateId');
+  const payload = stripUndefined({
+    id,
+    trainerId: assertValidId(template.trainerId, 'trainerId'),
+    trainerUserId: sanitizeOptionalId(template.trainerUserId),
+    title: clampString(template.title, 140),
+    description: clampString(template.description, 1000),
+    dietaryType: template.dietaryType || 'vegetarian',
+    targetKcal: Math.max(500, Math.min(10000, template.targetKcal || 2000)),
+    targetProteinG: Math.max(0, Math.min(500, template.targetProteinG || 100)),
+    hydrationTargetGlasses: Math.max(0, Math.min(24, template.hydrationTargetGlasses || 8)),
+    slots: Array.isArray(template.slots) ? template.slots.slice(0, 8) : [],
+    createdAt: template.createdAt ? new Date(template.createdAt) : serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  try {
+    await setDoc(doc(db, 'nutritionTemplates', id), payload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `nutritionTemplates/${id}`);
+  }
+}
+
+export async function deleteNutritionTemplateDoc(templateId: string): Promise<void> {
+  const id = assertValidId(templateId, 'templateId');
+  try {
+    await deleteDoc(doc(db, 'nutritionTemplates', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `nutritionTemplates/${id}`);
+  }
+}
+
+export async function createScheduledReminderDoc(reminder: ScheduledReminder): Promise<void> {
+  const id = assertValidId(reminder.id, 'reminderId');
+  const payload = stripUndefined({
+    id,
+    recipientUserId: assertValidId(reminder.recipientUserId, 'recipientUserId'),
+    category: reminder.category || 'workout',
+    title: clampString(reminder.title, 140),
+    body: clampString(reminder.body, 1000),
+    scheduledFor: reminder.scheduledFor,
+    triggerStatus: reminder.triggerStatus || 'scheduled',
+    idempotencyKey: clampString(reminder.idempotencyKey || id, 100),
+    channel: reminder.channel || 'in_app',
+    createdAt: serverTimestamp(),
+  });
+  try {
+    await setDoc(doc(db, 'scheduledReminders', id), payload);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `scheduledReminders/${id}`);
+  }
+}
+
+export async function updateScheduledReminderStatusDoc(
+  reminderId: string,
+  status: ScheduledReminder['triggerStatus']
+): Promise<void> {
+  const id = assertValidId(reminderId, 'reminderId');
+  try {
+    await updateDoc(doc(db, 'scheduledReminders', id), {
+      triggerStatus: status,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `scheduledReminders/${id}`);
+  }
+}
+
+export async function deleteScheduledReminderDoc(reminderId: string): Promise<void> {
+  const id = assertValidId(reminderId, 'reminderId');
+  try {
+    await deleteDoc(doc(db, 'scheduledReminders', id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `scheduledReminders/${id}`);
+  }
+}
+
 export async function fetchPublicTrainersAndPackages(): Promise<{
   trainers: TrainerProfile[];
   packages: Package[];
@@ -2079,13 +2569,14 @@ export async function resolveInvitePublic(token: string): Promise<PublicInviteRe
 export function subscribeAuthenticatedWorkspace(
   fbUser: FirebaseAuthUser,
   onUpdate: (patch: Partial<LiveFirestoreSlice>) => void,
-  options?: { isPlatformAdmin?: boolean },
+  options?: { isPlatformAdmin?: boolean; role?: UserRole },
 ): Unsubscribe {
   if (!fbUser.emailVerified) {
     return () => {};
   }
   const uid = assertValidId(fbUser.uid, 'userId');
   const isPlatformAdmin = Boolean(options?.isPlatformAdmin);
+  const userRole = options?.role;
   const unsubs: Unsubscribe[] = [];
 
   // Track merged sets for collections that have multiple scoped queries (e.g. trainers, packages, assignments)
@@ -2118,6 +2609,12 @@ export function subscribeAuthenticatedWorkspace(
   let trainerDailyActs: DailyActivity[] = [];
   let clientStreaks: StreakRecord[] = [];
   let trainerStreaks: StreakRecord[] = [];
+  let clientSessions: WorkoutSession[] = [];
+  let trainerSessions: WorkoutSession[] = [];
+  let clientNutrition: NutritionDiaryEntry[] = [];
+  let trainerNutrition: NutritionDiaryEntry[] = [];
+  let clientCheckIns: WeeklyCheckIn[] = [];
+  let trainerCheckIns: WeeklyCheckIn[] = [];
   const groupMemberMap = new Map<string, ClientGroupMember[]>();
   const groupMemberUnsubs = new Map<string, Unsubscribe>();
 
@@ -3130,6 +3627,312 @@ export function subscribeAuthenticatedWorkspace(
         onUpdate({ reviews });
       },
       (err) => handleFirestoreError(err, OperationType.LIST, 'reviews'),
+    ),
+  );
+
+  // ---------------------------------------------------------------------------
+  // Stage 4A Listeners: Custom Exercises, Workout Sessions, Achievements, Nutrition, Check-ins
+  // ---------------------------------------------------------------------------
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'exercises'), where('isCustom', '==', true)),
+      (snap) => {
+        const customExercises: ExerciseDefinition[] = snap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            name: String(d.name || ''),
+            category: (d.category as ExerciseDefinition['category']) || 'strength',
+            environment: (d.environment as ExerciseDefinition['environment']) || 'both',
+            equipment: (d.equipment as ExerciseDefinition['equipment']) || 'bodyweight',
+            difficulty: (d.difficulty as ExerciseDefinition['difficulty']) || 'beginner',
+            primaryMuscles: Array.isArray(d.primaryMuscles) ? d.primaryMuscles : [],
+            secondaryMuscles: Array.isArray(d.secondaryMuscles) ? d.secondaryMuscles : [],
+            instructions: Array.isArray(d.instructions) ? d.instructions : [],
+            commonMistakes: Array.isArray(d.commonMistakes) ? d.commonMistakes : [],
+            safetyNotes: String(d.safetyNotes || ''),
+            alternativeIds: Array.isArray(d.alternativeIds) ? d.alternativeIds : [],
+            isCustom: true,
+            trainerId: String(d.trainerId || ''),
+            trainerUserId: String(d.trainerUserId || ''),
+            createdAt: tsToIso(d.createdAt),
+          };
+        });
+        onUpdate({ customExercises });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'exercises'),
+    ),
+  );
+
+  const mapSession = (id: string, d: Record<string, unknown>): WorkoutSession => ({
+    id,
+    clientId: String(d.clientId || ''),
+    clientUserId: typeof d.clientUserId === 'string' && d.clientUserId ? d.clientUserId : undefined,
+    trainerUserId: typeof d.trainerUserId === 'string' && d.trainerUserId ? d.trainerUserId : undefined,
+    assignmentId: typeof d.assignmentId === 'string' && d.assignmentId ? d.assignmentId : undefined,
+    planId: typeof d.planId === 'string' && d.planId ? d.planId : undefined,
+    dayIndex: typeof d.dayIndex === 'number' ? d.dayIndex : undefined,
+    title: String(d.title || 'Workout Session'),
+    dateKey: String(d.dateKey || ''),
+    status: (d.status as WorkoutSession['status']) || 'completed',
+    startedAt: String(d.startedAt || tsToIso(d.createdAt)),
+    completedAt: typeof d.completedAt === 'string' && d.completedAt ? d.completedAt : undefined,
+    durationSeconds: Number(d.durationSeconds || 0),
+    totalVolumeKg: Number(d.totalVolumeKg || 0),
+    completedSetsCount: Number(d.completedSetsCount || 0),
+    prCount: Number(d.prCount || 0),
+    exercises: Array.isArray(d.exercises) ? (d.exercises as WorkoutSession['exercises']) : [],
+    notes: typeof d.notes === 'string' && d.notes ? d.notes : undefined,
+    updatedAt: tsToIso(d.updatedAt),
+  });
+
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'workoutSessions'), where('clientUserId', '==', uid)),
+      (snap) => {
+        clientSessions = snap.docs.map((s) => mapSession(s.id, s.data()));
+        onUpdate({ workoutSessions: mergeById(clientSessions, trainerSessions) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'workoutSessions'),
+    ),
+  );
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'workoutSessions'), where('trainerUserId', '==', uid)),
+      (snap) => {
+        trainerSessions = snap.docs.map((s) => mapSession(s.id, s.data()));
+        onUpdate({ workoutSessions: mergeById(clientSessions, trainerSessions) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'workoutSessions'),
+    ),
+  );
+
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'achievements'), where('clientUserId', '==', uid)),
+      (snap) => {
+        const achievements: AchievementUnlock[] = snap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            badgeId: d.badgeId,
+            clientId: String(d.clientId || ''),
+            clientUserId: String(d.clientUserId || uid),
+            title: String(d.title || ''),
+            description: String(d.description || ''),
+            unlockedAt: String(d.unlockedAt || tsToIso(d.createdAt)),
+            metricSnapshot: typeof d.metricSnapshot === 'string' && d.metricSnapshot ? d.metricSnapshot : undefined,
+          };
+        });
+        onUpdate({ achievements });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'achievements'),
+    ),
+  );
+
+  const mapNutrition = (id: string, d: Record<string, unknown>): NutritionDiaryEntry => ({
+    id,
+    clientId: String(d.clientId || ''),
+    clientUserId: typeof d.clientUserId === 'string' && d.clientUserId ? d.clientUserId : undefined,
+    trainerUserId: typeof d.trainerUserId === 'string' && d.trainerUserId ? d.trainerUserId : undefined,
+    dateKey: String(d.dateKey || ''),
+    completedSlots: Array.isArray(d.completedSlots) ? (d.completedSlots as NutritionDiaryEntry['completedSlots']) : [],
+    items: Array.isArray(d.items) ? (d.items as NutritionDiaryEntry['items']) : [],
+    waterGlasses: Number(d.waterGlasses || 0),
+    personalNotes: typeof d.personalNotes === 'string' && d.personalNotes ? d.personalNotes : undefined,
+    trainerFeedback: typeof d.trainerFeedback === 'string' && d.trainerFeedback ? d.trainerFeedback : undefined,
+    trainerFeedbackAt: typeof d.trainerFeedbackAt === 'string' && d.trainerFeedbackAt ? d.trainerFeedbackAt : undefined,
+    updatedAt: tsToIso(d.updatedAt),
+  });
+
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'nutritionLogs'), where('clientUserId', '==', uid)),
+      (snap) => {
+        clientNutrition = snap.docs.map((s) => mapNutrition(s.id, s.data()));
+        onUpdate({ nutritionLogs: mergeById(clientNutrition, trainerNutrition) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'nutritionLogs'),
+    ),
+  );
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'nutritionLogs'), where('trainerUserId', '==', uid)),
+      (snap) => {
+        trainerNutrition = snap.docs.map((s) => mapNutrition(s.id, s.data()));
+        onUpdate({ nutritionLogs: mergeById(clientNutrition, trainerNutrition) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'nutritionLogs'),
+    ),
+  );
+
+  const mapCheckIn = (id: string, d: Record<string, unknown>): WeeklyCheckIn => ({
+    id,
+    clientId: String(d.clientId || ''),
+    clientUserId: typeof d.clientUserId === 'string' && d.clientUserId ? d.clientUserId : undefined,
+    trainerUserId: typeof d.trainerUserId === 'string' && d.trainerUserId ? d.trainerUserId : undefined,
+    weekKey: String(d.weekKey || ''),
+    dateKey: String(d.dateKey || ''),
+    weightKg: typeof d.weightKg === 'number' ? d.weightKg : undefined,
+    energyLevel: Number(d.energyLevel || 3),
+    sleepQuality: Number(d.sleepQuality || 3),
+    workoutDifficulty: Number(d.workoutDifficulty || 3),
+    hungerLevel: Number(d.hungerLevel || 3),
+    scheduleChallenges: typeof d.scheduleChallenges === 'string' && d.scheduleChallenges ? d.scheduleChallenges : undefined,
+    generalFeedback: typeof d.generalFeedback === 'string' && d.generalFeedback ? d.generalFeedback : undefined,
+    photoPath: typeof d.photoPath === 'string' && d.photoPath ? d.photoPath : undefined,
+    shareWithTrainer: typeof d.shareWithTrainer === 'boolean' ? d.shareWithTrainer : undefined,
+    trainerFeedback: typeof d.trainerFeedback === 'string' && d.trainerFeedback ? d.trainerFeedback : undefined,
+    trainerReviewedAt: typeof d.trainerReviewedAt === 'string' && d.trainerReviewedAt ? d.trainerReviewedAt : undefined,
+    createdAt: tsToIso(d.createdAt),
+    updatedAt: tsToIso(d.updatedAt),
+  });
+
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'weeklyCheckIns'), where('clientUserId', '==', uid)),
+      (snap) => {
+        clientCheckIns = snap.docs.map((s) => mapCheckIn(s.id, s.data()));
+        onUpdate({ weeklyCheckIns: mergeById(clientCheckIns, trainerCheckIns) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'weeklyCheckIns'),
+    ),
+  );
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'weeklyCheckIns'), where('trainerUserId', '==', uid)),
+      (snap) => {
+        trainerCheckIns = snap.docs.map((s) => mapCheckIn(s.id, s.data()));
+        onUpdate({ weeklyCheckIns: mergeById(clientCheckIns, trainerCheckIns) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'weeklyCheckIns'),
+    ),
+  );
+
+  // Conversations
+  const mapConversation = (id: string, d: Record<string, unknown>): ChatConversation => ({
+    id,
+    clientId: String(d.clientId || ''),
+    clientUserId: String(d.clientUserId || ''),
+    clientName: String(d.clientName || 'Client'),
+    clientAvatar: typeof d.clientAvatar === 'string' ? d.clientAvatar : undefined,
+    trainerId: String(d.trainerId || ''),
+    trainerUserId: String(d.trainerUserId || ''),
+    trainerName: String(d.trainerName || 'Coach'),
+    trainerAvatar: typeof d.trainerAvatar === 'string' ? d.trainerAvatar : undefined,
+    lastMessageText: typeof d.lastMessageText === 'string' ? d.lastMessageText : undefined,
+    lastMessageAt: typeof d.lastMessageAt === 'string' ? d.lastMessageAt : undefined,
+    lastMessageSenderId: typeof d.lastMessageSenderId === 'string' ? d.lastMessageSenderId : undefined,
+    unreadCountClient: Number(d.unreadCountClient || 0),
+    unreadCountTrainer: Number(d.unreadCountTrainer || 0),
+    isBlocked: Boolean(d.isBlocked),
+    blockedByUserId: typeof d.blockedByUserId === 'string' ? d.blockedByUserId : undefined,
+    createdAt: tsToIso(d.createdAt),
+    updatedAt: tsToIso(d.updatedAt),
+  });
+
+  let clientConversations: ChatConversation[] = [];
+  let trainerConversations: ChatConversation[] = [];
+
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'conversations'), where('clientUserId', '==', uid)),
+      (snap) => {
+        clientConversations = snap.docs.map((s) => mapConversation(s.id, s.data()));
+        onUpdate({ conversations: mergeById(clientConversations, trainerConversations) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'conversations'),
+    ),
+  );
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'conversations'), where('trainerUserId', '==', uid)),
+      (snap) => {
+        trainerConversations = snap.docs.map((s) => mapConversation(s.id, s.data()));
+        onUpdate({ conversations: mergeById(clientConversations, trainerConversations) });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'conversations'),
+    ),
+  );
+
+  // Workout Program Templates
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'workoutTemplates'), where('trainerUserId', '==', uid)),
+      (snap) => {
+        const workoutTemplates: WorkoutProgramTemplate[] = snap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            trainerId: String(d.trainerId || ''),
+            trainerUserId: String(d.trainerUserId || uid),
+            title: String(d.title || 'Workout Program'),
+            description: String(d.description || ''),
+            category: String(d.category || 'General'),
+            tags: Array.isArray(d.tags) ? d.tags : [],
+            weekCount: Number(d.weekCount || 4),
+            days: Array.isArray(d.days) ? (d.days as WorkoutProgramTemplate['days']) : [],
+            createdAt: tsToIso(d.createdAt),
+            updatedAt: tsToIso(d.updatedAt),
+          };
+        });
+        onUpdate({ workoutTemplates });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'workoutTemplates'),
+    ),
+  );
+
+  // Nutrition Program Templates
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'nutritionTemplates'), where('trainerUserId', '==', uid)),
+      (snap) => {
+        const nutritionTemplates: NutritionProgramTemplate[] = snap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            trainerId: String(d.trainerId || ''),
+            trainerUserId: String(d.trainerUserId || uid),
+            title: String(d.title || 'Nutrition Program'),
+            description: String(d.description || ''),
+            dietaryType: (d.dietaryType as NutritionProgramTemplate['dietaryType']) || 'vegetarian',
+            targetKcal: Number(d.targetKcal || 2000),
+            targetProteinG: Number(d.targetProteinG || 100),
+            hydrationTargetGlasses: Number(d.hydrationTargetGlasses || 8),
+            slots: Array.isArray(d.slots) ? (d.slots as NutritionProgramTemplate['slots']) : [],
+            createdAt: tsToIso(d.createdAt),
+            updatedAt: tsToIso(d.updatedAt),
+          };
+        });
+        onUpdate({ nutritionTemplates });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'nutritionTemplates'),
+    ),
+  );
+
+  // Scheduled Reminders
+  unsubs.push(
+    onSnapshot(
+      query(collection(db, 'scheduledReminders'), where('recipientUserId', '==', uid)),
+      (snap) => {
+        const scheduledReminders: ScheduledReminder[] = snap.docs.map((s) => {
+          const d = s.data();
+          return {
+            id: s.id,
+            recipientUserId: String(d.recipientUserId || uid),
+            category: d.category || 'workout',
+            title: String(d.title || ''),
+            body: String(d.body || ''),
+            scheduledFor: String(d.scheduledFor || ''),
+            triggerStatus: d.triggerStatus || 'scheduled',
+            idempotencyKey: String(d.idempotencyKey || s.id),
+            channel: d.channel || 'in_app',
+            createdAt: tsToIso(d.createdAt),
+          };
+        });
+        onUpdate({ scheduledReminders });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'scheduledReminders'),
     ),
   );
 

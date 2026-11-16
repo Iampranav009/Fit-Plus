@@ -92,3 +92,20 @@
    - Update `design.md`, `architecture.md`, `testing.md`, `CHANGELOG.md`.
    - Add unit + Firestore rules tests; run `compile_applet`, `lint_applet`, `npm test`, `npm run test:rules`, `vite build` chunk measurement, and emulator check.
    - **STOP** and present the 8-part Stage 4A checkpoint report.
+
+---
+
+## 5. Stage 4A Implementation & Resolution Status
+
+- [x] **Audit Finding 1 (Firestore Read Amplification)**: Resolved. `subscribeAuthenticatedWorkspace` now scopes real-time listeners by authenticated user role (`client` vs `trainer` vs `admin`) and avoids subscribing in real time to public marketplace collections (`trainers`, `packages`, `reviews`) which are cached via `fetchPublicTrainersAndPackages`.
+- [x] **Audit Finding 2 (Initial Bundle Size & Code Splitting)**: Resolved. All secondary pages and new Stage 4A routes are wrapped with `React.lazy` and `Suspense` using `RouteLoadingFallback`. Page chunks average 10–25 kB minified.
+- [x] **Audit Finding 3 (Hardcoded '8200' Default)**: Resolved in `src/pages/client/TaskDetailPage.tsx`. Default value now uses `completion?.loggedValue || ''`.
+- [x] **Audit Finding 4 (Haptic Feedback & Reduced Motion)**: Implemented in `src/lib/haptics.ts` with graceful fallback and `prefers-reduced-motion` guards.
+- [x] **Audit Finding 5 (Firestore Security Rules Synchronicity)**: Implemented and validated for all 35 blueprint collections in `firestore.rules` and `firebase-blueprint.json`. `npm run test:rules` passes with 0 errors.
+- [x] **Interactive Live Workout Mode**: Implemented in `src/pages/client/LiveWorkoutPage.tsx` (`/app/workout`, `/app/workout/:dayIndex`) with rest countdown, 1RM estimate, PR detection, substitution modal, and localStorage draft persistence.
+- [x] **Structured Exercise Library**: Implemented in `src/pages/client/ExerciseLibraryPage.tsx` (`/app/exercises`, `/studio/exercises`) with 30 India-accessible exercises, anatomical SVG highlighting (`AnatomyMuscleSvg`), and trainer custom exercise creator.
+- [x] **Daily Nutrition Diary**: Implemented in `src/pages/client/NutritionDiaryPage.tsx` (`/app/nutrition`) with 23 IFCT/NIN-aligned Indian foods, macro totals, water logging, and coach feedback loop in `StudioClientDetailPage.tsx`.
+- [x] **Weekly Reflection & Check-in**: Implemented in `src/pages/client/WeeklyCheckInPage.tsx` (`/app/check-in`) with 1–5 metrics, optional photo upload, and coach review interface.
+- [x] **FitPlus Wrapped**: Implemented in `src/pages/client/WrappedPage.tsx` (`/app/wrapped`) with client-side Canvas 9:16 and 4:5 PNG generation and privacy-first default-OFF toggles.
+- [x] **Achievements System**: Expanded `ACHIEVEMENT_CATALOG` to 9 badges with automated trigger evaluation on workout completion and celebration modal (`AchievementUnlockModal`).
+

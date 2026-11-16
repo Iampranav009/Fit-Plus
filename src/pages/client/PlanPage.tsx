@@ -143,6 +143,18 @@ export const PlanPage: React.FC = () => {
 
                   <p className="text-[14px] text-[#A2A8B5]">{currentWorkoutDay.coachInstructions}</p>
 
+                  {!currentWorkoutDay.isRecoveryDay && currentWorkoutDay.exercises.length > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/app/workout/${currentWorkoutDay.dayIndex}`)}
+                        className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#FF803E] to-[#E15A1C] text-white text-sm font-semibold hover:brightness-105 shadow-md shadow-[#FF803E]/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <span>Start Live Workout</span>
+                      </button>
+                    </div>
+                  ) : null}
+
                   {currentWorkoutDay.exercises.length === 0 ? (
                     <p className="text-[14px] text-[#7C8393] py-4 border-t border-white/[0.08]">
                       No exercises scheduled on this rest day.
@@ -193,6 +205,20 @@ export const PlanPage: React.FC = () => {
                 </p>
                 <h2 className="mt-1 text-[20px] font-semibold text-[#F5F5F7]">{mealPlan.title}</h2>
                 <p className="mt-2 text-[14px] text-[#A2A8B5]">{mealPlan.coachNotes}</p>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-[20px] bg-[#B8E66C]/10 border border-[#B8E66C]/30">
+                <div>
+                  <p className="text-sm font-bold text-white">Daily Nutrition Diary</p>
+                  <p className="text-xs text-white/60">Log today's Indian meals, estimate macros & water</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/app/nutrition')}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#B8E66C] text-[#101218] text-xs font-bold hover:brightness-105 transition-all cursor-pointer"
+                >
+                  Open Diary
+                </button>
               </div>
 
               <div className="grid gap-4">

@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Copy, FolderPlus, Plus, Trash2, UserCheck, UserPlus, X } from 'lucide-react';
+import { Check, Copy, FolderPlus, Plus, Trash2, UserCheck, UserPlus, X, MessageSquare } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import type { GoalFocus } from '../../types/domain';
 import { formatIndiaDate } from '../../lib/date';
 import { computeClientAdherencePercent, computeStreakSummary } from '../../lib/streak';
+import { computeClientPulse } from '../../lib/pulseEngine';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { GlassSheet } from '../../components/ui/GlassSheet';
@@ -31,6 +32,7 @@ export const StudioClientsPage: React.FC = () => {
     pendingRelationshipsForActiveTrainer,
     clientGroups,
     clientGroupMembers,
+    subscriptions,
     getClientApprovedRecoveryDates,
     createClientGroup,
     deleteClientGroup,
@@ -374,6 +376,16 @@ export const StudioClientsPage: React.FC = () => {
                   (r) => r.clientId === client.id && r.status === 'active',
                 );
                 const pkg = store.packages.find((p) => p.id === rel?.packageId);
+                const pulse = computeClientPulse({
+                  client,
+                  assignments: store.assignments,
+                  completions: store.completions,
+                  todayKey,
+                  workoutSessions: store.workoutSessions ?? [],
+                  weeklyCheckIns: store.weeklyCheckIns ?? [],
+                  subscription: subscriptions.find((s) => s.clientId === client.id),
+                  approvedRecoveryDates: approvedRecovery,
+                });
 
                 return (
                   <div
@@ -389,12 +401,34 @@ export const StudioClientsPage: React.FC = () => {
                         className="mt-1 sm:mt-0 h-5 w-5 accent-[#FF803E] shrink-0 cursor-pointer"
                       />
                       <div className="min-w-0">
-                        <Link
-                          to={`/studio/clients/${client.id}`}
-                          className="text-[16px] font-semibold text-[#F5F5F7] hover:text-[#FF803E] transition-colors"
-                        >
-                          {client.firstName} {client.lastName}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link
+                            to={`/studio/clients/${client.id}`}
+                            className="text-[16px] font-semibold text-[#F5F5F7] hover:text-[#FF803E] transition-colors"
+                          >
+                            {client.firstName} {client.lastName}
+                          </Link>
+                          {pulse.status === 'on_track' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                              On Track
+                            </span>
+                          )}
+                          {pulse.status === 'needs_attention' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                              Attention
+                            </span>
+                          )}
+                          {pulse.status === 'follow_up_recommended' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/15 text-purple-400 border border-purple-500/30">
+                              Follow-up
+                            </span>
+                          )}
+                          {pulse.status === 'insufficient_data' && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-white/50 border border-white/10">
+                              New
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-0.5 text-[13px] text-[#7C8393] flex flex-wrap items-center gap-x-1.5">
                           <span className="capitalize">
                             {client.primaryGoal.replaceAll('_', ' ')}
@@ -411,7 +445,7 @@ export const StudioClientsPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between sm:justify-end gap-5 pl-8 sm:pl-0">
+                    <div className="flex items-center justify-between sm:justify-end gap-3 pl-8 sm:pl-0">
                       <div className="text-left sm:text-right tabular-nums">
                         <p className="text-[14px] font-semibold text-[#F5F5F7]">
                           {adherence}% adherence
@@ -421,8 +455,15 @@ export const StudioClientsPage: React.FC = () => {
                         </p>
                       </div>
                       <Link
+                        to={`/studio/messages?client=${client.id}`}
+                        className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] text-white/60 hover:text-white transition-colors"
+                        title={`Message ${client.firstName}`}
+                      >
+                        <MessageSquare className="w-4 h-4 text-[#FF803E]" />
+                      </Link>
+                      <Link
                         to={`/studio/clients/${client.id}`}
-                        className="glass-control min-h-[40px] px-3.5 py-2 rounded-[10px] text-[13px] font-medium text-[#F5F5F7] hover:border-white/25 inline-flex items-center shrink-0 transition-colors"
+                        className="glass-control min-h-[36px] px-3 py-1.5 rounded-[10px] text-[13px] font-medium text-[#F5F5F7] hover:border-white/25 inline-flex items-center shrink-0 transition-colors"
                       >
                         Open
                       </Link>

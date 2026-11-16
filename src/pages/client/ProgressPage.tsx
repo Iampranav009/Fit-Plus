@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Camera, Eye, EyeOff, Loader2, Plus } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Camera, Eye, EyeOff, Loader2, Plus, Sparkles, Trophy } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import * as fsService from '../../data/firestoreService';
 import { addDaysToKey, formatIndiaDate } from '../../lib/date';
 import { computeHeatmapGrid, computeStreakSummary } from '../../lib/streak';
+import { evaluateAchievementsState } from '../../lib/achievementsEngine';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { Heatmap } from '../../components/ui/Heatmap';
@@ -156,40 +158,27 @@ export const ProgressPage: React.FC = () => {
     [heatmapDays],
   );
 
-  const achievements = useMemo(
-    () => [
-      {
-        kind: 'streak_7' as const,
-        title: '7-day steady streak',
-        subtitle: streak.longestStreak >= 7 ? 'Earned' : `${streak.longestStreak}/7 days`,
-        unlocked: streak.longestStreak >= 7,
-      },
-      {
-        kind: 'consistency' as const,
-        title: '10 active days',
-        subtitle: completedDaysCount >= 10 ? 'Earned' : `${completedDaysCount}/10 days`,
-        unlocked: completedDaysCount >= 10,
-      },
-      {
-        kind: 'strength' as const,
-        title: 'Strength benchmark',
-        subtitle: allClientEvents.some((e) => e.metricType === 'strength')
-          ? 'Earned'
-          : 'Log 1 strength entry',
-        unlocked: allClientEvents.some((e) => e.metricType === 'strength'),
-      },
-      {
-        kind: 'hydration' as const,
-        title: 'Logged 3+ check-ins',
-        subtitle:
-          allClientEvents.length >= 3
-            ? 'Earned'
-            : `${allClientEvents.length}/3 logged`,
-        unlocked: allClientEvents.length >= 3,
-      },
-    ],
-    [streak.longestStreak, completedDaysCount, allClientEvents],
-  );
+  const achievementProgress = useMemo(() => {
+    return evaluateAchievementsState({
+      clientId: activeClient?.id || '',
+      todayKey,
+      assignments: clientAssignments,
+      completions: clientCompletions,
+      approvedRecoveryDates,
+      workoutSessions: store.workoutSessions || [],
+      progressEvents: store.progressEvents,
+      existingUnlocks: store.achievements || [],
+    }).items;
+  }, [
+    activeClient,
+    todayKey,
+    clientAssignments,
+    clientCompletions,
+    approvedRecoveryDates,
+    store.workoutSessions,
+    store.progressEvents,
+    store.achievements,
+  ]);
 
   const openModalForTab = (tab: ProgressMetricTab = metricTab) => {
     setMetricTab(tab);
@@ -336,7 +325,7 @@ export const ProgressPage: React.FC = () => {
 
         {/* Achievement Badges Gallery */}
         <section className="surface-card rounded-[22px] p-5 flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
             <div className="flex items-center gap-3">
               <MediaImage
                 assetKey="illusTrophy"
@@ -344,32 +333,70 @@ export const ProgressPage: React.FC = () => {
                 aspectClass="w-11 h-11 rounded-[12px] shrink-0"
               />
               <div>
-                <h2 className="text-[17px] font-semibold text-[#F5F5F7]">Consistency milestones</h2>
+                <h2 className="text-[17px] font-semibold text-[#F5F5F7]">Milestone Gallery</h2>
                 <p className="text-[12px] text-[#7C8393]">
-                  Derived directly from your logged completions and check-ins
+                  9 verifiable milestones derived from workouts, streaks, and consistency
                 </p>
               </div>
             </div>
-            <span className="text-[13px] font-semibold text-[#FFB06B] tabular-nums">
-              {achievements.filter((a) => a.unlocked).length}/{achievements.length} earned
-            </span>
+
+            <div className="flex items-center gap-3 self-start sm:self-auto">
+              <span className="text-[13px] font-semibold text-[#FFB06B] tabular-nums">
+                {achievementProgress.filter((a) => a.unlocked).length}/{achievementProgress.length} unlocked
+              </span>
+              <Link
+                to="/app/wrapped"
+                className="px-3 py-1.5 rounded-xl bg-[#FF803E]/15 hover:bg-[#FF803E]/25 text-[#FF803E] text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>FitPlus Wrapped</span>
+              </Link>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {achievements.map((item) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {achievementProgress.map((item) => (
               <div
-                key={item.title}
-                className={`rounded-[16px] p-3.5 border flex flex-col items-center text-center gap-2 ${
+                key={item.badgeId}
+                className={`rounded-[18px] p-4 border flex flex-col justify-between gap-3 transition-all ${
                   item.unlocked
-                    ? 'surface-elevated border-white/[0.12]'
+                    ? 'surface-elevated border-white/[0.12] shadow-sm'
                     : 'bg-[#101218]/60 border-white/[0.06] opacity-75'
                 }`}
               >
-                <AchievementBadgeSvg kind={item.kind} unlocked={item.unlocked} size={46} />
-                <p className="text-[13px] font-semibold text-[#F5F5F7] leading-snug">
-                  {item.title}
-                </p>
-                <p className="text-[11px] text-[#A2A8B5] tabular-nums">{item.subtitle}</p>
+                <div className="flex items-start gap-3">
+                  <AchievementBadgeSvg kind={item.badgeId} unlocked={item.unlocked} size={48} className="shrink-0" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-bold text-white truncate">
+                        {item.title}
+                      </p>
+                      {item.unlocked && (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] bg-[#B8E66C]/20 text-[#B8E66C] font-semibold uppercase">
+                          Earned
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-white/60 leading-relaxed mt-0.5 line-clamp-2">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-white/5 space-y-1">
+                  <div className="flex items-center justify-between text-[11px] text-white/50 font-mono">
+                    <span>Progress</span>
+                    <span>{item.currentValue} / {item.targetValue}</span>
+                  </div>
+                  <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        item.unlocked ? 'bg-[#B8E66C]' : 'bg-[#FF803E]'
+                      }`}
+                      style={{ width: `${item.progressPercent}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             ))}
           </div>

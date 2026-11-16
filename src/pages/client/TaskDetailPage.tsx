@@ -40,7 +40,7 @@ export const TaskDetailPage: React.FC = () => {
   const [loggedValue, setLoggedValue] = useState(
     completion?.loggedValue ||
       (assignment?.completionType === 'log_value'
-        ? '8200'
+        ? (assignment?.targetLabel || '')
         : assignment?.durationMinutes
           ? `${assignment.durationMinutes} min`
           : ''),
@@ -120,6 +120,18 @@ export const TaskDetailPage: React.FC = () => {
             <div className="rounded-[14px] surface-elevated p-3.5 text-[13px] text-[#A2A8B5]">
               <span className="text-[#FFB06B] font-medium">Coach adjustment: </span>
               {assignment.overrideNote}
+            </div>
+          ) : null}
+
+          {assignment.category === 'workout' ? (
+            <div className="pt-2">
+              <GlassButton
+                type="button"
+                fullWidth
+                onClick={() => navigate('/app/workout')}
+              >
+                Launch Live Workout Mode
+              </GlassButton>
             </div>
           ) : null}
         </section>
