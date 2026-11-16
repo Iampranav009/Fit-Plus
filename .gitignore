@@ -10,3 +10,4 @@ coverage/
 .aistudio/
 .vscode/
 .agents/
+package-lock.json
