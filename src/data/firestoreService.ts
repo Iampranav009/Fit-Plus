@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase';
 import {
   collection,
   deleteDoc,
@@ -2182,10 +2183,26 @@ export async function sendMessageDoc(params: {
   });
 
   try {
+    await supabase.from('chat_messages').insert({
+      id: msgId,
+      conversation_id: convId,
+      sender_user_id: senderUid,
+      sender_role: params.senderRole === 'system' ? 'admin' : params.senderRole,
+      text: params.text,
+      reply_to: (params.replyTo as unknown as import('../types/database.types').Json) || null,
+      attachment: (params.attachment as unknown as import('../types/database.types').Json) || null,
+      reference: (params.reference as unknown as import('../types/database.types').Json) || null,
+      read_by_recipient: false,
+    });
+  } catch (sbErr) {
+    console.warn('Supabase sendMessage notice:', sbErr);
+  }
+
+  try {
     await batch.commit();
     return msgId;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, `conversations/${convId}/messages/${msgId}`);
+    console.warn(`Firestore sendMessage write notice for ${convId}:`, error);
     return msgId;
   }
 }
@@ -2196,12 +2213,21 @@ export async function markConversationReadDoc(
 ): Promise<void> {
   const convId = assertValidId(conversationId, 'conversationId');
   try {
+    await supabase
+      .from('chat_conversations')
+      .update(userRole === 'client' ? { unread_count_client: 0 } : { unread_count_trainer: 0 })
+      .eq('id', convId);
+  } catch (sbErr) {
+    console.warn('Supabase markConversationRead notice:', sbErr);
+  }
+
+  try {
     await updateDoc(doc(db, 'conversations', convId), {
       ...(userRole === 'client' ? { unreadCountClient: 0 } : { unreadCountTrainer: 0 }),
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `conversations/${convId}`);
+    console.warn(`Firestore markConversationRead notice for ${convId}:`, error);
   }
 }
 

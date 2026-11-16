@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Check, Copy, ExternalLink } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
-import * as fsService from '../../data/firestoreService';
+import * as supabaseService from '../../data/supabaseService';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField, TextAreaField } from '../../components/ui/InputField';
@@ -26,7 +26,7 @@ export const StudioStorefrontPage: React.FC = () => {
     if (!file || !isCloudSynced || !firebaseUser) return;
     setUploadingPhoto(true);
     try {
-      const { photoUrl } = await fsService.uploadTrainerPhotoToStorage({
+      const { photoUrl } = await supabaseService.uploadTrainerPhotoToStorage({
         uid: firebaseUser.uid,
         file,
       });

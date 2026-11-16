@@ -153,22 +153,42 @@ export function buildBulkAssignments(
 }
 
 export type InviteValidationResult =
-  | { state: 'valid'; invite: Invite }
-  | { state: 'expired'; invite: Invite }
-  | { state: 'redeemed'; invite: Invite }
-  | { state: 'revoked'; invite: Invite }
-  | { state: 'not_found' };
+  | { state: 'valid'; invite: Invite; isValid?: boolean; reason?: string }
+  | { state: 'expired'; invite: Invite; isValid?: boolean; reason?: string }
+  | { state: 'redeemed'; invite: Invite; isValid?: boolean; reason?: string }
+  | { state: 'revoked'; invite: Invite; isValid?: boolean; reason?: string }
+  | { state: 'not_found'; isValid?: boolean; reason?: string };
 
-export function validateInvite(token: string, invites: Invite[], todayKey: string): InviteValidationResult {
-  const normalized = token.trim().toUpperCase();
-  const invite = invites.find((i) => i.token.toUpperCase() === normalized);
-  if (!invite) return { state: 'not_found' };
-  if (invite.status === 'revoked') return { state: 'revoked', invite };
-  if (invite.status === 'redeemed') return { state: 'redeemed', invite };
-  if (invite.status === 'expired' || invite.expiresAt.slice(0, 10) < todayKey) {
-    return { state: 'expired', invite };
+export function validateInvite(
+  tokenOrInvite: string | { token?: string; code?: string; status?: string; expiresAt?: string; [key: string]: any },
+  invites?: Invite[],
+  todayKey?: string,
+): InviteValidationResult {
+  if (typeof tokenOrInvite === 'object' && tokenOrInvite !== null) {
+    const inviteObj = tokenOrInvite as any;
+    const nowIso = new Date().toISOString();
+    if (inviteObj.status === 'redeemed') {
+      return { state: 'redeemed', invite: inviteObj, isValid: false, reason: 'already_redeemed' };
+    }
+    if (inviteObj.status === 'revoked') {
+      return { state: 'revoked', invite: inviteObj, isValid: false, reason: 'revoked' };
+    }
+    if (inviteObj.status === 'expired' || (inviteObj.expiresAt && inviteObj.expiresAt < nowIso)) {
+      return { state: 'expired', invite: inviteObj, isValid: false, reason: 'expired' };
+    }
+    return { state: 'valid', invite: inviteObj, isValid: true };
   }
-  return { state: 'valid', invite };
+
+  const normalized = (tokenOrInvite || '').trim().toUpperCase();
+  const invite = (invites || []).find((i) => (i.token || (i as any).code || '').toUpperCase() === normalized);
+  if (!invite) return { state: 'not_found', isValid: false, reason: 'not_found' };
+  if (invite.status === 'revoked') return { state: 'revoked', invite, isValid: false, reason: 'revoked' };
+  if (invite.status === 'redeemed') return { state: 'redeemed', invite, isValid: false, reason: 'already_redeemed' };
+  const dateKey = todayKey || new Date().toISOString().slice(0, 10);
+  if (invite.status === 'expired' || (invite.expiresAt && invite.expiresAt.slice(0, 10) < dateKey)) {
+    return { state: 'expired', invite, isValid: false, reason: 'expired' };
+  }
+  return { state: 'valid', invite, isValid: true };
 }
 
 export function createDemoEnrollmentState(params: {
@@ -298,7 +318,7 @@ export function generateDeterministicPlanDraft(params: {
   daysPerWeek: number;
   environment: TrainingEnvironment;
   dietaryPreference: DietaryPreference;
-  constraints: string;
+  constraints?: string;
 }): AIPlanDraft {
   const focusMap: Record<GoalFocus, string> = {
     weight_management: 'Sustainable Fat Loss & Metabolic Conditioning',
@@ -371,9 +391,9 @@ export function generateDeterministicPlanDraft(params: {
     daysPerWeek: params.daysPerWeek,
     environment: params.environment,
     dietaryPreference: params.dietaryPreference,
-    constraints: params.constraints.trim() || 'No specific joint restrictions noted',
+    constraints: (params.constraints || '').trim() || 'No specific joint restrictions noted',
     title: `${focusMap[params.objective]} (${params.daysPerWeek}d/wk)`,
-    summary: `Deterministic sample draft tailored for ${params.experienceLevel} training (${params.environment}) with ${params.dietaryPreference.replace('_', ' ')} Indian home meals. Constraint check: ${params.constraints.trim() || 'standard progression'}.`,
+    summary: `Deterministic sample draft tailored for ${params.experienceLevel} training (${params.environment}) with ${params.dietaryPreference.replace('_', ' ')} Indian home meals. Constraint check: ${(params.constraints || '').trim() || 'standard progression'}.`,
     workoutDays,
     nutritionOutline,
     habitCommitments,

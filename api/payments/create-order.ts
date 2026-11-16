@@ -6,6 +6,7 @@ import {
   getFirebaseAdminContext,
   verifyAuthenticatedRequest,
 } from '../_lib/firebaseAdmin.js';
+import { applySecurityHeaders, checkRateLimit, sanitizeErrorMessage } from '../_lib/security.js';
 import {
   activateEnrollmentFromPayment,
   buildTrainerSettlementPreview,
@@ -27,6 +28,8 @@ const CreateOrderSchema = z.object({
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  applySecurityHeaders(res);
+
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
@@ -34,6 +37,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const authCtx = await verifyAuthenticatedRequest(req.headers);
+
+    const rateLimit = checkRateLimit(`order:${authCtx.uid}`, 15, 60 * 1000);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        ok: false,
+        code: 'rate-limit/exceeded',
+        error: 'Too many order requests. Please wait a moment before trying again.',
+      });
+    }
+
     const parsed = CreateOrderSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({
@@ -297,8 +310,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(error.status).json({ ok: false, code: error.code, error: error.message });
     }
     console.error('Create Cashfree order error:', error);
-    const message =
-      error instanceof Error ? error.message : 'Unable to initialize Cashfree checkout right now.';
+    const message = sanitizeErrorMessage(error, 'Unable to initialize Cashfree checkout right now.');
     return res.status(500).json({
       ok: false,
       code: 'payment/order-failed',

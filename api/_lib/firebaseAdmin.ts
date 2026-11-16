@@ -6,6 +6,7 @@ import {
   isFirebaseAdminConfigured,
   type AppletConfig,
 } from './firestoreAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from './supabaseAdmin.js';
 
 export type { AppletConfig };
 export { getFirestoreAdminContext, getFirestoreAdminContext as getFirebaseAdminContext, isFirebaseAdminConfigured };
@@ -85,18 +86,46 @@ export async function verifyAuthenticatedRequest(headers: {
     throw new AuthHttpError(403, 'auth/email-unverified', 'Verified email address is required.');
   }
 
-  const [userSnap, adminSnap] = await Promise.all([
-    db.collection('users').doc(decoded.uid).get(),
-    db.collection('admins').doc(decoded.uid).get(),
-  ]);
-
   const bootstrapAdminEmail = (
     process.env.FITPLUS_ADMIN_EMAIL || 'pranavshindeji5001@gmail.com'
   ).toLowerCase();
-  const isAdmin =
-    adminSnap.exists || (Boolean(email) && email.toLowerCase() === bootstrapAdminEmail);
 
-  const storedRole = userSnap.data()?.role;
+  let storedRole: string | undefined;
+  let isAdmin = Boolean(email) && email.toLowerCase() === bootstrapAdminEmail;
+
+  // Primary: Check role in Supabase
+  if (isSupabaseAdminConfigured()) {
+    try {
+      const supabaseAdmin = getSupabaseAdminClient();
+      const [userRes, adminRes] = await Promise.all([
+        supabaseAdmin.from('app_users').select('role').eq('firebase_uid', decoded.uid).maybeSingle(),
+        supabaseAdmin.from('platform_admins').select('firebase_uid').eq('firebase_uid', decoded.uid).maybeSingle(),
+      ]);
+      if (userRes.data?.role) {
+        storedRole = userRes.data.role;
+      }
+      if (adminRes.data?.firebase_uid) {
+        isAdmin = true;
+      }
+    } catch {
+      // Fallback to Firestore if Supabase table is not yet created or offline
+    }
+  }
+
+  // Fallback: Check in Firestore if not found in Supabase
+  if (!storedRole && db) {
+    try {
+      const [userSnap, adminSnap] = await Promise.all([
+        db.collection('users').doc(decoded.uid).get(),
+        db.collection('admins').doc(decoded.uid).get(),
+      ]);
+      storedRole = userSnap.data()?.role;
+      if (adminSnap.exists) isAdmin = true;
+    } catch {
+      // Graceful fallback
+    }
+  }
+
   const role: 'client' | 'trainer' | 'admin' = isAdmin
     ? 'admin'
     : storedRole === 'trainer'

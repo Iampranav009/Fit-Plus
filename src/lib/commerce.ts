@@ -23,10 +23,12 @@ export function computePackageDurationDays(pkg: {
 
 export function computeAuthoritativeOrderAmountPaise(pkg: {
   priceInr: number;
-  cadence: BillingCadence;
+  cadence?: BillingCadence;
+  discountInr?: number;
 }): number {
   if (pkg.cadence === 'free') return 0;
-  const safeInr = Number.isFinite(pkg.priceInr) ? Math.max(0, Math.round(pkg.priceInr)) : 0;
+  const discount = Number.isFinite(pkg.discountInr) ? Math.max(0, pkg.discountInr!) : 0;
+  const safeInr = Number.isFinite(pkg.priceInr) ? Math.max(0, Math.round(pkg.priceInr - discount)) : 0;
   return safeInr * 100;
 }
 

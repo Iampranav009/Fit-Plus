@@ -159,6 +159,7 @@ export function computeMonthlyWrappedSummary(params: {
     monthKey,
     monthLabel: formatMonthLabel(monthKey),
     workoutsCompleted,
+    totalWorkoutsCompleted: workoutsCompleted,
     totalTrainingMinutes,
     totalVolumeKg,
     consistencyPercent,

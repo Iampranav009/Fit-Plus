@@ -61,7 +61,7 @@ import { findEligibleReviewRelationship } from '../lib/commerce';
 import { demoRepository } from '../data/repository';
 import { createSeedSnapshot, STORE_SCHEMA_VERSION } from '../data/demo/fixtures';
 import { auth, getApiSecurityHeaders } from '../lib/firebase';
-import * as fsService from '../data/firestoreService';
+import * as fsService from '../data/supabaseService';
 import { getTodayKey } from '../lib/date';
 import {
   attemptBookConsultationSlot,
@@ -517,7 +517,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [demoHydrationMap, setDemoHydrationMap] = useState<Record<string, number>>({});
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [celebrateStreakToday, setCelebrateStreakToday] = useState(false);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>('conv_aarav_arjun');
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [activeConversationMessages, setActiveConversationMessages] = useState<ChatMessage[]>([]);
 
   const workspaceUnsubRef = useRef<(() => void) | null>(null);

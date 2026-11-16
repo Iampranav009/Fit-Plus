@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { BadgeCheck, CalendarX2, CheckCircle2, CreditCard, Lock } from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
-import type { PublicInviteResolveResult } from '../../data/firestoreService';
+import type { PublicInviteResolveResult } from '../../data/supabaseService';
 import { validateInvite } from '../../lib/engines';
 import { formatIndiaDate, formatINR } from '../../lib/date';
 import { launchCashfreeCheckout } from '../../lib/cashfree';

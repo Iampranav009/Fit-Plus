@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, ClipboardCheck, Dumbbell, MessageSquare, Plus, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
-import * as fsService from '../../data/firestoreService';
+import * as supabaseService from '../../data/supabaseService';
 import { formatIndiaDate } from '../../lib/date';
 import { computeClientAdherencePercent, computeStreakSummary } from '../../lib/streak';
 import { AppShell } from '../../components/layout/AppShell';
@@ -110,7 +110,7 @@ export const StudioClientDetailPage: React.FC = () => {
     let active = true;
     for (const ev of sharedPhotoEvents) {
       if (!ev.photoPath || sharedPhotoUrls[ev.id]) continue;
-      void fsService
+      void supabaseService
         .getStorageFileDownloadUrl(ev.photoPath)
         .then((url) => {
           if (active) setSharedPhotoUrls((prev) => ({ ...prev, [ev.id]: url }));

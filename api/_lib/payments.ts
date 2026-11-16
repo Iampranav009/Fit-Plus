@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from './supabaseAdmin.js';
 
 export type CashfreeEnvironment = 'sandbox' | 'production';
 
@@ -655,6 +656,72 @@ export async function activateEnrollmentFromPayment(params: {
   });
 
   await batch.commit();
+
+  // Supabase PostgreSQL Synchronization (Stage 4E)
+  if (isSupabaseAdminConfigured()) {
+    try {
+      const supabaseAdmin = getSupabaseAdminClient();
+      await Promise.allSettled([
+        supabaseAdmin.from('payment_records').upsert({
+          id: paymentId,
+          client_user_id: clientUserId,
+          trainer_user_id: trainerUserId,
+          package_id: packageId,
+          subscription_id: subscriptionId,
+          amount_inr: pkgDetails.priceInr,
+          amount_paise: pkgDetails.amountPaise,
+          currency: 'INR',
+          cashfree_order_id: providerOrderId || `fp_${paymentId}`,
+          cashfree_payment_id: providerPaymentId || null,
+          status: 'captured',
+          payment_method: paymentMethod || 'upi',
+          coupon_code: payment.couponCode || null,
+          discount_inr: Number(payment.discountInr || 0),
+          gst_inr: 0,
+          platform_fee_inr: 0,
+          trainer_net_inr: pkgDetails.priceInr,
+          is_demo_order: false,
+        }),
+        supabaseAdmin.from('subscriptions').upsert({
+          id: subscriptionId,
+          client_user_id: clientUserId,
+          trainer_user_id: trainerUserId,
+          package_id: packageId,
+          status: 'active',
+          current_period_start: nowIso,
+          current_period_end: periodEndIso,
+          amount_inr: pkgDetails.priceInr,
+          amount_paise: pkgDetails.amountPaise,
+          currency: 'INR',
+          cancel_at_period_end: false,
+        }),
+        supabaseAdmin.from('coaching_relationships').upsert({
+          id: relationshipId,
+          trainer_id: trainerId,
+          trainer_user_id: trainerUserId,
+          client_id: clientId,
+          client_user_id: clientUserId,
+          package_id: packageId,
+          status: 'active',
+          started_at: nowIso,
+        }),
+        supabaseAdmin.from('enrollments').upsert({
+          id: enrollmentId,
+          client_id: clientId,
+          client_user_id: clientUserId,
+          trainer_id: trainerId,
+          trainer_user_id: trainerUserId,
+          package_id: packageId,
+          subscription_id: subscriptionId,
+          status: 'active',
+          is_demo_checkout: false,
+          enrolled_at: nowIso,
+        }),
+      ]);
+    } catch (sbErr) {
+      console.warn('Supabase payment sync warning:', sbErr);
+    }
+  }
 
   return {
     alreadyCaptured: false,

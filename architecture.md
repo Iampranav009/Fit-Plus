@@ -1,12 +1,17 @@
-# FitPlus Production Architecture (Stage 3)
+# FitPlus Production Architecture (Stage 4D/4E — Supabase PostgreSQL & Storage Migration)
+
+> [!IMPORTANT]
+> **Stage 4D/4E Database & Storage Migration Complete:**
+> Cloud Firestore and Firebase Storage have been migrated to **Supabase PostgreSQL** and **Supabase Storage**. Firebase Authentication remains the sole user identity provider. For the complete PostgreSQL relational schema, RLS policies, and SDK integration details, see [supabase-architecture.md](file:///C:/Users/prana/antigravity/FitPlus/supabase-architecture.md) and [database-schema.md](file:///C:/Users/prana/antigravity/FitPlus/database-schema.md).
 
 ## 1. Platform Overview
 FitPlus is an India-first independent personal coaching platform built with:
 - **Frontend**: React 19 + TypeScript + Vite 8 + Tailwind CSS v4 (Liquid Glass design system).
 - **Routing & Hosting**: React Router v7 SPA hosted on Vercel (`vercel.json` rewrites non-file/non-API routes to `/index.html`) + Express dev/preview parity (`server.ts`) and Vercel Serverless Functions (`/api/*`).
 - **Authentication & App Security**: Firebase Authentication (Google Sign-In + Email/Password with `sendEmailVerification` & `sendPasswordResetEmail` + `browserLocalPersistence`), optional Firebase App Check (`ReCaptchaV3Provider`), and server-side Firebase Admin SDK Bearer ID token verification.
-- **Database**: Cloud Firestore named database `ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841` in `asia-south1` under Firebase project `gen-lang-client-0381020502`, accessed on the server with `{ preferRest: true }` for low-latency serverless cold starts.
-- **Storage**: Firebase Storage (`gen-lang-client-0381020502.firebasestorage.app`) governed by `storage.rules` for private client progress photos and trainer credential uploads.
+- **Authoritative Database**: Supabase PostgreSQL (`https://rayzmyfanubpuqdsencw.supabase.co`) with 41 relational tables, Row-Level Security (RLS) policies scoped via `auth.jwt()->>'sub'`, PostgreSQL transactional integrity, and Supabase Realtime live subscriptions.
+- **Sole Media Storage**: Supabase Storage across 5 provisioned buckets (`public-trainer-assets`, `profile-avatars`, `progress-photos`, `coaching-attachments`, `verification-documents`) with strict RLS policies.
+- **Legacy Fallback**: Legacy Cloud Firestore and Firebase Storage are maintained in read-only/backward-compatible mode for historical recovery and rollback safety.
 
 ---
 

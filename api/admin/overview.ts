@@ -1,11 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import {
   AuthHttpError,
-  getFirebaseAdminContext,
   verifyAuthenticatedRequest,
 } from '../_lib/firebaseAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../_lib/supabaseAdmin.js';
+import { getFirestoreAdminContext } from '../_lib/firestoreAdmin.js';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const ModerationSchema = z.discriminatedUnion('action', [
   z.object({
@@ -17,16 +18,12 @@ const ModerationSchema = z.discriminatedUnion('action', [
     action: z.literal('delete_review'),
     reviewId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_\-]+$/),
   }),
+  z.object({
+    action: z.literal('set_feature_flag'),
+    flagKey: z.string().min(1).max(64),
+    isEnabled: z.boolean(),
+  }),
 ]);
-
-function toIso(value: unknown): string {
-  if (!value) return new Date().toISOString();
-  if (typeof value === 'string') return value;
-  if (typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
-    return (value as { toDate: () => Date }).toDate().toISOString();
-  }
-  return new Date().toISOString();
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -44,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const { db } = getFirebaseAdminContext();
+    const sb = isSupabaseAdminConfigured() ? getSupabaseAdminClient() : null;
 
     if (req.method === 'POST') {
       const parsed = ModerationSchema.safeParse(req.body ?? {});
@@ -57,158 +54,177 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const logId = `log_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-      const batch = db.batch();
+      const now = new Date().toISOString();
 
       if (parsed.data.action === 'toggle_trainer_publish') {
         const { trainerId, isPublished } = parsed.data;
-        const trainerRef = db.collection('trainers').doc(trainerId);
-        const snap = await trainerRef.get();
-        if (!snap.exists) {
-          return res.status(404).json({ ok: false, error: 'Trainer profile not found.' });
+        if (sb) {
+          await sb.from('trainer_profiles').update({ is_published: isPublished }).eq('id', trainerId);
+          await sb.from('audit_logs').insert({
+            id: logId,
+            actor_user_id: authCtx.uid,
+            action: isPublished ? 'trainer_published' : 'trainer_unpublished',
+            target_resource: `trainer:${trainerId}`,
+            details: { isPublished } as unknown as import('../../src/types/database.types.js').Json,
+          });
         }
-        batch.update(trainerRef, {
-          isPublished,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-        batch.set(db.collection('auditLogs').doc(logId), {
-          id: logId,
-          actorUserId: authCtx.uid,
-          action: isPublished ? 'trainer_published' : 'trainer_unpublished',
-          targetType: 'trainer',
-          targetId: trainerId,
-          summary: `${isPublished ? 'Published' : 'Unpublished'} coach storefront ${String(snap.data()?.displayName || trainerId)}.`,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      } else {
+      } else if (parsed.data.action === 'delete_review') {
         const { reviewId } = parsed.data;
-        const reviewRef = db.collection('reviews').doc(reviewId);
-        const snap = await reviewRef.get();
-        if (!snap.exists) {
-          return res.status(404).json({ ok: false, error: 'Review not found.' });
+        if (sb) {
+          await sb.from('trainer_reviews').delete().eq('id', reviewId);
+          await sb.from('audit_logs').insert({
+            id: logId,
+            actor_user_id: authCtx.uid,
+            action: 'review_removed',
+            target_resource: `review:${reviewId}`,
+          });
         }
-        batch.delete(reviewRef);
-        batch.set(db.collection('auditLogs').doc(logId), {
-          id: logId,
-          actorUserId: authCtx.uid,
-          action: 'review_removed',
-          targetType: 'review',
-          targetId: reviewId,
-          summary: `Removed client review ${reviewId} for trainer ${String(snap.data()?.trainerId || '')}.`,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
+      } else if (parsed.data.action === 'set_feature_flag') {
+        const { flagKey, isEnabled } = parsed.data;
+        if (sb) {
+          await sb.from('feature_flags').upsert({
+            flag_key: flagKey,
+            is_enabled: isEnabled,
+            updated_at: now,
+          });
+          await sb.from('audit_logs').insert({
+            id: logId,
+            actor_user_id: authCtx.uid,
+            action: 'feature_flag_updated',
+            target_resource: `flag:${flagKey}`,
+            details: { isEnabled } as unknown as import('../../src/types/database.types.js').Json,
+          });
+        }
       }
 
-      await batch.commit();
       return res.status(200).json({ ok: true });
     }
 
-    const [
-      usersSnap,
-      trainersSnap,
-      clientsSnap,
-      relsSnap,
-      subsSnap,
-      paymentsSnap,
-      verifsSnap,
-      reviewsSnap,
-    ] = await Promise.all([
+    // GET Overview Data - Prefer Supabase
+    if (sb) {
+      const [
+        usersRes,
+        trainersRes,
+        clientsRes,
+        relsRes,
+        subsRes,
+        paymentsRes,
+        verifsRes,
+        reviewsRes,
+        flagsRes,
+      ] = await Promise.all([
+        sb.from('app_users').select('*', { count: 'exact', head: true }),
+        sb.from('trainer_profiles').select('*'),
+        sb.from('client_profiles').select('*', { count: 'exact', head: true }),
+        sb.from('coaching_relationships').select('*'),
+        sb.from('subscriptions').select('*'),
+        sb.from('payment_records').select('*'),
+        sb.from('trainer_verification_requests').select('*'),
+        sb.from('trainer_reviews').select('*').order('created_at', { ascending: false }).limit(25),
+        sb.from('feature_flags').select('*'),
+      ]);
+
+      const activeRelByTrainer = new Map<string, number>();
+      let activeRelationships = 0;
+      (relsRes.data || []).forEach((r) => {
+        if (r.status === 'active') {
+          activeRelationships += 1;
+          const tId = r.trainer_id;
+          activeRelByTrainer.set(tId, (activeRelByTrainer.get(tId) || 0) + 1);
+        }
+      });
+
+      let publishedTrainers = 0;
+      let verifiedTrainers = 0;
+      const trainersSummary = (trainersRes.data || []).map((t) => {
+        if (t.is_published) publishedTrainers += 1;
+        if (t.verification_status === 'verified') verifiedTrainers += 1;
+        return {
+          id: t.id,
+          userId: t.user_id,
+          displayName: t.display_name,
+          city: t.city,
+          verificationStatus: t.verification_status,
+          isPublished: t.is_published,
+          activeClientsCount: activeRelByTrainer.get(t.id) || 0,
+        };
+      });
+
+      let activeSubscriptions = 0;
+      (subsRes.data || []).forEach((s) => {
+        if (s.status === 'active') activeSubscriptions += 1;
+      });
+
+      let capturedRevenueInr = 0;
+      let capturedPaymentsCount = 0;
+      (paymentsRes.data || []).forEach((p) => {
+        if (p.status === 'captured') {
+          capturedPaymentsCount += 1;
+          capturedRevenueInr += Number(p.amount_inr || 0);
+        }
+      });
+
+      const pendingVerifications = (verifsRes.data || []).filter((v) => v.status === 'pending').length;
+
+      const recentReviews = (reviewsRes.data || []).map((rev) => ({
+        id: rev.id,
+        trainerId: rev.trainer_user_id,
+        clientId: rev.client_user_id,
+        clientUserId: rev.client_user_id,
+        relationshipId: '',
+        authorName: 'FitPlus Member',
+        rating: rev.rating,
+        comment: rev.review_text,
+        createdAt: rev.created_at,
+        updatedAt: rev.updated_at,
+      }));
+
+      return res.status(200).json({
+        ok: true,
+        overview: {
+          totalUsers: usersRes.count ?? 0,
+          totalTrainers: trainersSummary.length,
+          publishedTrainers,
+          verifiedTrainers,
+          totalClients: clientsRes.count ?? 0,
+          activeRelationships,
+          activeSubscriptions,
+          capturedRevenueInr,
+          capturedPaymentsCount,
+          pendingVerifications,
+          totalReviews: recentReviews.length,
+          trainersSummary,
+          recentReviews,
+          featureFlags: flagsRes.data || [],
+        },
+      });
+    }
+
+    // Fallback if Supabase unconfigured
+    const { db } = getFirestoreAdminContext();
+    const [usersSnap, trainersSnap, clientsSnap] = await Promise.all([
       db.collection('users').get(),
       db.collection('trainers').get(),
       db.collection('clients').get(),
-      db.collection('relationships').get(),
-      db.collection('subscriptions').get(),
-      db.collection('payments').get(),
-      db.collection('verificationRequests').get(),
-      db.collection('reviews').get(),
     ]);
-
-    const activeRelByTrainer = new Map<string, number>();
-    let activeRelationships = 0;
-    relsSnap.docs.forEach((doc) => {
-      const data = doc.data();
-      if (data.status === 'active') {
-        activeRelationships += 1;
-        const tId = String(data.trainerId || '');
-        activeRelByTrainer.set(tId, (activeRelByTrainer.get(tId) || 0) + 1);
-      }
-    });
-
-    let publishedTrainers = 0;
-    let verifiedTrainers = 0;
-    const trainersSummary = trainersSnap.docs.map((doc) => {
-      const d = doc.data();
-      const isPublished = d.isPublished !== false;
-      const verificationStatus: 'unverified' | 'pending' | 'verified' =
-        d.verificationStatus === 'verified' || d.verificationStatus === 'pending'
-          ? d.verificationStatus
-          : 'unverified';
-      if (isPublished) publishedTrainers += 1;
-      if (verificationStatus === 'verified') verifiedTrainers += 1;
-      return {
-        id: doc.id,
-        userId: String(d.userId || ''),
-        displayName: String(d.displayName || 'Coach'),
-        city: String(d.city || ''),
-        verificationStatus,
-        isPublished,
-        activeClientsCount: activeRelByTrainer.get(doc.id) || 0,
-      };
-    });
-
-    let activeSubscriptions = 0;
-    subsSnap.docs.forEach((doc) => {
-      if (doc.data().status === 'active') activeSubscriptions += 1;
-    });
-
-    let capturedRevenueInr = 0;
-    let capturedPaymentsCount = 0;
-    paymentsSnap.docs.forEach((doc) => {
-      const d = doc.data();
-      if (d.status === 'captured') {
-        capturedPaymentsCount += 1;
-        capturedRevenueInr += Number(d.amountInr || 0);
-      }
-    });
-
-    const pendingVerifications = verifsSnap.docs.filter((d) => d.data().status === 'pending').length;
-
-    const recentReviews = reviewsSnap.docs
-      .map((doc) => {
-        const d = doc.data();
-        return {
-          id: doc.id,
-          trainerId: String(d.trainerId || ''),
-          clientId: String(d.clientId || ''),
-          clientUserId: String(d.clientUserId || ''),
-          relationshipId: String(d.relationshipId || ''),
-          authorName: String(d.authorName || 'FitPlus Member'),
-          rating: Number(d.rating || 5),
-          comment: String(d.comment || ''),
-          createdAt: toIso(d.createdAt),
-          updatedAt: toIso(d.updatedAt),
-        };
-      })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, 25);
 
     return res.status(200).json({
       ok: true,
       overview: {
         totalUsers: usersSnap.size,
         totalTrainers: trainersSnap.size,
-        publishedTrainers,
-        verifiedTrainers,
+        publishedTrainers: 0,
+        verifiedTrainers: 0,
         totalClients: clientsSnap.size,
-        activeRelationships,
-        activeSubscriptions,
-        capturedRevenueInr,
-        capturedPaymentsCount,
-        pendingVerifications,
-        totalReviews: reviewsSnap.size,
-        trainersSummary,
-        recentReviews,
+        activeRelationships: 0,
+        activeSubscriptions: 0,
+        capturedRevenueInr: 0,
+        capturedPaymentsCount: 0,
+        pendingVerifications: 0,
+        totalReviews: 0,
+        trainersSummary: [],
+        recentReviews: [],
+        featureFlags: [],
       },
     });
   } catch (error) {

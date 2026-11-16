@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Send, Paperclip, MessageCircle, X, Dumbbell, Utensils, Image as ImageIcon } from 'lucide-react';
 import type { ChatMessage, WorkoutProgramTemplate, NutritionProgramTemplate } from '../../types/domain';
-import { uploadChatAttachmentPhoto } from '../../data/firestoreService';
+import { uploadChatAttachmentPhoto } from '../../data/supabaseService';
 
 interface ChatComposerProps {
   conversationId: string;

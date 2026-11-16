@@ -17,6 +17,7 @@ const InvitePage = React.lazy(() => import('./pages/public/InvitePage').then((m)
 const DiscoverPage = React.lazy(() => import('./pages/public/DiscoverPage').then((m) => ({ default: m.DiscoverPage })));
 const TrainerPublicProfilePage = React.lazy(() => import('./pages/public/TrainerPublicProfilePage').then((m) => ({ default: m.TrainerPublicProfilePage })));
 const PaymentResultPage = React.lazy(() => import('./pages/public/PaymentResultPage').then((m) => ({ default: m.PaymentResultPage })));
+const LegalPage = React.lazy(() => import('./pages/public/LegalPage').then((m) => ({ default: m.LegalPage })));
 
 // Onboarding pages
 const RoleSelectPage = React.lazy(() => import('./pages/onboarding/RoleSelectPage').then((m) => ({ default: m.RoleSelectPage })));
@@ -303,6 +304,10 @@ export default function App() {
             <Route path="/discover" element={<DiscoverPage />} />
             <Route path="/trainers/:slug" element={<TrainerPublicProfilePage />} />
             <Route path="/payments/result" element={<PaymentResultPage />} />
+            <Route path="/privacy" element={<LegalPage />} />
+            <Route path="/terms" element={<LegalPage />} />
+            <Route path="/refund-policy" element={<LegalPage />} />
+            <Route path="/disclaimer" element={<LegalPage />} />
 
             {/* Onboarding Routes */}
             <Route

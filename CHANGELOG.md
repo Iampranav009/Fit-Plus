@@ -1,5 +1,34 @@
 # FitPlus Changelog
 
+## Stage 4E — Complete Supabase Database & Storage Migration (2026-11-16)
+
+### Checkpoint 4E.1: Architecture & Audit
+- Performed complete audit of 41 managed Firestore collections and 57+ real-time snapshot listeners (`database-migration-audit.md`).
+- Designed hybrid enterprise architecture retaining Firebase Authentication as the sole end-user identity provider while replacing Firestore with Supabase PostgreSQL and Firebase Storage with Supabase Storage.
+- Mapped all document models to strongly-typed PostgreSQL schemas with TEXT primary keys and proper constraints.
+
+### Checkpoint 4E.2: Supabase Schema & Row Level Security
+- Created version-controlled SQL migrations:
+  - `001_base_schema.sql`: 41 tables with TIMESTAMPTZ, integer minor currency units, and JSONB document storage.
+  - `002_rls_policies.sql`: Comprehensive Row Level Security policies utilizing `auth.jwt()->>'sub'` for Firebase user verification.
+  - `003_functions_triggers.sql`: PostgreSQL triggers for `updated_at`, streak recalculation, and `activate_payment_subscription` atomic transaction.
+  - `004_indexes.sql`: Performance indexes on all foreign keys, status flags, and timestamps, plus Supabase Realtime publications.
+  - `005_storage_buckets.sql`: Storage bucket provisioning and access policies.
+  - `seed.sql`: Baseline promo coupons and feature flags.
+- Generated full TypeScript definitions in `src/types/database.types.ts`.
+
+### Checkpoint 4E.3: Client & Storage Integration
+- Configured official `@supabase/supabase-js` SDK with dynamic accessToken resolver passing Firebase ID tokens.
+- Created `src/lib/supabaseStorage.ts` and provisioned all 5 Supabase Storage buckets live in the cloud (`public-trainer-assets`, `profile-avatars`, `progress-photos`, `coaching-attachments`, `verification-documents`).
+- Implemented client repositories in `src/data/repositories/` and unified `src/data/supabaseService.ts`.
+
+### Checkpoint 4E.4: API & Payment Hardening
+- Resolved trainer mode chat permission error (`conversations/conv_aarav_arjun`) by adding Supabase synchronization and defensive handling for demo records.
+- Refactored `api/ai/generate-plan.ts` with Supabase persistence and deterministic fallback, resolving the HTTP 500 error.
+- Enhanced `api/_lib/payments.ts` with dual-system synchronization during Cashfree payment captures.
+- Updated `api/health.ts` to report live readiness for Firebase Auth, Supabase DB, Supabase Storage, Gemini, and Cashfree.
+- Implemented `api/auth/provision-claims.ts` to set `role: 'authenticated'` custom claim on Firebase tokens.
+
 ## Stage 4B — Trainer Empowerment & Coaching Operations (2026-11-16)
 
 ### Checkpoint 4B.0: Critical Cashfree Webhook Defect Resolution

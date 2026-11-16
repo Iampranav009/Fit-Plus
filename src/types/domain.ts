@@ -811,6 +811,7 @@ export interface WrappedMonthlySummary {
   monthKey: string;
   monthLabel: string;
   workoutsCompleted: number;
+  totalWorkoutsCompleted?: number;
   totalTrainingMinutes: number;
   totalVolumeKg: number;
   consistencyPercent: number;

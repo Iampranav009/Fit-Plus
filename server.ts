@@ -5,6 +5,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import healthHandler from './api/health.js';
 import deleteAccountHandler from './api/account/delete.js';
+import exportAccountHandler from './api/account/export.js';
+import provisionClaimsHandler from './api/auth/provision-claims.js';
 import resolveInviteHandler from './api/invites/resolve.js';
 import generatePlanHandler from './api/ai/generate-plan.js';
 import recalculateStreakHandler from './api/streaks/recalculate.js';
@@ -15,6 +17,7 @@ import cashfreeWebhookHandler from './api/payments/webhook.js';
 import refundPaymentHandler from './api/payments/refund.js';
 import adminOverviewHandler from './api/admin/overview.js';
 import monitoringErrorHandler from './api/monitoring/error.js';
+import { SECURITY_HEADERS } from './api/_lib/security.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -32,6 +35,15 @@ function adaptVercelHandler(
 
 async function startServer() {
   const app = express();
+
+  // Standard security headers middleware
+  app.use((_req, res, next) => {
+    for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+      res.setHeader(key, value);
+    }
+    next();
+  });
+
   app.use(
     express.json({
       limit: '1mb',
@@ -42,6 +54,8 @@ async function startServer() {
   );
 
   app.all('/api/health', adaptVercelHandler(healthHandler));
+  app.all('/api/auth/provision-claims', adaptVercelHandler(provisionClaimsHandler));
+  app.all('/api/account/export', adaptVercelHandler(exportAccountHandler));
   app.all('/api/account/delete', adaptVercelHandler(deleteAccountHandler));
   app.all('/api/invites/resolve', adaptVercelHandler(resolveInviteHandler));
   app.all('/api/ai/generate-plan', adaptVercelHandler(generatePlanHandler));
@@ -56,6 +70,14 @@ async function startServer() {
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ ok: false, error: 'API endpoint not found' });
+  });
+
+  // Sanitized global error handler
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error('Unhandled server error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ ok: false, error: 'Internal server error' });
+    }
   });
 
   if (process.env.NODE_ENV !== 'production') {

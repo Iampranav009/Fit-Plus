@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test src/tests/domain.test.ts src/tests/firestore.rules.test.ts src/tests/routing.test.ts",
+    "test": "tsx --test src/tests/domain.test.ts src/tests/firestore.rules.test.ts src/tests/routing.test.ts src/tests/e2e.test.ts",
+    "test:e2e": "tsx --test src/tests/e2e.test.ts",
     "test:rules": "eslint firestore.rules",
     "test:emulator": "firebase emulators:exec --only firestore 'tsx --test src/tests/firestore.emulator.test.ts'"
   },
@@ -22,6 +23,7 @@
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@firebase/rules-unit-testing": "^6.0.0",
     "@google/genai": "^2.4.0",
+    "@supabase/supabase-js": "^2.119.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vercel/node": "^31.0.0",
     "@vitejs/plugin-react": "^6.1.1",

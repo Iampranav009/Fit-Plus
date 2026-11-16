@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Camera, Eye, EyeOff, Loader2, Plus, Sparkles, Trophy } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
-import * as fsService from '../../data/firestoreService';
+import * as supabaseService from '../../data/supabaseService';
 import { addDaysToKey, formatIndiaDate } from '../../lib/date';
 import { computeHeatmapGrid, computeStreakSummary } from '../../lib/streak';
 import { evaluateAchievementsState } from '../../lib/achievementsEngine';
@@ -140,7 +140,7 @@ export const ProgressPage: React.FC = () => {
     let active = true;
     for (const ev of photoEvents) {
       if (!ev.photoPath || photoUrls[ev.id]) continue;
-      void fsService
+      void supabaseService
         .getStorageFileDownloadUrl(ev.photoPath)
         .then((url) => {
           if (active) setPhotoUrls((prev) => ({ ...prev, [ev.id]: url }));
