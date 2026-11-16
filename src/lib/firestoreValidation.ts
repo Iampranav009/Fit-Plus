@@ -54,6 +54,18 @@ export const BLUEPRINT_LIMITS = {
   workoutDaysMaxItems: 7,
   mealOptionsMaxItems: 10,
   outlineMaxItems: 10,
+  exerciseSafetyNotesMax: 400,
+  exerciseStepsMaxItems: 10,
+  exerciseAlternativeIdsMaxItems: 10,
+  workoutExercisesMaxItems: 20,
+  workoutNotesMax: 1000,
+  nutritionNotesMax: 600,
+  nutritionItemsMaxItems: 30,
+  nutritionSlotsMaxItems: 5,
+  trainerFeedbackMax: 1000,
+  checkInChallengesMax: 800,
+  achievementDescMax: 400,
+  metricSnapshotMax: 120,
 } as const;
 
 export function assertValidId(value: string, fieldName: string): string {

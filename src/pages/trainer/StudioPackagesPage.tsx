@@ -116,7 +116,7 @@ export const StudioPackagesPage: React.FC = () => {
           <div>
             <p className="text-[13px] text-[#7C8393]">
               {isCloudSynced
-                ? 'Server-verified INR packages · Razorpay checkout & free-tier enrollments'
+                ? 'Server-verified INR packages · Cashfree checkout & free-tier enrollments'
                 : 'Example INR pricing only · No live payment processing in demo'}
             </p>
             <h1 className="mt-1 text-[30px] sm:text-[34px] font-semibold tracking-[-0.025em] text-[#F5F5F7]">
@@ -221,8 +221,8 @@ export const StudioPackagesPage: React.FC = () => {
           {trainerCapturedPayments.length === 0 ? (
             <p className="text-[14px] text-[#A2A8B5]">
               {isCloudSynced
-                ? 'Verified Razorpay checkouts and client enrollments will appear here.'
-                : 'Sign in with a cloud-synced trainer account to view live Razorpay INR receipts.'}
+                ? 'Verified Cashfree checkouts, historical receipts, and client enrollments will appear here.'
+                : 'Sign in with a cloud-synced trainer account to view live Cashfree INR receipts.'}
             </p>
           ) : (
             <div className="divide-y divide-white/[0.08]">

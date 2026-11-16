@@ -26,19 +26,24 @@ Configure these in **Vercel Project Settings -> Environment Variables** (Product
 ### Required for Stage 3A Backend APIs
 | Variable | Purpose | Notes |
 |---|---|---|
-| `APP_URL` | Canonical deployment URL (`https://fitplus-kappa.vercel.app`) | Used for canonical metadata and links |
+| `APP_BASE_URL` | Canonical deployment URL (`https://fitplus-kappa.vercel.app`) | Used for Cashfree `return_url` & `notify_url` and invite links |
 | `FIREBASE_PROJECT_ID` | `gen-lang-client-0381020502` | Matches `firebase-applet-config.json` |
 | `FIREBASE_FIRESTORE_DATABASE_ID` | `ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841` | Critical: named Firestore database, not `(default)` |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Minified JSON or Base64 service account credentials | Enables `/api/account/delete` and server-side `/api/invites/resolve`. Alternatively set `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`. |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Minified JSON or Base64 service account credentials | Enables `/api/account/delete`, payment APIs, and server-side `/api/invites/resolve`. Alternatively set `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`. |
 | `FITPLUS_ADMIN_EMAIL` | Bootstrap platform admin email (`pranavshindeji5001@gmail.com`) | Checked alongside `/admins/{uid}` on server endpoints |
 
-### Optional Security & Upcoming Stage Variables
+### Cashfree Payments & Optional Security Variables
 | Variable | Purpose | Notes |
 |---|---|---|
+| `CASHFREE_APP_ID` | Cashfree Payment Gateway App ID | Sandbox credentials initially (`CASHFREE_ENV="sandbox"`) |
+| `CASHFREE_SECRET_KEY` | Cashfree Payment Gateway Secret Key | Server-only secret (never prefix with `VITE_`); also verifies webhook HMAC |
+| `CASHFREE_ENV` | `"sandbox"` or `"production"` | Keep `"sandbox"` until production KYC & verification complete |
+| `CASHFREE_API_VERSION` | `"2025-01-01"` | Cashfree PG REST API version header |
+| `CASHFREE_EASY_SPLIT_ENABLED` | `"false"` | Scaffolding flag kept disabled until Easy Split approval |
+| `VITE_CASHFREE_ENV` | `"sandbox"` or `"production"` | Client SDK mode selector |
 | `VITE_FIREBASE_APP_CHECK_SITE_KEY` | Google reCAPTCHA v3 site key for Firebase App Check | Client-side App Check initializes automatically when set |
 | `REQUIRE_APP_CHECK` | `"true"` or `"false"` (default `"false"`) | Set `"true"` only after App Check is enabled in Firebase Console |
 | `GEMINI_API_KEY` | Server-side Gemini API key (Stage 3B) | Never prefix with `VITE_` |
-| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET` | Razorpay checkout credentials (Stage 3C) | Secrets remain server-only |
 
 ---
 
@@ -72,7 +77,7 @@ Before going live with production traffic, complete these one-time Firebase Cons
 1. Build locally: `npm run build`
 2. Verify TypeScript & rules: `npm run lint && npm test && npm run test:rules`
 3. After Vercel deploy, verify:
-   - `GET https://fitplus-kappa.vercel.app/api/health` returns `200 OK` with `firebase.adminConfigured: true` (once service account env vars are added) and the named `firestoreDatabaseId`.
-   - Direct browser refresh on `/discover`, `/auth`, `/welcome`, `/demo`, `/join/FIT-ARJUN-2026`, and `/join/FIT-EXP-000` loads the SPA with HTTP 200 (no Vercel 404).
+   - `GET https://fitplus-kappa.vercel.app/api/health` returns `200 OK` with `capabilities.cashfreeEnv: "sandbox"`, `firebase.adminConfigured: true` (once service account env vars are added), and the named `firestoreDatabaseId`.
+   - Direct browser refresh on `/discover`, `/auth`, `/welcome`, `/demo`, `/payments/result`, `/join/FIT-ARJUN-2026`, and `/join/FIT-EXP-000` loads the SPA with HTTP 200 (no Vercel 404).
    - Unknown paths (e.g., `/non-existent-page`) render the branded FitPlus 404 page inside the SPA.
-   - Sign in with Google and Email/Password, verify email gate behavior, and verify `/admin` access with the configured platform admin account.
+   - Sign in with Google and Email/Password, verify email gate behavior, test Sandbox Cashfree checkout + `/payments/result`, and verify `/admin` access with the configured platform admin account.

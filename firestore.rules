@@ -688,6 +688,159 @@ service cloud.firestore {
         && data.updatedAt is timestamp;
     }
 
+    function isValidCustomExercise(data, exerciseId) {
+      return data.keys().hasAll([
+          'id', 'name', 'category', 'environment', 'equipment', 'difficulty',
+          'primaryMuscles', 'secondaryMuscles', 'instructions', 'commonMistakes',
+          'safetyNotes', 'alternativeIds', 'isCustom', 'trainerId', 'trainerUserId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'category', 'environment', 'equipment', 'difficulty',
+          'primaryMuscles', 'secondaryMuscles', 'instructions', 'commonMistakes',
+          'safetyNotes', 'alternativeIds', 'isCustom', 'trainerId', 'trainerUserId',
+          'createdAt', 'updatedAt'
+        ])
+        && data.id == exerciseId
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 140
+        && data.category in ['strength', 'mobility', 'conditioning', 'recovery']
+        && data.environment in ['gym', 'home', 'both']
+        && data.equipment in ['bodyweight', 'dumbbells', 'barbell', 'kettlebell', 'cable', 'machine', 'resistance_band', 'pullup_bar']
+        && data.difficulty in ['beginner', 'intermediate', 'experienced']
+        && isValidStringList(data.primaryMuscles, 6, 32)
+        && isValidStringList(data.secondaryMuscles, 6, 32)
+        && isValidStringList(data.instructions, 10, 300)
+        && isValidStringList(data.commonMistakes, 10, 240)
+        && data.safetyNotes is string && data.safetyNotes.size() <= 400
+        && isValidStringList(data.alternativeIds, 10, 128)
+        && data.isCustom == true
+        && isValidId(data.trainerId)
+        && isValidId(data.trainerUserId)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWorkoutSession(data, sessionId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'title', 'dateKey',
+          'status', 'startedAt', 'durationSeconds', 'totalVolumeKg', 'completedSetsCount',
+          'prCount', 'exercises', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'assignmentId', 'planId',
+          'dayIndex', 'title', 'dateKey', 'status', 'startedAt', 'completedAt',
+          'durationSeconds', 'totalVolumeKg', 'completedSetsCount', 'prCount',
+          'exercises', 'notes', 'createdAt', 'updatedAt'
+        ])
+        && data.id == sessionId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerUserId')
+        && isValidOptionalId(data, 'assignmentId')
+        && isValidOptionalId(data, 'planId')
+        && (!('dayIndex' in data) || (data.dayIndex is number && data.dayIndex >= 0 && data.dayIndex <= 6))
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && isValidDateKey(data.dateKey)
+        && data.status in ['in_progress', 'paused', 'completed']
+        && data.startedAt is string && data.startedAt.size() >= 1 && data.startedAt.size() <= 64
+        && (!('completedAt' in data) || (data.completedAt is string && data.completedAt.size() <= 64))
+        && data.durationSeconds is number && data.durationSeconds >= 0 && data.durationSeconds <= 86400
+        && data.totalVolumeKg is number && data.totalVolumeKg >= 0 && data.totalVolumeKg <= 500000
+        && data.completedSetsCount is number && data.completedSetsCount >= 0 && data.completedSetsCount <= 500
+        && data.prCount is number && data.prCount >= 0 && data.prCount <= 100
+        && data.exercises is list && data.exercises.size() <= 20 && (data.exercises.size() == 0 || data.exercises[0] is map)
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAchievementUnlock(data, achievementId) {
+      return data.keys().hasAll([
+          'id', 'badgeId', 'clientId', 'clientUserId', 'title', 'description',
+          'unlockedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'badgeId', 'clientId', 'clientUserId', 'title', 'description',
+          'unlockedAt', 'metricSnapshot', 'createdAt', 'updatedAt'
+        ])
+        && data.id == achievementId
+        && isValidId(data.id)
+        && data.badgeId in [
+          'first_workout', 'streak_7', 'streak_14', 'streak_30',
+          'streak_60', 'streak_100', 'personal_record', 'consistency_10', 'consistency_30'
+        ]
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.description is string && data.description.size() >= 1 && data.description.size() <= 400
+        && data.unlockedAt is string && data.unlockedAt.size() >= 1 && data.unlockedAt.size() <= 64
+        && (!('metricSnapshot' in data) || (data.metricSnapshot is string && data.metricSnapshot.size() <= 120))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNutritionLog(data, logId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'completedSlots', 'items', 'waterGlasses', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'completedSlots', 'items', 'waterGlasses', 'personalNotes',
+          'trainerFeedback', 'trainerFeedbackAt', 'createdAt', 'updatedAt'
+        ])
+        && data.id == logId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerUserId')
+        && isValidDateKey(data.dateKey)
+        && isValidStringList(data.completedSlots, 5, 24)
+        && data.items is list && data.items.size() <= 30 && (data.items.size() == 0 || data.items[0] is map)
+        && data.waterGlasses is number && data.waterGlasses >= 0 && data.waterGlasses <= 24
+        && (!('personalNotes' in data) || (data.personalNotes is string && data.personalNotes.size() <= 600))
+        && (!('trainerFeedback' in data) || (data.trainerFeedback is string && data.trainerFeedback.size() <= 1000))
+        && (!('trainerFeedbackAt' in data) || (data.trainerFeedbackAt is string && data.trainerFeedbackAt.size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidWeeklyCheckIn(data, checkInId) {
+      return data.keys().hasAll([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'weekKey', 'dateKey',
+          'energyLevel', 'sleepQuality', 'workoutDifficulty', 'hungerLevel',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'clientId', 'clientUserId', 'trainerUserId', 'weekKey', 'dateKey',
+          'weightKg', 'energyLevel', 'sleepQuality', 'workoutDifficulty', 'hungerLevel',
+          'scheduleChallenges', 'generalFeedback', 'photoPath', 'shareWithTrainer',
+          'trainerFeedback', 'trainerReviewedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.id == checkInId
+        && isValidId(data.id)
+        && isValidId(data.clientId)
+        && isValidId(data.clientUserId)
+        && isValidOptionalId(data, 'trainerUserId')
+        && isValidDateKey(data.weekKey)
+        && isValidDateKey(data.dateKey)
+        && (!('weightKg' in data) || (data.weightKg is number && data.weightKg > 0 && data.weightKg <= 500))
+        && data.energyLevel is number && data.energyLevel >= 1 && data.energyLevel <= 5
+        && data.sleepQuality is number && data.sleepQuality >= 1 && data.sleepQuality <= 5
+        && data.workoutDifficulty is number && data.workoutDifficulty >= 1 && data.workoutDifficulty <= 5
+        && data.hungerLevel is number && data.hungerLevel >= 1 && data.hungerLevel <= 5
+        && (!('scheduleChallenges' in data) || (data.scheduleChallenges is string && data.scheduleChallenges.size() <= 800))
+        && (!('generalFeedback' in data) || (data.generalFeedback is string && data.generalFeedback.size() <= 1000))
+        && (!('photoPath' in data) || (data.photoPath is string && data.photoPath.size() <= 300))
+        && (!('shareWithTrainer' in data) || data.shareWithTrainer is bool)
+        && (!('trainerFeedback' in data) || (data.trainerFeedback is string && data.trainerFeedback.size() <= 1000))
+        && (!('trainerReviewedAt' in data) || (data.trainerReviewedAt is string && data.trainerReviewedAt.size() <= 64))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     // -------------------------------------------------------------------------
     // /admins/{userId} (Server-Provisioned Admins — Never Client-Writable)
     // -------------------------------------------------------------------------
@@ -1778,6 +1931,230 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['rating', 'comment', 'updatedAt']);
 
       allow delete: if isValidId(reviewId) && isVerifiedUser() && (existing().clientUserId == request.auth.uid || isAdmin());
+    }
+
+    // -------------------------------------------------------------------------
+    // /exercises/{exerciseId} (Stage 4A Custom Trainer Exercises)
+    // -------------------------------------------------------------------------
+    match /exercises/{exerciseId} {
+      allow get: if isSignedIn() && isValidId(exerciseId) && existing().isCustom == true;
+      allow list: if isSignedIn() && resource.data.isCustom == true;
+
+      allow create: if isVerifiedUser()
+        && isValidId(exerciseId)
+        && isValidCustomExercise(incoming(), exerciseId)
+        && incoming().trainerUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/trainers/$(incoming().trainerId))
+        && get(/databases/$(database)/documents/trainers/$(incoming().trainerId)).data.userId == request.auth.uid;
+
+      allow update: if isVerifiedUser()
+        && isValidId(exerciseId)
+        && isValidCustomExercise(incoming(), exerciseId)
+        && existing().trainerUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().trainerId == existing().trainerId
+        && incoming().trainerUserId == existing().trainerUserId
+        && incoming().isCustom == existing().isCustom
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'category', 'environment', 'equipment', 'difficulty',
+          'primaryMuscles', 'secondaryMuscles', 'instructions', 'commonMistakes',
+          'safetyNotes', 'alternativeIds', 'updatedAt'
+        ]);
+
+      allow delete: if isValidId(exerciseId) && isVerifiedUser() && existing().trainerUserId == request.auth.uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // /workoutSessions/{sessionId} (Stage 4A Live Workout Logs)
+    // -------------------------------------------------------------------------
+    match /workoutSessions/{sessionId} {
+      allow get: if isSignedIn() && isValidId(sessionId) && (
+        existing().clientUserId == request.auth.uid ||
+        (
+          existing().trainerUserId == request.auth.uid &&
+          exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
+          get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid
+        )
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid ||
+        resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(sessionId)
+        && isValidWorkoutSession(incoming(), sessionId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
+        && (
+          incoming().trainerUserId == '' ||
+          get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(sessionId)
+        && isValidWorkoutSession(incoming(), sessionId)
+        && existing().clientUserId == request.auth.uid
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'completedAt', 'durationSeconds', 'totalVolumeKg',
+          'completedSetsCount', 'prCount', 'exercises', 'notes', 'updatedAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /achievements/{achievementId} (Stage 4A Deduplicated Milestones)
+    // -------------------------------------------------------------------------
+    match /achievements/{achievementId} {
+      allow get: if isSignedIn() && isValidId(achievementId) && existing().clientUserId == request.auth.uid;
+      allow list: if isSignedIn() && resource.data.clientUserId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(achievementId)
+        && isValidAchievementUnlock(incoming(), achievementId)
+        && incoming().clientUserId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /nutritionLogs/{logId} (Stage 4A India-First Daily Nutrition Diary)
+    // -------------------------------------------------------------------------
+    match /nutritionLogs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (
+        existing().clientUserId == request.auth.uid ||
+        (
+          existing().trainerUserId == request.auth.uid &&
+          exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
+          get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid
+        )
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid ||
+        resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(logId)
+        && isValidNutritionLog(incoming(), logId)
+        && incoming().clientUserId == request.auth.uid
+        && !('trainerFeedback' in incoming())
+        && !('trainerFeedbackAt' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
+        && (
+          incoming().trainerUserId == '' ||
+          get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(logId)
+        && isValidNutritionLog(incoming(), logId)
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().dateKey == existing().dateKey
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            existing().clientUserId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'completedSlots', 'items', 'waterGlasses', 'personalNotes', 'updatedAt'
+            ])
+          ) ||
+          (
+            existing().trainerUserId == request.auth.uid &&
+            exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
+            get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'trainerFeedback', 'trainerFeedbackAt', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // /weeklyCheckIns/{checkInId} (Stage 4A Weekly Check-Ins & Coach Feedback)
+    // -------------------------------------------------------------------------
+    match /weeklyCheckIns/{checkInId} {
+      allow get: if isSignedIn() && isValidId(checkInId) && (
+        existing().clientUserId == request.auth.uid ||
+        (
+          existing().trainerUserId == request.auth.uid &&
+          exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
+          get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid
+        )
+      );
+      allow list: if isSignedIn() && (
+        resource.data.clientUserId == request.auth.uid ||
+        resource.data.trainerUserId == request.auth.uid
+      );
+
+      allow create: if isVerifiedUser()
+        && isValidId(checkInId)
+        && isValidWeeklyCheckIn(incoming(), checkInId)
+        && incoming().clientUserId == request.auth.uid
+        && !('trainerFeedback' in incoming())
+        && !('trainerReviewedAt' in incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
+        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
+        && (
+          incoming().trainerUserId == '' ||
+          get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
+        );
+
+      allow update: if isVerifiedUser()
+        && isValidId(checkInId)
+        && isValidWeeklyCheckIn(incoming(), checkInId)
+        && incoming().id == existing().id
+        && incoming().clientId == existing().clientId
+        && incoming().clientUserId == existing().clientUserId
+        && incoming().weekKey == existing().weekKey
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (
+            existing().clientUserId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'weightKg', 'energyLevel', 'sleepQuality', 'workoutDifficulty', 'hungerLevel',
+              'scheduleChallenges', 'generalFeedback', 'photoPath', 'shareWithTrainer', 'updatedAt'
+            ])
+          ) ||
+          (
+            existing().trainerUserId == request.auth.uid &&
+            exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
+            get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'trainerFeedback', 'trainerReviewedAt', 'updatedAt'
+            ])
+          )
+        );
+
+      allow delete: if false;
     }
   }
 }

@@ -16,7 +16,7 @@ import type {
   TaskTemplate,
   TrainingEnvironment,
 } from '../types/domain';
-import { addDaysToKey, generateDateRangeKeys } from './date';
+import { addDaysToKey, generateDateRangeKeys } from './date.js';
 
 export function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36).slice(-4)}`;

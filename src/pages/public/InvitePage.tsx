@@ -6,7 +6,7 @@ import { useApp } from '../../context/AppContext';
 import type { PublicInviteResolveResult } from '../../data/firestoreService';
 import { validateInvite } from '../../lib/engines';
 import { formatIndiaDate, formatINR } from '../../lib/date';
-import { openRazorpayCheckout } from '../../lib/razorpay';
+import { launchCashfreeCheckout } from '../../lib/cashfree';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
@@ -26,7 +26,6 @@ export const InvitePage: React.FC = () => {
     setPendingInviteToken,
     acceptDemoInviteAndPackage,
     createPackageOrder,
-    verifyPackageOrder,
     rejectInvite,
     lookupInviteToken,
     pushToast,
@@ -142,37 +141,20 @@ export const InvitePage: React.FC = () => {
         return;
       }
 
-      if (!orderRes.keyId || !orderRes.orderId || !orderRes.paymentId) {
-        setCheckoutError('Incomplete payment order details from server.');
+      if (!orderRes.paymentSessionId || !orderRes.orderId) {
+        setCheckoutError('Incomplete Cashfree order details from server.');
         return;
       }
 
-      const rzpRes = await openRazorpayCheckout({
-        keyId: orderRes.keyId,
-        orderId: orderRes.orderId,
-        amountPaise: orderRes.amountPaise || activePackage.priceInr * 100,
-        packageName: orderRes.packageName || activePackage.name,
-        trainerName: trainer.displayName,
-        customerName: `${activeUser.firstName} ${activeUser.lastName}`.trim(),
-        customerEmail: activeUser.email,
+      const cfRes = await launchCashfreeCheckout({
+        paymentSessionId: orderRes.paymentSessionId,
+        mode: orderRes.cashfreeEnv,
       });
 
-      if (!rzpRes.ok) {
-        setCheckoutError('error' in rzpRes ? rzpRes.error : 'Payment canceled.');
+      if (!cfRes.ok) {
+        setCheckoutError('error' in cfRes ? cfRes.error : 'Unable to start Cashfree checkout.');
         return;
       }
-
-      const verifyRes = await verifyPackageOrder({
-        paymentId: orderRes.paymentId,
-        razorpayOrderId: rzpRes.razorpayOrderId,
-        razorpayPaymentId: rzpRes.razorpayPaymentId,
-        razorpaySignature: rzpRes.razorpaySignature,
-      });
-      if (!verifyRes.ok) {
-        setCheckoutError(verifyRes.error || 'Payment verification failed.');
-        return;
-      }
-      navigate('/app/coach');
     } finally {
       setCheckoutBusy(false);
     }
@@ -340,7 +322,7 @@ export const InvitePage: React.FC = () => {
                     {isCloudSynced
                       ? activePackage?.priceInr === 0
                         ? `Accepting activates your coaching relationship with ${trainer.displayName}.`
-                        : `Paid packages are processed via Razorpay before activating your coaching workspace.`
+                        : `Paid packages are processed via Cashfree Payments before activating your coaching workspace.`
                       : `${COPY.discovery.checkoutNotice} Accepting explicitly connects you to ${trainer.displayName} in this local demo.`}
                   </p>
                 </div>

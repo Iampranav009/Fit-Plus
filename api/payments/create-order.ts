@@ -8,10 +8,13 @@ import {
 } from '../_lib/firebaseAdmin.js';
 import {
   activateEnrollmentFromPayment,
+  buildTrainerSettlementPreview,
   computeAuthoritativePackageDetails,
-  createRazorpayOrder,
+  createCashfreeOrder,
   formatInvoiceNumber,
-  getRazorpayConfig,
+  getCashfreeConfig,
+  resolveAppBaseUrl,
+  sanitizeIndianPhone,
 } from '../_lib/payments.js';
 
 const CreateOrderSchema = z.object({
@@ -72,9 +75,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     let resolvedClientId = requestedClientId;
+    let clientData: Record<string, unknown> | undefined;
     if (resolvedClientId) {
       const clientSnap = await db.collection('clients').doc(resolvedClientId).get();
-      if (!clientSnap.exists || String(clientSnap.data()?.userId) !== authCtx.uid) {
+      if (clientSnap.exists && String(clientSnap.data()?.userId) === authCtx.uid) {
+        clientData = clientSnap.data();
+      } else {
         resolvedClientId = undefined;
       }
     }
@@ -86,6 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .get();
       if (!clientQuery.empty) {
         resolvedClientId = clientQuery.docs[0].id;
+        clientData = clientQuery.docs[0].data();
       }
     }
 
@@ -118,6 +125,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         currency: 'INR',
         status: 'created',
         provider: 'free_tier',
+        mode: 'sandbox',
+        settlementStatus: 'not_applicable',
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -139,27 +148,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const razorpayConfig = getRazorpayConfig();
-    if (!razorpayConfig.isConfigured) {
+    const cashfreeConfig = getCashfreeConfig();
+    if (!cashfreeConfig.isConfigured) {
       return res.status(503).json({
         ok: false,
         code: 'payment/gateway-unconfigured',
-        error: 'Razorpay checkout credentials are not configured on this server yet.',
+        error: 'Cashfree checkout credentials are not configured on this server yet.',
       });
     }
 
-    const order = await createRazorpayOrder({
-      keyId: razorpayConfig.keyId,
-      keySecret: razorpayConfig.keySecret,
-      amountPaise: pkgDetails.amountPaise,
-      receipt: paymentId,
-      notes: {
+    const contactSnap = await db
+      .collection('users')
+      .doc(authCtx.uid)
+      .collection('private')
+      .doc('contact')
+      .get();
+
+    const customerName =
+      `${String(clientData?.firstName || '')} ${String(clientData?.lastName || '')}`.trim() ||
+      String(authCtx.decoded.name || 'FitPlus Member');
+    const customerPhone = sanitizeIndianPhone(
+      typeof contactSnap.data()?.whatsappE164 === 'string'
+        ? contactSnap.data()?.whatsappE164
+        : undefined,
+    );
+
+    const cashfreeOrderId = `fp_${paymentId}`;
+    const baseUrl = resolveAppBaseUrl(req.headers);
+    const returnUrl = `${baseUrl}/payments/result?order_id={order_id}&payment_id=${encodeURIComponent(paymentId)}`;
+    const notifyUrl = `${baseUrl}/api/payments/webhook`;
+
+    const cfOrder = await createCashfreeOrder({
+      config: cashfreeConfig,
+      orderId: cashfreeOrderId,
+      amountInr: pkgDetails.priceInr,
+      customer: {
+        customerId: authCtx.uid,
+        customerName,
+        customerEmail: authCtx.email || 'member@fitplus.in',
+        customerPhone,
+      },
+      returnUrl,
+      notifyUrl,
+      orderNote: `${pkgDetails.name} coaching (${invoiceNumber})`,
+      orderTags: {
         paymentId,
         packageId,
         trainerId,
         clientId: resolvedClientId,
-        clientUserId: authCtx.uid,
       },
+    });
+
+    const settlementPreview = buildTrainerSettlementPreview({
+      trainerId,
+      amountInr: pkgDetails.priceInr,
+      easySplitEnabled: cashfreeConfig.easySplitEnabled,
     });
 
     await db.collection('payments').doc(paymentId).set({
@@ -176,34 +219,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       amountInr: pkgDetails.priceInr,
       currency: 'INR',
       status: 'created',
-      provider: 'razorpay',
-      razorpayOrderId: order.id,
+      provider: 'cashfree',
+      mode: cashfreeConfig.env,
+      providerOrderId: cfOrder.order_id,
+      cfOrderId: String(cfOrder.cf_order_id),
+      paymentSessionId: cfOrder.payment_session_id,
+      refundStatus: 'none',
+      settlementStatus: settlementPreview.settlementStatus,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
     return res.status(200).json({
       ok: true,
-      mode: 'razorpay_checkout',
-      keyId: razorpayConfig.keyId,
-      orderId: order.id,
+      mode: 'cashfree_checkout',
+      cashfreeEnv: cashfreeConfig.env,
+      orderId: cfOrder.order_id,
+      paymentSessionId: cfOrder.payment_session_id,
       amountPaise: pkgDetails.amountPaise,
       amountInr: pkgDetails.priceInr,
       currency: 'INR',
       paymentId,
+      invoiceNumber,
       packageName: pkgDetails.name,
       trainerName: String(trainerData.displayName || 'FitPlus Coach'),
-      isLiveMode: razorpayConfig.isLive,
+      isLiveMode: cashfreeConfig.isLive,
     });
   } catch (error) {
     if (error instanceof AuthHttpError) {
       return res.status(error.status).json({ ok: false, code: error.code, error: error.message });
     }
-    console.error('Create payment order error:', error);
+    console.error('Create Cashfree order error:', error);
     return res.status(500).json({
       ok: false,
       code: 'payment/order-failed',
-      error: 'Unable to initialize checkout right now.',
+      error: 'Unable to initialize Cashfree checkout right now.',
     });
   }
 }

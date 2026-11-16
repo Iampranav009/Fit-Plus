@@ -3,8 +3,10 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { getFirebaseAdminContext, isFirebaseAdminConfigured } from '../_lib/firebaseAdmin.js';
 import {
   activateEnrollmentFromPayment,
-  getRazorpayConfig,
-  verifyRazorpayWebhookSignature,
+  buildDeterministicWebhookEventId,
+  getCashfreeConfig,
+  recordNonCapturedPaymentState,
+  verifyCashfreeWebhookSignature,
 } from '../_lib/payments.js';
 
 export const config = {
@@ -33,18 +35,44 @@ async function readRawRequestBody(req: VercelRequest): Promise<Buffer> {
   return Buffer.alloc(0);
 }
 
+interface CashfreeWebhookPayload {
+  type?: string;
+  event_time?: string;
+  data?: {
+    order?: {
+      order_id?: string;
+      order_amount?: number;
+      order_currency?: string;
+    };
+    payment?: {
+      cf_payment_id?: string | number;
+      payment_status?: string;
+      payment_amount?: number;
+      payment_currency?: string;
+      payment_group?: string;
+      payment_message?: string;
+    };
+    refund?: {
+      cf_refund_id?: string;
+      refund_id?: string;
+      order_id?: string;
+      refund_status?: string;
+    };
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
-  const razorpayConfig = getRazorpayConfig();
-  if (!razorpayConfig.webhookSecret) {
+  const cashfreeConfig = getCashfreeConfig();
+  if (!cashfreeConfig.isConfigured) {
     return res.status(503).json({
       ok: false,
       code: 'payment/webhook-unconfigured',
-      error: 'Razorpay webhook secret is not configured on this server.',
+      error: 'Cashfree credentials are not configured on this server.',
     });
   }
 
@@ -58,34 +86,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const rawBody = await readRawRequestBody(req);
-    const sigHeader = req.headers['x-razorpay-signature'];
-    const signature = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader || '';
+    const sigHeader = req.headers['x-webhook-signature'];
+    const tsHeader = req.headers['x-webhook-timestamp'];
+    const idempotencyHeader = req.headers['x-webhook-id'] || req.headers['x-idempotency-key'];
 
-    if (!verifyRazorpayWebhookSignature(rawBody, signature, razorpayConfig.webhookSecret)) {
+    const signature = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader || '';
+    const timestamp = Array.isArray(tsHeader) ? tsHeader[0] : tsHeader || '';
+    const headerEventId = Array.isArray(idempotencyHeader)
+      ? idempotencyHeader[0]
+      : idempotencyHeader || undefined;
+
+    if (
+      !verifyCashfreeWebhookSignature({
+        timestamp,
+        rawBody,
+        signature,
+        secretKey: cashfreeConfig.secretKey,
+      })
+    ) {
       return res.status(401).json({
         ok: false,
         code: 'payment/invalid-webhook-signature',
-        error: 'Invalid Razorpay webhook signature.',
+        error: 'Invalid Cashfree webhook signature.',
       });
     }
 
-    const payload = JSON.parse(rawBody.toString('utf8')) as {
-      event?: string;
-      payload?: {
-        payment?: {
-          entity?: {
-            id?: string;
-            order_id?: string;
-            error_description?: string;
-          };
-        };
-      };
-    };
-
-    const eventName = payload.event || '';
-    const entity = payload.payload?.payment?.entity;
-    const orderId = entity?.order_id;
-    const razorpayPaymentId = entity?.id;
+    const payload = JSON.parse(rawBody.toString('utf8')) as CashfreeWebhookPayload;
+    const eventType = String(payload.type || '').toUpperCase();
+    const orderId = payload.data?.order?.order_id || payload.data?.refund?.order_id;
+    const cfPaymentId = payload.data?.payment?.cf_payment_id
+      ? String(payload.data.payment.cf_payment_id)
+      : undefined;
+    const paymentStatus = String(payload.data?.payment?.payment_status || '').toUpperCase();
+    const paymentMethod = payload.data?.payment?.payment_group
+      ? String(payload.data.payment.payment_group)
+      : undefined;
 
     if (!orderId) {
       return res.status(200).json({ ok: true, ignored: true });
@@ -94,7 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { db } = getFirebaseAdminContext();
     const paymentsSnap = await db
       .collection('payments')
-      .where('razorpayOrderId', '==', orderId)
+      .where('providerOrderId', '==', orderId)
       .limit(1)
       .get();
 
@@ -103,29 +138,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const paymentDoc = paymentsSnap.docs[0];
+    const paymentData = paymentDoc.data();
+    const webhookEventId = buildDeterministicWebhookEventId({
+      headerEventId,
+      timestamp,
+      eventType,
+      orderId,
+      cfPaymentId,
+      paymentStatus,
+    });
 
-    if (eventName === 'payment.captured') {
+    if (paymentData.webhookEventId === webhookEventId) {
+      return res.status(200).json({ ok: true, deduplicated: true, event: eventType });
+    }
+
+    if (eventType === 'PAYMENT_SUCCESS_WEBHOOK' || (eventType.includes('PAYMENT') && paymentStatus === 'SUCCESS')) {
+      const paidAmountPaise = Math.round(
+        Number(payload.data?.payment?.payment_amount ?? payload.data?.order?.order_amount ?? 0) * 100,
+      );
+      if (paidAmountPaise > 0 && paidAmountPaise !== Number(paymentData.amountPaise)) {
+        return res.status(400).json({
+          ok: false,
+          code: 'payment/amount-mismatch',
+          error: 'Webhook payment amount mismatch.',
+        });
+      }
+
       await activateEnrollmentFromPayment({
         db,
         paymentId: paymentDoc.id,
-        razorpayPaymentId,
-        actorUserId: String(paymentDoc.data().clientUserId),
+        providerPaymentId: cfPaymentId,
+        paymentMethod,
+        webhookEventId,
+        actorUserId: String(paymentData.clientUserId),
       });
-    } else if (eventName === 'payment.failed') {
-      const currentStatus = paymentDoc.data().status;
-      if (currentStatus === 'created') {
-        await paymentDoc.ref.update({
-          status: 'failed',
-          ...(razorpayPaymentId ? { razorpayPaymentId } : {}),
-          failureReason: String(entity?.error_description || 'Payment failed at gateway').slice(0, 240),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      }
+    } else if (eventType === 'PAYMENT_USER_DROPPED_WEBHOOK' || paymentStatus === 'USER_DROPPED') {
+      await recordNonCapturedPaymentState({
+        db,
+        paymentId: paymentDoc.id,
+        nextStatus: 'cancelled',
+        providerPaymentId: cfPaymentId,
+        paymentMethod,
+        failureReason: String(
+          payload.data?.payment?.payment_message || 'User closed checkout before completing payment',
+        ),
+        webhookEventId,
+      });
+    } else if (eventType === 'PAYMENT_FAILED_WEBHOOK' || paymentStatus === 'FAILED') {
+      await recordNonCapturedPaymentState({
+        db,
+        paymentId: paymentDoc.id,
+        nextStatus: 'failed',
+        providerPaymentId: cfPaymentId,
+        paymentMethod,
+        failureReason: String(
+          payload.data?.payment?.payment_message || 'Payment failed at Cashfree gateway',
+        ),
+        webhookEventId,
+      });
+    } else if (eventType === 'REFUND_STATUS_WEBHOOK' && payload.data?.refund) {
+      const rfStatus = String(payload.data.refund.refund_status || '').toUpperCase();
+      const normalizedRefundStatus =
+        rfStatus === 'SUCCESS'
+          ? 'processed'
+          : rfStatus === 'CANCELLED' || rfStatus === 'ONHOLD'
+            ? 'failed'
+            : 'pending';
+      await paymentDoc.ref.update({
+        refundStatus: normalizedRefundStatus,
+        ...(normalizedRefundStatus === 'processed' ? { status: 'refunded' } : {}),
+        webhookEventId,
+        lastWebhookAt: new Date().toISOString(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     }
 
-    return res.status(200).json({ ok: true, event: eventName });
+    return res.status(200).json({ ok: true, event: eventType, webhookEventId });
   } catch (error) {
-    console.error('Razorpay webhook error:', error);
+    console.error('Cashfree webhook error:', error);
     return res.status(500).json({ ok: false, error: 'Webhook processing error' });
   }
 }

@@ -5,7 +5,7 @@ import type {
   DayConsistency,
   StreakSummary,
 } from '../types/domain';
-import { addDaysToKey } from './date';
+import { addDaysToKey } from './date.js';
 
 export function isAssignmentCompletedOnDate(
   assignmentId: string,

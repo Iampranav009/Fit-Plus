@@ -36,12 +36,15 @@ When Java 11+ is available locally or in CI, `npm run test:emulator` validates:
 
 Verify against `npm run build` + `NODE_ENV=production PORT=3100 npx tsx server.ts` (or against `https://fitplus-kappa.vercel.app/`):
 
-- `GET /api/health` -> HTTP `200`, JSON `{ ok: true, service: "fitplus-api", firebase: { projectId, firestoreDatabaseId, adminConfigured } }`
+- `GET /api/health` -> HTTP `200`, JSON `{ ok: true, service: "fitplus-api", firebase: { projectId, firestoreDatabaseId, adminConfigured }, capabilities: { cashfreeConfigured, cashfreeEnv, cashfreeApiVersion, easySplitEnabled } }`
 - `GET /api/invites/resolve?token=FIT-ARJUN-2026` -> HTTP `200`, JSON response (`source: "firestore_admin"` when Admin SDK configured, or `"client_fallback"` with `state: "unverified_server"` otherwise)
 - `GET /api/invites/resolve?token=FIT-EXP-000` -> HTTP `200`, JSON response
+- `POST /api/payments/create-order` (without Authorization header) -> HTTP `401`
+- `POST /api/payments/verify` (without Authorization header) -> HTTP `401`
+- `POST /api/payments/webhook` (without Cashfree env or signature) -> HTTP `503` (when gateway unconfigured) or `401` (when signature invalid)
 - `GET /api/nonexistent` -> HTTP `404`, JSON `{ ok: false, error: "API endpoint not found" }` (never rewritten to HTML)
 - `POST /api/account/delete` (without Authorization header) -> HTTP `401`, JSON `{ ok: false, code: "auth/missing-token" }`
-- `GET /discover`, `/auth`, `/welcome`, `/demo`, `/join/FIT-ARJUN-2026`, `/join/FIT-EXP-000` -> HTTP `200`, `text/html` containing `<div id="root"></div>`
+- `GET /discover`, `/auth`, `/welcome`, `/demo`, `/payments/result`, `/join/FIT-ARJUN-2026`, `/join/FIT-EXP-000` -> HTTP `200`, `text/html` containing `<div id="root"></div>`
 
 ---
 

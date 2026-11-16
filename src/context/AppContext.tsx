@@ -273,16 +273,17 @@ interface AppContextValue {
   markNotificationRead: (notificationId: string) => void;
   markAllNotificationsRead: () => void;
 
-  // Stage 3C Payments, Reviews, Notification Prefs, & Admin Moderation
+  // Stage 3C/3D Cashfree Payments, Reviews, Notification Prefs, & Admin Moderation
   createPackageOrder: (params: {
     trainerId: string;
     packageId: string;
     inviteId?: string;
   }) => Promise<{
     ok: boolean;
-    mode?: 'free_enrolled' | 'razorpay_checkout';
-    keyId?: string;
+    mode?: 'free_enrolled' | 'cashfree_checkout';
+    cashfreeEnv?: 'sandbox' | 'production';
     orderId?: string;
+    paymentSessionId?: string;
     amountPaise?: number;
     amountInr?: number;
     paymentId?: string;
@@ -293,11 +294,19 @@ interface AppContextValue {
     code?: string;
   }>;
   verifyPackageOrder: (params: {
-    paymentId: string;
-    razorpayOrderId: string;
-    razorpayPaymentId: string;
-    razorpaySignature: string;
-  }) => Promise<{ ok: boolean; invoiceNumber?: string; error?: string }>;
+    orderId: string;
+    paymentId?: string;
+  }) => Promise<{
+    ok: boolean;
+    status: 'paid' | 'pending' | 'failed' | 'cancelled';
+    invoiceNumber?: string;
+    packageName?: string;
+    amountInr?: number;
+    providerPaymentId?: string;
+    paymentMethod?: string;
+    message?: string;
+    error?: string;
+  }>;
   submitTrainerReview: (params: {
     trainerId: string;
     rating: number;
@@ -3049,9 +3058,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
-          mode?: 'free_enrolled' | 'razorpay_checkout';
-          keyId?: string;
+          mode?: 'free_enrolled' | 'cashfree_checkout';
+          cashfreeEnv?: 'sandbox' | 'production';
           orderId?: string;
+          paymentSessionId?: string;
           amountPaise?: number;
           amountInr?: number;
           paymentId?: string;
@@ -3067,8 +3077,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ok: true,
           mode: data.mode,
-          keyId: data.keyId,
+          cashfreeEnv: data.cashfreeEnv,
           orderId: data.orderId,
+          paymentSessionId: data.paymentSessionId,
           amountPaise: data.amountPaise,
           amountInr: data.amountInr,
           paymentId: data.paymentId,
@@ -3084,14 +3095,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const verifyPackageOrder = useCallback(
-    async (params: {
-      paymentId: string;
-      razorpayOrderId: string;
-      razorpayPaymentId: string;
-      razorpaySignature: string;
-    }) => {
+    async (params: { orderId: string; paymentId?: string }) => {
       if (!isCloudSynced || !firebaseUser) {
-        return { ok: false, error: 'Authentication required.' };
+        return { ok: false, status: 'failed' as const, error: 'Authentication required.' };
       }
       try {
         const headers = await getApiSecurityHeaders();
@@ -3102,19 +3108,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const data = (await res.json().catch(() => ({}))) as {
           ok?: boolean;
+          status?: 'paid' | 'pending' | 'failed' | 'cancelled';
           invoiceNumber?: string;
+          packageName?: string;
+          amountInr?: number;
+          providerPaymentId?: string;
+          paymentMethod?: string;
+          message?: string;
           error?: string;
         };
-        if (!res.ok || !data.ok) {
-          pushToast(data.error || 'Payment verification failed.', 'error');
-          return { ok: false, error: data.error || 'Payment verification failed.' };
+        const resolvedStatus = data.status || (res.ok && data.ok ? 'paid' : 'failed');
+        if (resolvedStatus === 'paid') {
+          pushToast(`Enrollment confirmed (${data.invoiceNumber || 'Receipt ready'}).`);
+          return {
+            ok: true,
+            status: 'paid' as const,
+            invoiceNumber: data.invoiceNumber,
+            packageName: data.packageName,
+            amountInr: data.amountInr,
+            providerPaymentId: data.providerPaymentId,
+            paymentMethod: data.paymentMethod,
+          };
         }
-        pushToast(`Enrollment confirmed (${data.invoiceNumber || 'Receipt ready'}).`);
-        return { ok: true, invoiceNumber: data.invoiceNumber };
+        if (resolvedStatus === 'pending') {
+          return {
+            ok: true,
+            status: 'pending' as const,
+            packageName: data.packageName,
+            amountInr: data.amountInr,
+            message: data.message,
+          };
+        }
+        if (resolvedStatus === 'cancelled') {
+          return {
+            ok: false,
+            status: 'cancelled' as const,
+            packageName: data.packageName,
+            amountInr: data.amountInr,
+            error: data.error || 'Checkout was cancelled before completion.',
+          };
+        }
+        pushToast(data.error || 'Payment verification failed.', 'error');
+        return {
+          ok: false,
+          status: 'failed' as const,
+          packageName: data.packageName,
+          amountInr: data.amountInr,
+          error: data.error || 'Payment verification failed.',
+        };
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unable to verify payment.';
         pushToast(msg, 'error');
-        return { ok: false, error: msg };
+        return { ok: false, status: 'failed' as const, error: msg };
       }
     },
     [isCloudSynced, firebaseUser, pushToast],

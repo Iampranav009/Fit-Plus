@@ -11,7 +11,8 @@ import recalculateStreakHandler from './api/streaks/recalculate.js';
 import respondRelationshipHandler from './api/relationships/respond.js';
 import createPaymentOrderHandler from './api/payments/create-order.js';
 import verifyPaymentHandler from './api/payments/verify.js';
-import razorpayWebhookHandler from './api/payments/webhook.js';
+import cashfreeWebhookHandler from './api/payments/webhook.js';
+import refundPaymentHandler from './api/payments/refund.js';
 import adminOverviewHandler from './api/admin/overview.js';
 import monitoringErrorHandler from './api/monitoring/error.js';
 
@@ -48,7 +49,8 @@ async function startServer() {
   app.all('/api/relationships/respond', adaptVercelHandler(respondRelationshipHandler));
   app.all('/api/payments/create-order', adaptVercelHandler(createPaymentOrderHandler));
   app.all('/api/payments/verify', adaptVercelHandler(verifyPaymentHandler));
-  app.all('/api/payments/webhook', adaptVercelHandler(razorpayWebhookHandler));
+  app.all('/api/payments/webhook', adaptVercelHandler(cashfreeWebhookHandler));
+  app.all('/api/payments/refund', adaptVercelHandler(refundPaymentHandler));
   app.all('/api/admin/overview', adaptVercelHandler(adminOverviewHandler));
   app.all('/api/monitoring/error', adaptVercelHandler(monitoringErrorHandler));
 

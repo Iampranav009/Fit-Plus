@@ -245,8 +245,10 @@
         "trainerUserId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "packageId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "status": { "type": "string", "enum": ["pending", "active", "past_due", "canceled", "expired"] },
-        "provider": { "type": "string", "enum": ["razorpay", "free_tier"] },
+        "provider": { "type": "string", "enum": ["cashfree", "razorpay", "free_tier"] },
         "latestPaymentId": { "type": "string", "maxLength": 128 },
+        "providerOrderId": { "type": "string", "maxLength": 128 },
+        "razorpayOrderId": { "type": "string", "maxLength": 128 },
         "currentPeriodStart": { "type": "string", "maxLength": 64 },
         "currentPeriodEnd": { "type": "string", "maxLength": 64 },
         "createdAt": { "type": "string", "format": "date-time" },
@@ -256,7 +258,7 @@
     },
     "PaymentRecord": {
       "title": "PaymentRecord",
-      "description": "Server-verified Razorpay test/live payment & invoice record (never writable from client SDK).",
+      "description": "Server-verified provider-agnostic payment & invoice record (Cashfree PG primary; legacy Razorpay preserved; never writable from client SDK).",
       "type": "object",
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
@@ -267,15 +269,25 @@
         "packageId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "amountInr": { "type": "number" },
         "currency": { "type": "string", "enum": ["INR"] },
-        "status": { "type": "string", "enum": ["created", "captured", "failed", "refunded"] },
-        "mode": { "type": "string", "enum": ["test", "live"] },
+        "status": { "type": "string", "enum": ["created", "pending", "captured", "failed", "cancelled", "refunded"] },
+        "provider": { "type": "string", "enum": ["cashfree", "razorpay", "free_tier"] },
+        "mode": { "type": "string", "enum": ["sandbox", "production", "test", "live"] },
+        "providerOrderId": { "type": "string", "maxLength": 128 },
+        "providerPaymentId": { "type": "string", "maxLength": 128 },
+        "paymentSessionId": { "type": "string", "maxLength": 256 },
+        "paymentMethod": { "type": "string", "maxLength": 64 },
+        "refundStatus": { "type": "string", "enum": ["none", "pending", "processed", "failed"] },
+        "settlementStatus": { "type": "string", "enum": ["not_applicable", "pending_onboarding", "scheduled", "settled"] },
+        "verifiedAt": { "type": "string", "maxLength": 64 },
+        "webhookEventId": { "type": "string", "maxLength": 128 },
+        "lastWebhookAt": { "type": "string", "maxLength": 64 },
         "razorpayOrderId": { "type": "string", "maxLength": 128 },
         "razorpayPaymentId": { "type": "string", "maxLength": 128 },
         "invoiceNumber": { "type": "string", "maxLength": 64 },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "clientId", "clientUserId", "trainerId", "trainerUserId", "packageId", "amountInr", "currency", "status", "mode", "createdAt", "updatedAt"]
+      "required": ["id", "clientId", "clientUserId", "trainerId", "trainerUserId", "packageId", "amountInr", "currency", "status", "provider", "createdAt", "updatedAt"]
     },
     "TaskTemplate": {
       "title": "TaskTemplate",
@@ -618,6 +630,125 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "trainerId", "clientId", "clientUserId", "relationshipId", "authorName", "rating", "comment", "createdAt", "updatedAt"]
+    },
+    "CustomExercise": {
+      "title": "CustomExercise",
+      "description": "Trainer-created custom exercise extending the built-in FitPlus anatomical exercise library.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "category": { "type": "string", "enum": ["strength", "mobility", "conditioning", "recovery"] },
+        "environment": { "type": "string", "enum": ["gym", "home", "both"] },
+        "equipment": { "type": "string", "enum": ["bodyweight", "dumbbells", "barbell", "kettlebell", "cable", "machine", "resistance_band", "pullup_bar"] },
+        "difficulty": { "type": "string", "enum": ["beginner", "intermediate", "experienced"] },
+        "primaryMuscles": { "type": "array", "description": "Bounded primary muscles (max 6)." },
+        "secondaryMuscles": { "type": "array", "description": "Bounded secondary muscles (max 6)." },
+        "instructions": { "type": "array", "description": "Bounded step-by-step form instructions (max 10)." },
+        "commonMistakes": { "type": "array", "description": "Bounded common mistakes list (max 10)." },
+        "safetyNotes": { "type": "string", "maxLength": 400 },
+        "alternativeIds": { "type": "array", "description": "Bounded alternative exercise IDs (max 10)." },
+        "isCustom": { "type": "boolean" },
+        "trainerId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trainerUserId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "category", "environment", "equipment", "difficulty", "primaryMuscles", "secondaryMuscles", "instructions", "commonMistakes", "safetyNotes", "alternativeIds", "isCustom", "trainerId", "trainerUserId", "createdAt", "updatedAt"]
+    },
+    "WorkoutSession": {
+      "title": "WorkoutSession",
+      "description": "Completed or saved live workout execution record with set logs, volume, and PR tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientUserId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trainerUserId": { "type": "string", "maxLength": 128 },
+        "assignmentId": { "type": "string", "maxLength": 128 },
+        "planId": { "type": "string", "maxLength": 128 },
+        "dayIndex": { "type": "number" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "dateKey": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "status": { "type": "string", "enum": ["in_progress", "paused", "completed"] },
+        "startedAt": { "type": "string", "maxLength": 64 },
+        "completedAt": { "type": "string", "maxLength": 64 },
+        "durationSeconds": { "type": "number" },
+        "totalVolumeKg": { "type": "number" },
+        "completedSetsCount": { "type": "number" },
+        "prCount": { "type": "number" },
+        "exercises": { "type": "array", "description": "Bounded logged exercises (max 20)." },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "clientUserId", "trainerUserId", "title", "dateKey", "status", "startedAt", "durationSeconds", "totalVolumeKg", "completedSetsCount", "prCount", "exercises", "createdAt", "updatedAt"]
+    },
+    "AchievementUnlock": {
+      "title": "AchievementUnlock",
+      "description": "Immutable, deduplicated achievement milestone unlocked by a client.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "badgeId": { "type": "string", "enum": ["first_workout", "streak_7", "streak_14", "streak_30", "streak_60", "streak_100", "personal_record", "consistency_10", "consistency_30"] },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientUserId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "unlockedAt": { "type": "string", "maxLength": 64 },
+        "metricSnapshot": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "badgeId", "clientId", "clientUserId", "title", "description", "unlockedAt", "createdAt", "updatedAt"]
+    },
+    "NutritionDiaryEntry": {
+      "title": "NutritionDiaryEntry",
+      "description": "India-first daily nutrition diary with estimated macro logs, water tracking, and coach feedback.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientUserId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trainerUserId": { "type": "string", "maxLength": 128 },
+        "dateKey": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "completedSlots": { "type": "array", "description": "Bounded meal slot keys (max 5)." },
+        "items": { "type": "array", "description": "Bounded logged food items (max 30)." },
+        "waterGlasses": { "type": "number" },
+        "personalNotes": { "type": "string", "maxLength": 600 },
+        "trainerFeedback": { "type": "string", "maxLength": 1000 },
+        "trainerFeedbackAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "clientUserId", "trainerUserId", "dateKey", "completedSlots", "items", "waterGlasses", "createdAt", "updatedAt"]
+    },
+    "WeeklyCheckIn": {
+      "title": "WeeklyCheckIn",
+      "description": "Structured weekly reflection check-in with ratings, optional shared progress photo, and trainer feedback.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientUserId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "trainerUserId": { "type": "string", "maxLength": 128 },
+        "weekKey": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "dateKey": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$", "maxLength": 10 },
+        "weightKg": { "type": "number" },
+        "energyLevel": { "type": "number" },
+        "sleepQuality": { "type": "number" },
+        "workoutDifficulty": { "type": "number" },
+        "hungerLevel": { "type": "number" },
+        "scheduleChallenges": { "type": "string", "maxLength": 800 },
+        "generalFeedback": { "type": "string", "maxLength": 1000 },
+        "photoPath": { "type": "string", "maxLength": 300 },
+        "shareWithTrainer": { "type": "boolean" },
+        "trainerFeedback": { "type": "string", "maxLength": 1000 },
+        "trainerReviewedAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "clientUserId", "trainerUserId", "weekKey", "dateKey", "energyLevel", "sleepQuality", "workoutDifficulty", "hungerLevel", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -740,6 +871,26 @@
     "/reviews/{reviewId}": {
       "schema": { "$ref": "#/entities/TrainerReview" },
       "description": "Verified client reviews for published trainers."
+    },
+    "/exercises/{exerciseId}": {
+      "schema": { "$ref": "#/entities/CustomExercise" },
+      "description": "Trainer-created custom exercise entries supplementing the built-in anatomical library."
+    },
+    "/workoutSessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/WorkoutSession" },
+      "description": "Client live workout execution logs with set-by-set tracking and volume metrics."
+    },
+    "/achievements/{achievementId}": {
+      "schema": { "$ref": "#/entities/AchievementUnlock" },
+      "description": "Immutable deduplicated milestone achievement unlocks per client."
+    },
+    "/nutritionLogs/{logId}": {
+      "schema": { "$ref": "#/entities/NutritionDiaryEntry" },
+      "description": "Daily India-first client nutrition logs with optional coach feedback."
+    },
+    "/weeklyCheckIns/{checkInId}": {
+      "schema": { "$ref": "#/entities/WeeklyCheckIn" },
+      "description": "Structured weekly client check-in reflections and coach review notes."
     }
   }
 }

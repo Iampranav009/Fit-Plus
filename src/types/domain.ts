@@ -366,6 +366,11 @@ export interface StoreSnapshot {
   bookings: Booking[];
   notifications: Notification[];
   aiDrafts: AIPlanDraft[];
+  customExercises?: ExerciseDefinition[];
+  workoutSessions?: WorkoutSession[];
+  achievements?: AchievementUnlock[];
+  nutritionLogs?: NutritionDiaryEntry[];
+  weeklyCheckIns?: WeeklyCheckIn[];
 }
 
 export type DayCompletionStatus =
@@ -496,6 +501,27 @@ export interface TrainerReview {
   updatedAt: string;
 }
 
+export type PaymentProvider = 'cashfree' | 'razorpay' | 'free_tier';
+
+export type PaymentStatus =
+  | 'created'
+  | 'pending'
+  | 'captured'
+  | 'failed'
+  | 'cancelled'
+  | 'refunded';
+
+export type RefundStatus = 'none' | 'pending' | 'processed' | 'failed';
+export type SettlementStatus = 'not_applicable' | 'pending_onboarding' | 'scheduled' | 'settled';
+
+export interface TrainerSettlementAccount {
+  trainerId: string;
+  provider: 'cashfree_easy_split';
+  enabled: boolean;
+  vendorId?: string;
+  kycStatus: 'not_started' | 'pending_review' | 'approved';
+}
+
 export interface Subscription {
   id: string;
   clientId: string;
@@ -509,8 +535,12 @@ export interface Subscription {
   durationDays: number;
   consultationsIncluded: number;
   status: 'active' | 'canceled' | 'expired';
+  provider: PaymentProvider;
+  latestPaymentId?: string;
+  providerOrderId?: string;
   currentPeriodStart: string;
   currentPeriodEnd: string;
+  /** Legacy historical field preserved for pre-migration Razorpay records. */
   razorpayOrderId?: string;
   createdAt: string;
   updatedAt: string;
@@ -529,8 +559,20 @@ export interface PaymentRecord {
   amountPaise: number;
   amountInr: number;
   currency: 'INR';
-  status: 'created' | 'captured' | 'failed' | 'refunded';
-  provider: 'razorpay' | 'free_tier';
+  status: PaymentStatus;
+  provider: PaymentProvider;
+  mode?: 'sandbox' | 'production' | 'test' | 'live';
+  providerOrderId?: string;
+  providerPaymentId?: string;
+  cfOrderId?: string;
+  paymentSessionId?: string;
+  paymentMethod?: string;
+  refundStatus?: RefundStatus;
+  settlementStatus?: SettlementStatus;
+  verifiedAt?: string;
+  webhookEventId?: string;
+  lastWebhookAt?: string;
+  /** Legacy historical fields preserved for pre-migration Razorpay records. */
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   paidAt?: string;
@@ -562,5 +604,211 @@ export interface AdminOverviewStats {
   }>;
   recentReviews: TrainerReview[];
 }
+
+// -----------------------------------------------------------------------------
+// Stage 4A — Live Workout, Exercise Library, Nutrition Diary, Check-ins, Wrapped
+// -----------------------------------------------------------------------------
+export type MuscleGroup =
+  | 'chest'
+  | 'back'
+  | 'shoulders'
+  | 'biceps'
+  | 'triceps'
+  | 'core'
+  | 'quads'
+  | 'hamstrings'
+  | 'glutes'
+  | 'calves'
+  | 'full_body'
+  | 'cardio';
+
+export type ExerciseEnvironment = 'gym' | 'home' | 'both';
+
+export type ExerciseEquipment =
+  | 'bodyweight'
+  | 'dumbbells'
+  | 'barbell'
+  | 'kettlebell'
+  | 'cable'
+  | 'machine'
+  | 'resistance_band'
+  | 'pullup_bar';
+
+export interface ExerciseDefinition {
+  id: string;
+  name: string;
+  category: 'strength' | 'mobility' | 'conditioning' | 'recovery';
+  environment: ExerciseEnvironment;
+  equipment: ExerciseEquipment;
+  difficulty: ExperienceLevel;
+  primaryMuscles: MuscleGroup[];
+  secondaryMuscles: MuscleGroup[];
+  instructions: string[];
+  commonMistakes: string[];
+  safetyNotes: string;
+  alternativeIds: string[];
+  isCustom?: boolean;
+  trainerId?: string;
+  trainerUserId?: string;
+  createdAt?: string;
+}
+
+export interface WorkoutSetLog {
+  setNumber: number;
+  reps: number;
+  weightKg: number;
+  completed: boolean;
+  isPersonalRecord?: boolean;
+  completedAt?: string;
+}
+
+export interface WorkoutExerciseLog {
+  exerciseId: string;
+  exerciseName: string;
+  substitutedFromName?: string;
+  targetSets: string;
+  targetReps: string;
+  restSeconds: number;
+  sets: WorkoutSetLog[];
+  notes?: string;
+}
+
+export interface WorkoutSession {
+  id: string;
+  clientId: string;
+  clientUserId?: string;
+  trainerUserId?: string;
+  assignmentId?: string;
+  planId?: string;
+  dayIndex?: number;
+  title: string;
+  dateKey: string;
+  status: 'in_progress' | 'paused' | 'completed';
+  startedAt: string;
+  completedAt?: string;
+  durationSeconds: number;
+  totalVolumeKg: number;
+  completedSetsCount: number;
+  prCount: number;
+  exercises: WorkoutExerciseLog[];
+  notes?: string;
+  updatedAt: string;
+}
+
+export type AchievementBadgeId =
+  | 'first_workout'
+  | 'streak_7'
+  | 'streak_14'
+  | 'streak_30'
+  | 'streak_60'
+  | 'streak_100'
+  | 'personal_record'
+  | 'consistency_10'
+  | 'consistency_30';
+
+export interface AchievementUnlock {
+  id: string;
+  badgeId: AchievementBadgeId;
+  clientId: string;
+  clientUserId?: string;
+  title: string;
+  description: string;
+  unlockedAt: string;
+  metricSnapshot?: string;
+}
+
+export type NutritionMealSlot =
+  | 'breakfast'
+  | 'lunch'
+  | 'evening_snack'
+  | 'dinner'
+  | 'additional';
+
+export interface NutritionFoodItem {
+  id: string;
+  name: string;
+  hindiOrRegional?: string;
+  category:
+    | 'breakfast'
+    | 'dal_legumes'
+    | 'breads_rice'
+    | 'protein'
+    | 'snacks'
+    | 'dairy_beverages';
+  dietaryTags: Array<'vegetarian' | 'vegan' | 'eggitarian' | 'non_vegetarian'>;
+  servingLabel: string;
+  servingGrams: number;
+  estimatedCalories: number;
+  estimatedProteinG: number;
+  estimatedCarbsG: number;
+  estimatedFatG: number;
+}
+
+export interface LoggedFoodItem {
+  id: string;
+  foodId?: string;
+  name: string;
+  slot: NutritionMealSlot;
+  servingLabel: string;
+  servings: number;
+  estimatedCalories: number;
+  estimatedProteinG: number;
+  estimatedCarbsG: number;
+  estimatedFatG: number;
+  isEstimated: true;
+}
+
+export interface NutritionDiaryEntry {
+  id: string;
+  clientId: string;
+  clientUserId?: string;
+  trainerUserId?: string;
+  dateKey: string;
+  completedSlots: NutritionMealSlot[];
+  items: LoggedFoodItem[];
+  waterGlasses: number;
+  personalNotes?: string;
+  trainerFeedback?: string;
+  trainerFeedbackAt?: string;
+  updatedAt: string;
+}
+
+export interface WeeklyCheckIn {
+  id: string;
+  clientId: string;
+  clientUserId?: string;
+  trainerUserId?: string;
+  weekKey: string;
+  dateKey: string;
+  weightKg?: number;
+  energyLevel: number;
+  sleepQuality: number;
+  workoutDifficulty: number;
+  hungerLevel: number;
+  scheduleChallenges?: string;
+  generalFeedback?: string;
+  photoPath?: string;
+  shareWithTrainer?: boolean;
+  trainerFeedback?: string;
+  trainerReviewedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WrappedMonthlySummary {
+  monthKey: string;
+  monthLabel: string;
+  workoutsCompleted: number;
+  totalTrainingMinutes: number;
+  totalVolumeKg: number;
+  consistencyPercent: number;
+  longestStreakDays: number;
+  prsAchieved: number;
+  commitmentsCompleted: number;
+  achievementsEarned: number;
+  topExercise?: string;
+  optionalWeightChangeKg?: number;
+}
+
 
 

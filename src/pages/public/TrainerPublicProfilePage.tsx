@@ -20,7 +20,7 @@ import {
   findEligibleReviewRelationship,
 } from '../../lib/commerce';
 import { formatIndiaDate, formatINR } from '../../lib/date';
-import { openRazorpayCheckout } from '../../lib/razorpay';
+import { launchCashfreeCheckout } from '../../lib/cashfree';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
@@ -217,40 +217,20 @@ export const TrainerPublicProfilePage: React.FC = () => {
         return;
       }
 
-      if (!orderRes.keyId || !orderRes.orderId || !orderRes.paymentId) {
-        setCheckoutError('Incomplete payment order response from server.');
+      if (!orderRes.paymentSessionId || !orderRes.orderId) {
+        setCheckoutError('Incomplete Cashfree session details from server.');
         return;
       }
 
-      const rzpRes = await openRazorpayCheckout({
-        keyId: orderRes.keyId,
-        orderId: orderRes.orderId,
-        amountPaise: orderRes.amountPaise || checkoutPkg.priceInr * 100,
-        packageName: orderRes.packageName || checkoutPkg.name,
-        trainerName: orderRes.trainerName || trainer.displayName,
-        customerName: `${activeUser.firstName} ${activeUser.lastName}`.trim(),
-        customerEmail: activeUser.email,
+      const cfRes = await launchCashfreeCheckout({
+        paymentSessionId: orderRes.paymentSessionId,
+        mode: orderRes.cashfreeEnv,
       });
 
-      if (!rzpRes.ok) {
-        setCheckoutError('error' in rzpRes ? rzpRes.error : 'Checkout window was closed.');
+      if (!cfRes.ok) {
+        setCheckoutError('error' in cfRes ? cfRes.error : 'Unable to start Cashfree checkout.');
         return;
       }
-
-      const verifyRes = await verifyPackageOrder({
-        paymentId: orderRes.paymentId,
-        razorpayOrderId: rzpRes.razorpayOrderId,
-        razorpayPaymentId: rzpRes.razorpayPaymentId,
-        razorpaySignature: rzpRes.razorpaySignature,
-      });
-
-      if (!verifyRes.ok) {
-        setCheckoutError(verifyRes.error || 'Payment verification failed.');
-        return;
-      }
-
-      setCheckoutPkg(null);
-      navigate('/app/coach');
     } finally {
       setCheckoutBusy(false);
     }
@@ -454,7 +434,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
               <p className="text-[13px] text-[#7C8393]">
                 {isDemoSandbox
                   ? 'Example INR packages for demo preview · No real payment processed'
-                  : 'Transparent INR packages · Instant enrollment via Razorpay or free tier'}
+                  : 'Transparent INR packages · Instant enrollment via Cashfree Payments or free tier'}
               </p>
             </div>
             {isCurrentCoach ? (
@@ -633,7 +613,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
         </section>
       </main>
 
-      {/* Enrollment & Razorpay Checkout Sheet */}
+      {/* Enrollment & Cashfree Checkout Sheet */}
       <GlassSheet
         open={Boolean(checkoutPkg)}
         onClose={() => !checkoutBusy && setCheckoutPkg(null)}
@@ -642,7 +622,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
           isCloudSynced
             ? checkoutPkg?.priceInr === 0
               ? 'Activate your free coaching tier immediately.'
-              : 'Secure INR payment processed via Razorpay. Your relationship activates immediately upon verification.'
+              : 'Secure INR payment processed via Cashfree Payments. Your coaching workspace activates upon verification.'
             : COPY.discovery.checkoutNotice
         }
       >
@@ -682,14 +662,14 @@ export const TrainerPublicProfilePage: React.FC = () => {
                 {!activeClient ? (
                   'Sign in & enroll'
                 ) : checkoutBusy ? (
-                  'Opening checkout…'
+                  'Opening Cashfree checkout…'
                 ) : isCloudSynced ? (
                   checkoutPkg.priceInr === 0 ? (
                     'Activate free plan'
                   ) : (
                     <>
                       <CreditCard className="w-4 h-4" aria-hidden="true" />
-                      Pay {formatINR(checkoutPkg.priceInr)} via Razorpay
+                      Pay {formatINR(checkoutPkg.priceInr)} with Cashfree
                     </>
                   )
                 ) : (

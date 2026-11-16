@@ -79,8 +79,8 @@ export const ClientPaymentsPage: React.FC = () => {
       `Package: ${payment.packageName}`,
       `Amount: ${formatINR(payment.amountInr)} (${payment.currency})`,
       `Status: ${payment.status.toUpperCase()}`,
-      `Provider: ${payment.provider === 'razorpay' ? 'Razorpay' : 'Free tier'}`,
-      payment.razorpayPaymentId ? `Payment ID: ${payment.razorpayPaymentId}` : '',
+      `Provider: ${payment.provider === 'cashfree' ? 'Cashfree Payments' : payment.provider === 'razorpay' ? 'Razorpay (Legacy)' : 'Free tier'}`,
+      (payment.providerPaymentId || payment.razorpayPaymentId) ? `Payment ID: ${payment.providerPaymentId || payment.razorpayPaymentId}` : '',
       `Date: ${formatIndiaDate((payment.paidAt || payment.createdAt).slice(0, 10), 'short')}`,
     ]
       .filter(Boolean)
@@ -183,8 +183,8 @@ export const ClientPaymentsPage: React.FC = () => {
           ) : (
             <p className="text-[14px] text-[#A2A8B5]">
               {isCloudSynced
-                ? 'Enroll in a coach package or redeem a trainer invite to view your active billing cycle and GST-ready INR receipts.'
-                : 'Sign in with a verified FitPlus account to enroll via Razorpay INR checkout and track receipts.'}
+                ? 'Enroll in a coach package or redeem a trainer invite to view your active billing cycle and INR receipts.'
+                : 'Sign in with a verified FitPlus account to enroll via Cashfree INR checkout and track receipts.'}
             </p>
           )}
         </section>
@@ -233,7 +233,11 @@ export const ClientPaymentsPage: React.FC = () => {
                     <p className="text-[12px] text-[#7C8393] tabular-nums">
                       {payment.invoiceNumber} ·{' '}
                       {formatIndiaDate((payment.paidAt || payment.createdAt).slice(0, 10), 'short')} ·{' '}
-                      {payment.provider === 'razorpay' ? 'Razorpay INR' : 'Free plan'}
+                      {payment.provider === 'cashfree'
+                        ? `Cashfree INR${payment.paymentMethod ? ` (${payment.paymentMethod.toUpperCase()})` : ''}`
+                        : payment.provider === 'razorpay'
+                          ? 'Razorpay INR (Legacy)'
+                          : 'Free plan'}
                     </p>
                   </div>
 
@@ -292,20 +296,42 @@ export const ClientPaymentsPage: React.FC = () => {
                   )}
                 </span>
               </div>
-              {selectedReceipt.razorpayOrderId ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[#7C8393]">Provider</span>
+                <span className="text-[#F5F5F7]">
+                  {selectedReceipt.provider === 'cashfree'
+                    ? 'Cashfree Payments'
+                    : selectedReceipt.provider === 'razorpay'
+                      ? 'Razorpay (Legacy)'
+                      : 'Free tier'}
+                </span>
+              </div>
+              {selectedReceipt.paymentMethod ? (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[#7C8393]">Method</span>
+                  <span className="text-[#A2A8B5] uppercase">{selectedReceipt.paymentMethod}</span>
+                </div>
+              ) : null}
+              {selectedReceipt.providerOrderId || selectedReceipt.razorpayOrderId ? (
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[#7C8393]">Order ID</span>
                   <span className="text-[#A2A8B5] font-mono text-[12px]">
-                    {selectedReceipt.razorpayOrderId}
+                    {selectedReceipt.providerOrderId || selectedReceipt.razorpayOrderId}
                   </span>
                 </div>
               ) : null}
-              {selectedReceipt.razorpayPaymentId ? (
+              {selectedReceipt.providerPaymentId || selectedReceipt.razorpayPaymentId ? (
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[#7C8393]">Payment ID</span>
                   <span className="text-[#A2A8B5] font-mono text-[12px]">
-                    {selectedReceipt.razorpayPaymentId}
+                    {selectedReceipt.providerPaymentId || selectedReceipt.razorpayPaymentId}
                   </span>
+                </div>
+              ) : null}
+              {selectedReceipt.refundStatus && selectedReceipt.refundStatus !== 'none' ? (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[#7C8393]">Refund</span>
+                  <span className="text-[#FFB06B] capitalize">{selectedReceipt.refundStatus}</span>
                 </div>
               ) : null}
             </div>

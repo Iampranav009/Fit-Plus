@@ -4,10 +4,11 @@
 
 ---
 
-## Key Capabilities (Stage 3A — Production Foundation)
+## Key Capabilities (Stage 3D — Cashfree Payments & Production Readiness)
 
-- **Vercel SPA + Serverless API Architecture:** `vercel.json` rewrites SPA routes (`/discover`, `/auth`, `/welcome`, `/demo`, `/admin`, `/join/:token`, `/trainers/:slug`, `/app/*`, `/studio/*`) to `/index.html` while keeping `/api/*` and static assets isolated. Local parity runs via Express in `server.ts`.
+- **Vercel SPA + Serverless API Architecture:** `vercel.json` rewrites SPA routes (`/discover`, `/auth`, `/welcome`, `/demo`, `/admin`, `/join/:token`, `/trainers/:slug`, `/payments/result`, `/app/*`, `/studio/*`) to `/index.html` while keeping `/api/*` and static assets isolated. Local parity runs via Express in `server.ts`.
 - **Complete Firebase Authentication:** Google Sign-In, Email/Password registration & sign-in, mandatory Email Verification Gate, Password Reset emails, persistent browser sessions, and self-service Account Deletion (`/api/account/delete`).
+- **Cashfree Payments PG Integration (Sandbox Ready):** Server-verified INR package orders (`/api/payments/create-order`), authoritative order/payment verification (`/api/payments/verify`), HMAC-SHA256 webhooks (`/api/payments/webhook`), admin refunds (`/api/payments/refund`), `/payments/result` return screen, and preserved historical Razorpay receipts.
 - **Role-Based Access Control (RBAC):** Strict `client`, `trainer`, and `admin` route protection (`ProtectedRoute` + `OnboardingGuard`), `/admin` moderation console for trainer credential verification & audit logs, and an isolated `/demo` interactive sandbox completely separated from authenticated cloud accounts.
 - **30-Collection Multi-Tenant Firestore & Storage Schema:** Validated schemas (`src/lib/firestoreValidation.ts`), hardened Firestore rules (`firestore.rules`), composite indexes (`firestore.indexes.json`), and Cloud Storage rules (`storage.rules`) backed by named Firestore database `ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841`.
 - **Cloud-Synced Activity & Privacy Consents:** Daily hydration tracking persisted to Firestore `dailyActivity`, persistent `consentRecords`, and honest empty states for newly created client and trainer accounts.

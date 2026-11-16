@@ -16,6 +16,7 @@ import { AuthPage } from './pages/public/AuthPage';
 import { InvitePage } from './pages/public/InvitePage';
 import { DiscoverPage } from './pages/public/DiscoverPage';
 import { TrainerPublicProfilePage } from './pages/public/TrainerPublicProfilePage';
+import { PaymentResultPage } from './pages/public/PaymentResultPage';
 
 // Onboarding pages
 import { RoleSelectPage } from './pages/onboarding/RoleSelectPage';
@@ -282,6 +283,7 @@ export default function App() {
             <Route path="/join/:token" element={<InvitePage />} />
             <Route path="/discover" element={<DiscoverPage />} />
             <Route path="/trainers/:slug" element={<TrainerPublicProfilePage />} />
+            <Route path="/payments/result" element={<PaymentResultPage />} />
 
             {/* Onboarding Routes */}
             <Route

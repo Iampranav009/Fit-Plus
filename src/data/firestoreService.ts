@@ -2972,25 +2972,42 @@ export function subscribeAuthenticatedWorkspace(
   // Subscriptions, Payments, & Public Reviews (Stage 3C)
   let clientSubs: Subscription[] = [];
   let trainerSubs: Subscription[] = [];
-  const mapSub = (id: string, d: Record<string, unknown>): Subscription => ({
-    id,
-    clientId: String(d.clientId || ''),
-    clientUserId: String(d.clientUserId || ''),
-    trainerId: String(d.trainerId || ''),
-    trainerUserId: String(d.trainerUserId || ''),
-    packageId: String(d.packageId || ''),
-    packageName: String(d.packageName || 'Coaching Package'),
-    priceInr: Number(d.priceInr || 0),
-    cadence: (d.cadence as Subscription['cadence']) || 'monthly',
-    durationDays: Number(d.durationDays || 30),
-    consultationsIncluded: Number(d.consultationsIncluded ?? 2),
-    status: (d.status as Subscription['status']) || 'active',
-    currentPeriodStart: String(d.currentPeriodStart || tsToIso(d.createdAt)),
-    currentPeriodEnd: String(d.currentPeriodEnd || tsToIso(d.createdAt)),
-    razorpayOrderId: typeof d.razorpayOrderId === 'string' ? d.razorpayOrderId : undefined,
-    createdAt: tsToIso(d.createdAt),
-    updatedAt: tsToIso(d.updatedAt),
-  });
+  const mapSub = (id: string, d: Record<string, unknown>): Subscription => {
+    const provider: Subscription['provider'] =
+      d.provider === 'free_tier'
+        ? 'free_tier'
+        : d.provider === 'razorpay' || (typeof d.razorpayOrderId === 'string' && !d.providerOrderId)
+          ? 'razorpay'
+          : 'cashfree';
+    const providerOrderId =
+      typeof d.providerOrderId === 'string'
+        ? d.providerOrderId
+        : typeof d.razorpayOrderId === 'string'
+          ? d.razorpayOrderId
+          : undefined;
+    return {
+      id,
+      clientId: String(d.clientId || ''),
+      clientUserId: String(d.clientUserId || ''),
+      trainerId: String(d.trainerId || ''),
+      trainerUserId: String(d.trainerUserId || ''),
+      packageId: String(d.packageId || ''),
+      packageName: String(d.packageName || 'Coaching Package'),
+      priceInr: Number(d.priceInr || 0),
+      cadence: (d.cadence as Subscription['cadence']) || 'monthly',
+      durationDays: Number(d.durationDays || 30),
+      consultationsIncluded: Number(d.consultationsIncluded ?? 2),
+      status: (d.status as Subscription['status']) || 'active',
+      provider,
+      latestPaymentId: typeof d.latestPaymentId === 'string' ? d.latestPaymentId : undefined,
+      providerOrderId,
+      currentPeriodStart: String(d.currentPeriodStart || tsToIso(d.createdAt)),
+      currentPeriodEnd: String(d.currentPeriodEnd || tsToIso(d.createdAt)),
+      razorpayOrderId: typeof d.razorpayOrderId === 'string' ? d.razorpayOrderId : undefined,
+      createdAt: tsToIso(d.createdAt),
+      updatedAt: tsToIso(d.updatedAt),
+    };
+  };
   unsubs.push(
     onSnapshot(
       query(collection(db, 'subscriptions'), where('clientUserId', '==', uid)),
@@ -3014,28 +3031,62 @@ export function subscribeAuthenticatedWorkspace(
 
   let clientPays: PaymentRecord[] = [];
   let trainerPays: PaymentRecord[] = [];
-  const mapPay = (id: string, d: Record<string, unknown>): PaymentRecord => ({
-    id,
-    subscriptionId: typeof d.subscriptionId === 'string' ? d.subscriptionId : undefined,
-    clientId: String(d.clientId || ''),
-    clientUserId: String(d.clientUserId || ''),
-    trainerId: String(d.trainerId || ''),
-    trainerUserId: String(d.trainerUserId || ''),
-    packageId: String(d.packageId || ''),
-    packageName: String(d.packageName || 'Coaching Package'),
-    invoiceNumber: String(d.invoiceNumber || id),
-    amountPaise: Number(d.amountPaise || 0),
-    amountInr: Number(d.amountInr || 0),
-    currency: 'INR',
-    status: (d.status as PaymentRecord['status']) || 'created',
-    provider: d.provider === 'free_tier' ? 'free_tier' : 'razorpay',
-    razorpayOrderId: typeof d.razorpayOrderId === 'string' ? d.razorpayOrderId : undefined,
-    razorpayPaymentId: typeof d.razorpayPaymentId === 'string' ? d.razorpayPaymentId : undefined,
-    paidAt: typeof d.paidAt === 'string' ? d.paidAt : undefined,
-    failureReason: typeof d.failureReason === 'string' ? d.failureReason : undefined,
-    createdAt: tsToIso(d.createdAt),
-    updatedAt: tsToIso(d.updatedAt),
-  });
+  const mapPay = (id: string, d: Record<string, unknown>): PaymentRecord => {
+    const provider: PaymentRecord['provider'] =
+      d.provider === 'free_tier'
+        ? 'free_tier'
+        : d.provider === 'razorpay' || (typeof d.razorpayOrderId === 'string' && !d.providerOrderId)
+          ? 'razorpay'
+          : 'cashfree';
+    const providerOrderId =
+      typeof d.providerOrderId === 'string'
+        ? d.providerOrderId
+        : typeof d.razorpayOrderId === 'string'
+          ? d.razorpayOrderId
+          : undefined;
+    const providerPaymentId =
+      typeof d.providerPaymentId === 'string'
+        ? d.providerPaymentId
+        : typeof d.razorpayPaymentId === 'string'
+          ? d.razorpayPaymentId
+          : undefined;
+    return {
+      id,
+      subscriptionId: typeof d.subscriptionId === 'string' ? d.subscriptionId : undefined,
+      clientId: String(d.clientId || ''),
+      clientUserId: String(d.clientUserId || ''),
+      trainerId: String(d.trainerId || ''),
+      trainerUserId: String(d.trainerUserId || ''),
+      packageId: String(d.packageId || ''),
+      packageName: String(d.packageName || 'Coaching Package'),
+      invoiceNumber: String(d.invoiceNumber || id),
+      amountPaise: Number(d.amountPaise || 0),
+      amountInr: Number(d.amountInr || 0),
+      currency: 'INR',
+      status: (d.status as PaymentRecord['status']) || 'created',
+      provider,
+      mode: typeof d.mode === 'string' ? (d.mode as PaymentRecord['mode']) : undefined,
+      providerOrderId,
+      providerPaymentId,
+      cfOrderId: typeof d.cfOrderId === 'string' ? d.cfOrderId : undefined,
+      paymentSessionId: typeof d.paymentSessionId === 'string' ? d.paymentSessionId : undefined,
+      paymentMethod: typeof d.paymentMethod === 'string' ? d.paymentMethod : undefined,
+      refundStatus: typeof d.refundStatus === 'string' ? (d.refundStatus as PaymentRecord['refundStatus']) : undefined,
+      settlementStatus:
+        typeof d.settlementStatus === 'string'
+          ? (d.settlementStatus as PaymentRecord['settlementStatus'])
+          : undefined,
+      verifiedAt: typeof d.verifiedAt === 'string' ? d.verifiedAt : undefined,
+      webhookEventId: typeof d.webhookEventId === 'string' ? d.webhookEventId : undefined,
+      lastWebhookAt: typeof d.lastWebhookAt === 'string' ? d.lastWebhookAt : undefined,
+      razorpayOrderId: typeof d.razorpayOrderId === 'string' ? d.razorpayOrderId : undefined,
+      razorpayPaymentId: typeof d.razorpayPaymentId === 'string' ? d.razorpayPaymentId : undefined,
+      paidAt: typeof d.paidAt === 'string' ? d.paidAt : undefined,
+      failureReason: typeof d.failureReason === 'string' ? d.failureReason : undefined,
+      createdAt: tsToIso(d.createdAt),
+      updatedAt: tsToIso(d.updatedAt),
+    };
+  };
   unsubs.push(
     onSnapshot(
       query(collection(db, 'payments'), where('clientUserId', '==', uid)),

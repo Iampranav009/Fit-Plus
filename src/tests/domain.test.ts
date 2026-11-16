@@ -27,18 +27,25 @@ import {
 } from '../lib/commerce';
 import { createSeedSnapshot } from '../data/demo/fixtures';
 import type { Assignment, CompletionEvent, TrainerReview } from '../types/domain';
+import healthHandler from '../../api/health';
 import generatePlanHandler from '../../api/ai/generate-plan';
 import recalculateStreakHandler from '../../api/streaks/recalculate';
 import respondRelationshipHandler from '../../api/relationships/respond';
 import createOrderHandler from '../../api/payments/create-order';
 import verifyPaymentHandler from '../../api/payments/verify';
 import webhookHandler from '../../api/payments/webhook';
+import refundHandler from '../../api/payments/refund';
 import adminOverviewHandler from '../../api/admin/overview';
 import monitoringErrorHandler from '../../api/monitoring/error';
 import {
+  buildDeterministicWebhookEventId,
+  buildTrainerSettlementPreview,
   computeAuthoritativePackageDetails,
-  verifyRazorpayCheckoutSignature,
-  verifyRazorpayWebhookSignature,
+  extractPreferredPaymentAttempt,
+  getCashfreeConfig,
+  resolveAppBaseUrl,
+  sanitizeIndianPhone,
+  verifyCashfreeWebhookSignature,
 } from '../../api/_lib/payments';
 
 test('Streak engine: counts recovery days, treats unscheduled/future days as neutral, and recalculates on undo', () => {
@@ -413,43 +420,125 @@ test('Stage 3C commerce helpers: WhatsApp URL, authoritative pricing, review eli
   assert.equal(isValidHttpMeetingLink('javascript:alert(1)'), false);
 });
 
-test('Stage 3C Razorpay HMAC checkout & webhook signature verification', () => {
-  const secret = 'test_rzp_secret_123';
-  const orderId = 'order_Test123';
-  const paymentId = 'pay_Test456';
-  const expectedCheckoutSig = crypto
-    .createHmac('sha256', secret)
-    .update(`${orderId}|${paymentId}`)
-    .digest('hex');
+test('Stage 3D Cashfree HMAC webhook signature verification, idempotency keys, and payment attempt selection', () => {
+  const secretKey = 'cfsk_ma_test_secret_123';
+  const timestamp = '1731643200000';
+  const rawPayload = Buffer.from(
+    JSON.stringify({
+      type: 'PAYMENT_SUCCESS_WEBHOOK',
+      data: {
+        order: { order_id: 'fp_pay_123', order_amount: 1999, order_currency: 'INR' },
+        payment: { cf_payment_id: '998877', payment_status: 'SUCCESS', payment_group: 'upi' },
+      },
+    }),
+    'utf8',
+  );
+  const expectedSig = crypto
+    .createHmac('sha256', secretKey)
+    .update(`${timestamp}${rawPayload.toString('utf8')}`)
+    .digest('base64');
 
   assert.equal(
-    verifyRazorpayCheckoutSignature(orderId, paymentId, expectedCheckoutSig, secret),
+    verifyCashfreeWebhookSignature({
+      timestamp,
+      rawBody: rawPayload,
+      signature: expectedSig,
+      secretKey,
+    }),
     true,
   );
   assert.equal(
-    verifyRazorpayCheckoutSignature(orderId, paymentId, '0'.repeat(64), secret),
+    verifyCashfreeWebhookSignature({
+      timestamp,
+      rawBody: rawPayload,
+      signature: 'dGFtcGVyZWQ=',
+      secretKey,
+    }),
+    false,
+  );
+  assert.equal(
+    verifyCashfreeWebhookSignature({
+      timestamp: '',
+      rawBody: rawPayload,
+      signature: expectedSig,
+      secretKey,
+    }),
     false,
   );
 
-  const webhookSecret = 'whsec_test_999';
-  const rawPayload = Buffer.from(JSON.stringify({ event: 'payment.captured' }), 'utf8');
-  const expectedWebhookSig = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(rawPayload)
-    .digest('hex');
+  const evt1 = buildDeterministicWebhookEventId({
+    timestamp,
+    eventType: 'PAYMENT_SUCCESS_WEBHOOK',
+    orderId: 'fp_pay_123',
+    cfPaymentId: '998877',
+    paymentStatus: 'SUCCESS',
+  });
+  const evt2 = buildDeterministicWebhookEventId({
+    timestamp,
+    eventType: 'PAYMENT_SUCCESS_WEBHOOK',
+    orderId: 'fp_pay_123',
+    cfPaymentId: '998877',
+    paymentStatus: 'SUCCESS',
+  });
+  assert.equal(evt1, evt2);
 
-  assert.equal(
-    verifyRazorpayWebhookSignature(rawPayload, expectedWebhookSig, webhookSecret),
-    true,
-  );
-  assert.equal(
-    verifyRazorpayWebhookSignature(rawPayload, 'tampered', webhookSecret),
-    false,
-  );
+  const preferred = extractPreferredPaymentAttempt([
+    { cf_payment_id: '1', order_id: 'fp_pay_123', payment_status: 'FAILED' },
+    { cf_payment_id: '2', order_id: 'fp_pay_123', payment_status: 'SUCCESS', payment_group: 'upi' },
+    { cf_payment_id: '3', order_id: 'fp_pay_123', payment_status: 'PENDING' },
+  ]);
+  assert.equal(preferred?.cf_payment_id, '2');
+  assert.equal(preferred?.payment_group, 'upi');
+
+  assert.equal(sanitizeIndianPhone('+91 98200 11223'), '9820011223');
+  assert.equal(sanitizeIndianPhone(''), '9999999999');
+
+  const cfConfig = getCashfreeConfig();
+  assert.equal(cfConfig.env, 'sandbox');
+  assert.equal(cfConfig.easySplitEnabled, false);
+  assert.equal(cfConfig.baseUrl, 'https://sandbox.cashfree.com/pg');
+
+  const settlement = buildTrainerSettlementPreview({
+    trainerId: 'trn_arjun',
+    amountInr: 1999,
+    easySplitEnabled: false,
+  });
+  assert.equal(settlement.enabled, false);
+  assert.equal(settlement.settlementStatus, 'not_applicable');
+
+  const baseUrl = resolveAppBaseUrl({ host: 'fitplus-kappa.vercel.app', 'x-forwarded-proto': 'https' });
+  assert.ok(baseUrl.startsWith('https://'));
 });
 
-test('Stage 3C API handlers enforce HTTP methods, auth, webhook config, and error monitoring sanitization', async () => {
-  for (const handler of [createOrderHandler, verifyPaymentHandler]) {
+test('Stage 3D /api/health returns HTTP 200 non-secret readiness and payment/admin handlers enforce auth and method security', async () => {
+  const healthGet = createMockRes();
+  await healthHandler(
+    { method: 'GET', headers: {}, body: {} } as unknown as VercelRequest,
+    healthGet.res,
+  );
+  assert.equal(healthGet.result.statusCode, 200);
+  const healthBody = healthGet.result.body as {
+    ok: boolean;
+    firebase: { projectId: string; firestoreDatabaseId: string; adminConfigured: boolean };
+    capabilities: { cashfreeConfigured: boolean; cashfreeEnv: string; easySplitEnabled: boolean };
+  };
+  assert.equal(healthBody.ok, true);
+  assert.equal(healthBody.firebase.projectId, 'gen-lang-client-0381020502');
+  assert.equal(
+    healthBody.firebase.firestoreDatabaseId,
+    'ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841',
+  );
+  assert.equal(healthBody.capabilities.cashfreeEnv, 'sandbox');
+  assert.equal(healthBody.capabilities.easySplitEnabled, false);
+
+  const healthPost = createMockRes();
+  await healthHandler(
+    { method: 'POST', headers: {}, body: {} } as unknown as VercelRequest,
+    healthPost.res,
+  );
+  assert.equal(healthPost.result.statusCode, 405);
+
+  for (const handler of [createOrderHandler, verifyPaymentHandler, refundHandler]) {
     const getMock = createMockRes();
     await handler(
       { method: 'GET', headers: {}, body: {} } as unknown as VercelRequest,

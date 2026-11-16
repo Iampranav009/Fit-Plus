@@ -67,8 +67,12 @@ Existing live collections from Stage 2 are preserved so existing user accounts a
 ---
 
 ## 5. Server & API Layer (`/api/*` + `server.ts`)
-- `GET /api/health`: Non-secret runtime readiness report (Firebase Admin, named DB, App Check, Gemini, Razorpay availability).
+- `GET /api/health`: Non-secret runtime readiness report (Firebase Admin config status, named DB, App Check, Gemini, Cashfree Sandbox/Production readiness). Never initializes Firebase Admin synchronously so `/api/health` reliably returns HTTP 200.
 - `GET /api/invites/resolve?token=...`: Returns sanitized non-PII invite state, trainer summary, and active packages without exposing client emails/labels.
+- `POST /api/payments/create-order`: Server-verified INR package checkout via Cashfree `POST /pg/orders` (or instant ₹0 free-tier enrollment).
+- `POST /api/payments/verify`: Queries Cashfree `GET /pg/orders/{order_id}` + `/payments` server-side before activating `subscriptions`, `enrollments`, `relationships`, and invoices.
+- `POST /api/payments/webhook`: Verifies Cashfree `x-webhook-signature` + `x-webhook-timestamp` (`Base64(HMAC-SHA256)`) on raw body with idempotency and out-of-order protection.
+- `POST /api/payments/refund`: Admin-only Cashfree refund trigger (`POST /pg/orders/{order_id}/refunds`) with audit logging.
 - `POST /api/account/delete`: Verifies Firebase ID token, removes user-scoped Firestore documents, logs a deletion event to `/auditLogs`, and deletes the Firebase Auth user via Admin SDK.
 
 ---

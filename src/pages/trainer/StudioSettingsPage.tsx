@@ -314,7 +314,7 @@ export const StudioSettingsPage: React.FC = () => {
                 },
                 {
                   key: 'billingReceipts',
-                  label: 'Razorpay INR payment notices',
+                  label: 'Cashfree INR payment notices',
                   desc: 'Receive alerts when package checkouts are captured.',
                 },
               ] as { key: keyof NotificationPrefs; label: string; desc: string }[]

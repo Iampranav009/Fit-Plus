@@ -5,10 +5,13 @@ import { getFirestore, initializeFirestore, type Firestore } from 'firebase-admi
 import fs from 'node:fs';
 import path from 'node:path';
 
-interface AppletConfig {
+export interface AppletConfig {
   projectId: string;
   firestoreDatabaseId: string;
 }
+
+const DEFAULT_PROJECT_ID = 'gen-lang-client-0381020502';
+const DEFAULT_FIRESTORE_DATABASE_ID = 'ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841';
 
 function loadAppletConfig(): AppletConfig {
   try {
@@ -16,23 +19,31 @@ function loadAppletConfig(): AppletConfig {
     const raw = fs.readFileSync(configPath, 'utf8');
     const parsed = JSON.parse(raw) as Partial<AppletConfig>;
     return {
-      projectId: parsed.projectId || process.env.FIREBASE_PROJECT_ID || 'gen-lang-client-0381020502',
+      projectId: parsed.projectId?.trim() || process.env.FIREBASE_PROJECT_ID?.trim() || DEFAULT_PROJECT_ID,
       firestoreDatabaseId:
-        parsed.firestoreDatabaseId ||
-        process.env.FIREBASE_FIRESTORE_DATABASE_ID ||
-        'ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841',
+        parsed.firestoreDatabaseId?.trim() ||
+        process.env.FIREBASE_FIRESTORE_DATABASE_ID?.trim() ||
+        DEFAULT_FIRESTORE_DATABASE_ID,
     };
   } catch {
     return {
-      projectId: process.env.FIREBASE_PROJECT_ID || 'gen-lang-client-0381020502',
+      projectId: process.env.FIREBASE_PROJECT_ID?.trim() || DEFAULT_PROJECT_ID,
       firestoreDatabaseId:
-        process.env.FIREBASE_FIRESTORE_DATABASE_ID ||
-        'ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841',
+        process.env.FIREBASE_FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID,
     };
   }
 }
 
+export function getFirebaseAdminConfig(): AppletConfig {
+  return loadAppletConfig();
+}
+
 let cachedFirestore: Firestore | null = null;
+
+function normalizePrivateKey(raw: string | undefined): string {
+  if (!raw) return '';
+  return raw.replace(/\\n/g, '\n').trim();
+}
 
 function parseServiceAccount(): ServiceAccount | null {
   const rawJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
@@ -41,21 +52,16 @@ function parseServiceAccount(): ServiceAccount | null {
       const decoded = rawJson.startsWith('{')
         ? rawJson
         : Buffer.from(rawJson, 'base64').toString('utf8');
-      const parsed = JSON.parse(decoded) as ServiceAccount;
-      if (parsed.projectId && parsed.clientEmail && parsed.privateKey) {
-        return parsed;
-      }
-      const snake = JSON.parse(decoded) as {
+      const parsed = JSON.parse(decoded) as Partial<ServiceAccount> & {
         project_id?: string;
         client_email?: string;
         private_key?: string;
       };
-      if (snake.project_id && snake.client_email && snake.private_key) {
-        return {
-          projectId: snake.project_id,
-          clientEmail: snake.client_email,
-          privateKey: snake.private_key.replace(/\\n/g, '\n'),
-        };
+      const projectId = (parsed.projectId || parsed.project_id || '').trim();
+      const clientEmail = (parsed.clientEmail || parsed.client_email || '').trim();
+      const privateKey = normalizePrivateKey(parsed.privateKey || parsed.private_key);
+      if (projectId && clientEmail && privateKey && privateKey.includes('BEGIN')) {
+        return { projectId, clientEmail, privateKey };
       }
     } catch {
       return null;
@@ -64,15 +70,30 @@ function parseServiceAccount(): ServiceAccount | null {
 
   const projectId = process.env.FIREBASE_PROJECT_ID?.trim();
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n').trim();
-  if (projectId && clientEmail && privateKey) {
+  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+  if (projectId && clientEmail && privateKey && privateKey.includes('BEGIN')) {
     return { projectId, clientEmail, privateKey };
   }
   return null;
 }
 
 export function isFirebaseAdminConfigured(): boolean {
-  return Boolean(parseServiceAccount() || process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  return Boolean(parseServiceAccount() || process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim());
+}
+
+export function getFirebaseAdminStatus(): {
+  projectId: string;
+  firestoreDatabaseId: string;
+  adminConfigured: boolean;
+  appCheckEnforced: boolean;
+} {
+  const config = loadAppletConfig();
+  return {
+    projectId: config.projectId,
+    firestoreDatabaseId: config.firestoreDatabaseId,
+    adminConfigured: isFirebaseAdminConfigured(),
+    appCheckEnforced: process.env.REQUIRE_APP_CHECK === 'true',
+  };
 }
 
 export function getFirebaseAdminContext(): {
@@ -86,9 +107,14 @@ export function getFirebaseAdminContext(): {
     app = getApp();
   } else {
     const serviceAccount = parseServiceAccount();
-    app = serviceAccount
-      ? initializeApp({ credential: cert(serviceAccount), projectId: config.projectId })
-      : initializeApp({ projectId: config.projectId });
+    if (serviceAccount) {
+      app = initializeApp({
+        credential: cert(serviceAccount),
+        projectId: config.projectId,
+      });
+    } else {
+      app = initializeApp({ projectId: config.projectId });
+    }
   }
 
   if (!cachedFirestore) {

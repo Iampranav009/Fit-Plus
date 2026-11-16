@@ -1,5 +1,22 @@
 # FitPlus Changelog
 
+## Stage 3D — Cashfree Payments Migration & Production Verification (2026-11-16)
+
+### Production Defect Fix (`/api/health` 500) & Vercel Runtime Compatibility
+- Fixed `/api/health` `500 FUNCTION_INVOCATION_FAILED` by removing synchronous `initializeApp()` / `initializeFirestore()` calls from health probes, adding `getFirebaseAdminConfig()` / `getFirebaseAdminStatus()`, normalizing escaped `\\n` PEM keys in both camelCase and snake_case service account JSONs, and wrapping `/api/health` in fail-safe `try/catch`.
+- Added `/api/tsconfig.json` isolating serverless handlers from Vite client `@types` (`TS2688`) and fixed extensionless `./date` imports in `src/lib/engines.ts` and `src/lib/streak.ts` to `./date.js` for Node.js native ESM execution on Vercel.
+
+### Cashfree Payments PG Integration (Sandbox First)
+- Replaced Razorpay dependency (`razorpay`) with `@cashfreepayments/cashfree-js` and official Cashfree PG REST APIs (`POST /pg/orders`, `GET /pg/orders/{order_id}`, `GET /pg/orders/{order_id}/payments`, `POST /pg/orders/{order_id}/refunds`).
+- Added `/payments/result` (`PaymentResultPage.tsx`) handling `verifying`, `paid`, `pending`, `failed`, and `cancelled` return outcomes with idempotent server verification and duplicate-checkout prevention.
+- Implemented raw-body Cashfree webhook signature verification (`x-webhook-signature` + `x-webhook-timestamp` Base64 HMAC-SHA256) with deterministic `webhookEventId` deduplication and out-of-order protection (never downgrading captured payments).
+- Refactored `Subscription`, `PaymentRecord`, `firebase-blueprint.json`, and `firestoreService.ts` to provider-agnostic fields (`providerOrderId`, `providerPaymentId`, `paymentSessionId`, `paymentMethod`, `refundStatus`, `settlementStatus`, `verifiedAt`, `webhookEventId`, `lastWebhookAt`) while preserving historical Razorpay receipts.
+- Added `/api/payments/refund.ts` for admin-authorized Cashfree refunds and disabled Easy Split vendor settlement scaffolding (`CASHFREE_EASY_SPLIT_ENABLED="false"`).
+- Hardened PWA Service Worker Workbox config in `vite.config.ts` with `NetworkOnly` for `/api/*`.
+- Added `payment-migration.md` and updated unit, routing, and API handler tests.
+
+---
+
 ## Stage 3A — Production Foundation (2026-11-15)
 
 ### Infrastructure, Hosting & APIs
