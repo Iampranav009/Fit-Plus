@@ -1,14 +1,14 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import {
   AuthHttpError,
   getFirebaseAdminContext,
   verifyAuthenticatedRequest,
-} from '../_lib/firebaseAdmin.js';
-import { DEFAULT_TIMEZONE, getTodayKey } from '../../src/lib/date.js';
-import { computeStreakSummary } from '../../src/lib/streak.js';
-import type { Assignment, CompletionEvent } from '../../src/types/domain.js';
+} from '../../_lib/firebaseAdmin.js';
+import { DEFAULT_TIMEZONE, getTodayKey } from '../../../src/lib/date.js';
+import { computeStreakSummary } from '../../../src/lib/streak.js';
+import type { Assignment, CompletionEvent } from '../../../src/types/domain.js';
 
 const RecalculateSchema = z.object({
   clientId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_\-]+$/),

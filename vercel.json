@@ -3,14 +3,24 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/health.ts":     { "maxDuration": 10 },
+    "api/payments.ts":   { "maxDuration": 30 },
+    "api/account.ts":    { "maxDuration": 30 },
+    "api/studio.ts":     { "maxDuration": 30 },
+    "api/auth.ts":       { "maxDuration": 15 },
+    "api/admin.ts":      { "maxDuration": 15 },
+    "api/ai.ts":         { "maxDuration": 60 },
+    "api/monitoring.ts": { "maxDuration": 10 }
+  },
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
+        { "key": "X-Frame-Options",        "value": "SAMEORIGIN" },
+        { "key": "Referrer-Policy",        "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy",     "value": "camera=(), microphone=(), geolocation=()" }
       ]
     },
     {
@@ -30,6 +40,15 @@
     {
       "source": "/((?!api/|assets/|manifest\\.webmanifest$|sw\\.js$|robots\\.txt$|sitemap\\.xml$|.*\\.(?:js|css|mjs|map|json|webp|png|jpg|jpeg|svg|ico|woff|woff2|txt|xml)$).*)",
       "destination": "/index.html"
-    }
+    },
+    { "source": "/api/payments/:path*",      "destination": "/api/payments" },
+    { "source": "/api/account/:path*",       "destination": "/api/account" },
+    { "source": "/api/invites/:path*",       "destination": "/api/studio" },
+    { "source": "/api/relationships/:path*", "destination": "/api/studio" },
+    { "source": "/api/streaks/:path*",       "destination": "/api/studio" },
+    { "source": "/api/auth/:path*",          "destination": "/api/auth" },
+    { "source": "/api/admin/:path*",         "destination": "/api/admin" },
+    { "source": "/api/ai/:path*",            "destination": "/api/ai" },
+    { "source": "/api/monitoring/:path*",    "destination": "/api/monitoring" }
   ]
 }

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import crypto from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -188,6 +189,17 @@ export function createSyntheticWebhook(params: {
   };
 }
 
+// In-memory Firestore store for mocking Firestore collections in tests
+const inMemoryFirestoreDocs = new Map<string, Record<string, any>>();
+
+export function setMockFirestoreDoc(collection: string, docId: string, data: Record<string, any>) {
+  inMemoryFirestoreDocs.set(`${collection}/${docId}`, { ...data, id: docId });
+}
+
+export function clearMockFirestoreDocs() {
+  inMemoryFirestoreDocs.clear();
+}
+
 export async function setupAuthMock() {
   const { privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: 2048,
@@ -195,16 +207,25 @@ export async function setupAuthMock() {
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
 
-  process.env.FIREBASE_SERVICE_ACCOUNT_JSON = JSON.stringify({
+  const serviceAccount = {
     project_id: 'gen-lang-client-0381020502',
     client_email: 'test@example.com',
     private_key: privateKey,
-  });
+  };
 
-  const { getApps, initializeApp, getApp } = await import('firebase-admin/app');
+  process.env.FIREBASE_SERVICE_ACCOUNT_JSON = JSON.stringify(serviceAccount);
+  process.env.CASHFREE_SECRET_KEY = 'test_cashfree_sandbox_key';
+  process.env.CASHFREE_APP_ID = 'test_cashfree_app_id';
+
+  const { getApps, initializeApp, getApp, cert } = await import('firebase-admin/app');
   const { getAuth } = await import('firebase-admin/auth');
 
-  const app = getApps().length ? getApp() : initializeApp({ projectId: 'gen-lang-client-0381020502' });
+  const app = getApps().length
+    ? getApp()
+    : initializeApp({
+        credential: cert(serviceAccount as any),
+        projectId: 'gen-lang-client-0381020502',
+      });
   const auth = getAuth(app);
 
   auth.verifyIdToken = async (idToken: string) => {
@@ -259,11 +280,143 @@ export async function setupAuthMock() {
       auth_time: Math.floor(Date.now() / 1000),
     } as any;
   };
+
+  const syntheticClaimsStore = new Map<string, Record<string, unknown>>();
+
+  auth.getUser = async (uid: string) => {
+    return {
+      uid,
+      customClaims: syntheticClaimsStore.get(uid) || {},
+    } as any;
+  };
+
+  auth.setCustomUserClaims = async (uid: string, claims: object | null) => {
+    syntheticClaimsStore.set(uid, (claims as Record<string, unknown>) || {});
+  };
+
+  auth.deleteUser = async (uid: string) => {
+    syntheticClaimsStore.delete(uid);
+  };
+
+  // Intercept & completely stub Firestore admin to eliminate unhandled Google Cloud / ADC errors
+  const { getFirestoreAdminContext } = await import('../../../api/_lib/firestoreAdmin.js');
+  const { db } = getFirestoreAdminContext();
+
+  const createMockDocRef = (pathOrId: string) => {
+    const key = pathOrId.includes('/') ? pathOrId : `default/${pathOrId}`;
+    return {
+      id: key.split('/').pop() || pathOrId,
+      path: key,
+      get: async () => {
+        const data = inMemoryFirestoreDocs.get(key);
+        return {
+          exists: Boolean(data),
+          id: key.split('/').pop() || pathOrId,
+          data: () => (data ? { ...data } : undefined),
+          ref: {
+            update: async (updates: any) => {
+              if (data) Object.assign(data, updates);
+            },
+            delete: async () => {
+              inMemoryFirestoreDocs.delete(key);
+            },
+          },
+        };
+      },
+      set: async (data: any, options?: any) => {
+        const existing = inMemoryFirestoreDocs.get(key) || {};
+        inMemoryFirestoreDocs.set(key, options?.merge ? { ...existing, ...data } : { ...data });
+      },
+      update: async (updates: any) => {
+        const existing = inMemoryFirestoreDocs.get(key) || {};
+        inMemoryFirestoreDocs.set(key, { ...existing, ...updates });
+      },
+      delete: async () => {
+        inMemoryFirestoreDocs.delete(key);
+      },
+    };
+  };
+
+  const createMockQuery = (
+    colName: string,
+    filters: Array<{ field: string; op: string; val: any }> = [],
+    limitCount: number | null = null,
+  ) => {
+    const queryObj: any = {
+      where: (field: string, op: string, val: any) =>
+        createMockQuery(colName, [...filters, { field, op, val }], limitCount),
+      limit: (count: number) => createMockQuery(colName, filters, count),
+      orderBy: () => queryObj,
+      get: async () => {
+        const matching: any[] = [];
+        for (const [key, val] of inMemoryFirestoreDocs.entries()) {
+          if (key.startsWith(`${colName}/`)) {
+            let pass = true;
+            for (const f of filters) {
+              if (f.op === '==' && val[f.field] !== f.val) {
+                pass = false;
+                break;
+              }
+            }
+            if (pass) {
+              matching.push({
+                id: val.id || key.split('/')[1],
+                exists: true,
+                data: () => ({ ...val }),
+                ref: createMockDocRef(key),
+              });
+            }
+          }
+        }
+        const docs = limitCount !== null ? matching.slice(0, limitCount) : matching;
+        return {
+          empty: docs.length === 0,
+          docs,
+          size: docs.length,
+          forEach: (cb: (doc: any) => void) => docs.forEach(cb),
+        };
+      },
+      doc: (id: string) => createMockDocRef(`${colName}/${id}`),
+    };
+    return queryObj;
+  };
+
+  db.collection = ((name: string) => createMockQuery(name)) as any;
+  db.doc = ((p: string) => createMockDocRef(p)) as any;
+  db.batch = () => ({
+    set: (ref: any, data: any, options?: any) => {
+      const p = ref?.path || (ref?.id ? `default/${ref.id}` : null);
+      if (p) {
+        const existing = inMemoryFirestoreDocs.get(p) || {};
+        inMemoryFirestoreDocs.set(p, options?.merge ? { ...existing, ...data } : { ...data });
+      }
+    },
+    update: (ref: any, data: any) => {
+      const p = ref?.path || (ref?.id ? `default/${ref.id}` : null);
+      if (p) {
+        const existing = inMemoryFirestoreDocs.get(p) || {};
+        inMemoryFirestoreDocs.set(p, { ...existing, ...data });
+      }
+    },
+    delete: (ref: any) => {
+      const p = ref?.path || (ref?.id ? `default/${ref.id}` : null);
+      if (p) inMemoryFirestoreDocs.delete(p);
+    },
+    commit: async () => {},
+  }) as any;
+  db.runTransaction = (async (fn: any) => {
+    return fn({
+      get: async (ref: any) => ref.get(),
+      set: (ref: any, data: any) => ref.set(data),
+      update: (ref: any, data: any) => ref.update(data),
+      delete: (ref: any) => ref.delete(),
+    });
+  }) as any;
 }
 
 export async function setupSyntheticDatabase(sbAdmin: SupabaseClient<Database>) {
   // 1. Insert app_users
-  await sbAdmin.from('app_users').upsert([
+  const resUsers = await sbAdmin.from('app_users').upsert([
     {
       firebase_uid: SYNTHETIC_IDENTITIES.CLIENT_A.uid,
       first_name: SYNTHETIC_IDENTITIES.CLIENT_A.firstName,
@@ -302,15 +455,17 @@ export async function setupSyntheticDatabase(sbAdmin: SupabaseClient<Database>) 
       role: SYNTHETIC_IDENTITIES.ADMIN.role,
     },
   ]);
+  if (resUsers.error) throw new Error(`setupSyntheticDatabase app_users failed: ${resUsers.error.message}`);
 
   // 2. Insert platform_admins
-  await sbAdmin.from('platform_admins').upsert({
+  const resAdmin = await sbAdmin.from('platform_admins').upsert({
     firebase_uid: SYNTHETIC_IDENTITIES.ADMIN.uid,
     granted_by: 'system_bootstrap',
   });
+  if (resAdmin.error) throw new Error(`setupSyntheticDatabase platform_admins failed: ${resAdmin.error.message}`);
 
   // 3. Insert trainer_profiles
-  await sbAdmin.from('trainer_profiles').upsert([
+  const resTrainers = await sbAdmin.from('trainer_profiles').upsert([
     {
       id: SYNTHETIC_IDENTITIES.TRAINER_A.trainerId,
       user_id: SYNTHETIC_IDENTITIES.TRAINER_A.uid,
@@ -332,9 +487,10 @@ export async function setupSyntheticDatabase(sbAdmin: SupabaseClient<Database>) 
       accepting_clients: false,
     },
   ]);
+  if (resTrainers.error) throw new Error(`setupSyntheticDatabase trainer_profiles failed: ${resTrainers.error.message}`);
 
   // 4. Insert client_profiles
-  await sbAdmin.from('client_profiles').upsert([
+  const resClients = await sbAdmin.from('client_profiles').upsert([
     {
       id: SYNTHETIC_IDENTITIES.CLIENT_A.clientId,
       user_id: SYNTHETIC_IDENTITIES.CLIENT_A.uid,
@@ -359,9 +515,10 @@ export async function setupSyntheticDatabase(sbAdmin: SupabaseClient<Database>) 
       dietary_preference: 'vegetarian',
     },
   ]);
+  if (resClients.error) throw new Error(`setupSyntheticDatabase client_profiles failed: ${resClients.error.message}`);
 
   // 5. Insert coaching packages
-  await sbAdmin.from('coaching_packages').upsert([
+  const resPackages = await sbAdmin.from('coaching_packages').upsert([
     {
       id: SYNTHETIC_PACKAGES.PKG_ARJUN_MONTHLY.id,
       trainer_id: SYNTHETIC_PACKAGES.PKG_ARJUN_MONTHLY.trainer_id,
@@ -383,9 +540,10 @@ export async function setupSyntheticDatabase(sbAdmin: SupabaseClient<Database>) 
       status: SYNTHETIC_PACKAGES.PKG_ARJUN_TRANSFORM.status,
     },
   ]);
+  if (resPackages.error) throw new Error(`setupSyntheticDatabase coaching_packages failed: ${resPackages.error.message}`);
 
   // 6. Insert coaching relationship between Client A and Trainer A
-  await sbAdmin.from('coaching_relationships').upsert({
+  const resRel = await sbAdmin.from('coaching_relationships').upsert({
     id: `rel_${SYNTHETIC_IDENTITIES.CLIENT_A.uid}_${SYNTHETIC_IDENTITIES.TRAINER_A.uid}`,
     client_id: SYNTHETIC_IDENTITIES.CLIENT_A.clientId,
     client_user_id: SYNTHETIC_IDENTITIES.CLIENT_A.uid,
@@ -394,9 +552,15 @@ export async function setupSyntheticDatabase(sbAdmin: SupabaseClient<Database>) 
     package_id: SYNTHETIC_PACKAGES.PKG_ARJUN_MONTHLY.id,
     status: 'active',
   });
+  if (resRel.error) throw new Error(`setupSyntheticDatabase coaching_relationships failed: ${resRel.error.message}`);
 }
 
+let isTeardownCompleted = false;
+
 export async function teardownSyntheticDatabase(sbAdmin: SupabaseClient<Database>) {
+  if (isTeardownCompleted) return;
+  isTeardownCompleted = true;
+
   const uids = [
     SYNTHETIC_IDENTITIES.CLIENT_A.uid,
     SYNTHETIC_IDENTITIES.CLIENT_B.uid,
@@ -406,6 +570,8 @@ export async function teardownSyntheticDatabase(sbAdmin: SupabaseClient<Database
   ];
 
   try {
+    // Reverse foreign-key order deletion of test-generated transaction records
+    await sbAdmin.from('audit_logs').delete().in('actor_user_id', uids);
     await sbAdmin.from('notifications').delete().in('recipient_user_id', uids);
     await sbAdmin.from('weekly_check_ins').delete().in('client_user_id', uids);
     await sbAdmin.from('workout_sessions').delete().in('client_user_id', uids);
@@ -424,16 +590,14 @@ export async function teardownSyntheticDatabase(sbAdmin: SupabaseClient<Database
     await sbAdmin.from('consent_records').delete().in('user_id', uids);
     await sbAdmin.from('chat_messages').delete().in('sender_user_id', uids);
     await sbAdmin.from('chat_conversations').delete().in('client_user_id', uids);
-    await sbAdmin.from('coaching_relationships').delete().in('client_user_id', uids);
-    await sbAdmin.from('coaching_packages').delete().in('id', [
-      SYNTHETIC_PACKAGES.PKG_ARJUN_MONTHLY.id,
-      SYNTHETIC_PACKAGES.PKG_ARJUN_TRANSFORM.id,
-      SYNTHETIC_PACKAGES.PKG_FREE_INTRO.id,
-    ]);
-    await sbAdmin.from('client_profiles').delete().in('user_id', uids);
-    await sbAdmin.from('trainer_profiles').delete().in('user_id', uids);
-    await sbAdmin.from('platform_admins').delete().in('firebase_uid', uids);
-    await sbAdmin.from('app_users').delete().in('firebase_uid', uids);
+
+    if (process.env.PURGE_ALL_SYNTHETIC_USERS === 'true') {
+      await sbAdmin.from('coaching_relationships').delete().in('client_user_id', uids);
+      await sbAdmin.from('client_profiles').delete().in('user_id', uids);
+      await sbAdmin.from('trainer_profiles').delete().in('user_id', uids);
+      await sbAdmin.from('platform_admins').delete().in('firebase_uid', uids);
+      await sbAdmin.from('app_users').delete().in('firebase_uid', uids);
+    }
   } catch (err) {
     console.warn('Synthetic teardown warning:', err);
   }

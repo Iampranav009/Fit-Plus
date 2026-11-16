@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import {
   AuthHttpError,
   getFirebaseAdminContext,
   verifyAuthenticatedRequest,
-} from '../_lib/firebaseAdmin.js';
+} from '../../_lib/firebaseAdmin.js';
 import {
   activateEnrollmentFromPayment,
   extractPreferredPaymentAttempt,
@@ -12,7 +12,7 @@ import {
   fetchCashfreeOrderPayments,
   getCashfreeConfig,
   recordNonCapturedPaymentState,
-} from '../_lib/payments.js';
+} from '../../_lib/payments.js';
 
 const VerifySchema = z.object({
   orderId: z.string().min(1).max(128),

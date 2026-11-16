@@ -1,11 +1,11 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   AuthHttpError,
   getFirebaseAdminContext,
   verifyAuthenticatedRequest,
-} from '../_lib/firebaseAdmin.js';
-import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../_lib/supabaseAdmin.js';
-import { applySecurityHeaders, sanitizeErrorMessage } from '../_lib/security.js';
+} from '../../_lib/firebaseAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../../_lib/supabaseAdmin.js';
+import { applySecurityHeaders, sanitizeErrorMessage } from '../../_lib/security.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   applySecurityHeaders(res);

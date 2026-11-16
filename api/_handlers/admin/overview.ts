@@ -1,11 +1,11 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import {
   AuthHttpError,
   verifyAuthenticatedRequest,
-} from '../_lib/firebaseAdmin.js';
-import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../_lib/supabaseAdmin.js';
-import { getFirestoreAdminContext } from '../_lib/firestoreAdmin.js';
+} from '../../_lib/firebaseAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../../_lib/supabaseAdmin.js';
+import { getFirestoreAdminContext } from '../../_lib/firestoreAdmin.js';
 import { FieldValue } from 'firebase-admin/firestore';
 
 const ModerationSchema = z.discriminatedUnion('action', [
@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             actor_user_id: authCtx.uid,
             action: isPublished ? 'trainer_published' : 'trainer_unpublished',
             target_resource: `trainer:${trainerId}`,
-            details: { isPublished } as unknown as import('../../src/types/database.types.js').Json,
+            details: { isPublished } as unknown as import('../../../src/types/database.types.js').Json,
           });
         }
       } else if (parsed.data.action === 'delete_review') {
@@ -92,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             actor_user_id: authCtx.uid,
             action: 'feature_flag_updated',
             target_resource: `flag:${flagKey}`,
-            details: { isEnabled } as unknown as import('../../src/types/database.types.js').Json,
+            details: { isEnabled } as unknown as import('../../../src/types/database.types.js').Json,
           });
         }
       }

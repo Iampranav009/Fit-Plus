@@ -1,12 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import {
   AuthHttpError,
   getFirebaseAdminContext,
   verifyAuthenticatedRequest,
-} from '../_lib/firebaseAdmin.js';
-import { applySecurityHeaders, checkRateLimit, sanitizeErrorMessage } from '../_lib/security.js';
+} from '../../_lib/firebaseAdmin.js';
+import { applySecurityHeaders, checkRateLimit, sanitizeErrorMessage } from '../../_lib/security.js';
 import {
   activateEnrollmentFromPayment,
   buildTrainerSettlementPreview,
@@ -16,7 +16,7 @@ import {
   getCashfreeConfig,
   resolveAppBaseUrl,
   sanitizeIndianPhone,
-} from '../_lib/payments.js';
+} from '../../_lib/payments.js';
 
 const CreateOrderSchema = z.object({
   packageId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_\-]+$/),

@@ -1,7 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { AuthHttpError, verifyAuthenticatedRequest } from '../_lib/firebaseAdmin.js';
-import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../_lib/supabaseAdmin.js';
-import { applySecurityHeaders, sanitizeErrorMessage } from '../_lib/security.js';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { AuthHttpError, verifyAuthenticatedRequest } from '../../_lib/firebaseAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../../_lib/supabaseAdmin.js';
+import { applySecurityHeaders, sanitizeErrorMessage } from '../../_lib/security.js';
 
 /**
  * GET /api/account/export

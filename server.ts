@@ -3,20 +3,17 @@ import express from 'express';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import path from 'node:path';
 import fs from 'node:fs';
+
+// ── Consolidated function handlers (matches Vercel deployment layout) ─────────
 import healthHandler from './api/health.js';
-import deleteAccountHandler from './api/account/delete.js';
-import exportAccountHandler from './api/account/export.js';
-import provisionClaimsHandler from './api/auth/provision-claims.js';
-import resolveInviteHandler from './api/invites/resolve.js';
-import generatePlanHandler from './api/ai/generate-plan.js';
-import recalculateStreakHandler from './api/streaks/recalculate.js';
-import respondRelationshipHandler from './api/relationships/respond.js';
-import createPaymentOrderHandler from './api/payments/create-order.js';
-import verifyPaymentHandler from './api/payments/verify.js';
-import cashfreeWebhookHandler from './api/payments/webhook.js';
-import refundPaymentHandler from './api/payments/refund.js';
-import adminOverviewHandler from './api/admin/overview.js';
-import monitoringErrorHandler from './api/monitoring/error.js';
+import paymentsHandler from './api/payments.js';
+import accountHandler from './api/account.js';
+import studioHandler from './api/studio.js';
+import authHandler from './api/auth.js';
+import adminHandler from './api/admin.js';
+import aiHandler from './api/ai.js';
+import monitoringHandler from './api/monitoring.js';
+
 import { SECURITY_HEADERS } from './api/_lib/security.js';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -53,20 +50,26 @@ async function startServer() {
     }),
   );
 
+  // ── API Routes (mirror vercel.json rewrites exactly) ──────────────────────
   app.all('/api/health', adaptVercelHandler(healthHandler));
-  app.all('/api/auth/provision-claims', adaptVercelHandler(provisionClaimsHandler));
-  app.all('/api/account/export', adaptVercelHandler(exportAccountHandler));
-  app.all('/api/account/delete', adaptVercelHandler(deleteAccountHandler));
-  app.all('/api/invites/resolve', adaptVercelHandler(resolveInviteHandler));
-  app.all('/api/ai/generate-plan', adaptVercelHandler(generatePlanHandler));
-  app.all('/api/streaks/recalculate', adaptVercelHandler(recalculateStreakHandler));
-  app.all('/api/relationships/respond', adaptVercelHandler(respondRelationshipHandler));
-  app.all('/api/payments/create-order', adaptVercelHandler(createPaymentOrderHandler));
-  app.all('/api/payments/verify', adaptVercelHandler(verifyPaymentHandler));
-  app.all('/api/payments/webhook', adaptVercelHandler(cashfreeWebhookHandler));
-  app.all('/api/payments/refund', adaptVercelHandler(refundPaymentHandler));
-  app.all('/api/admin/overview', adaptVercelHandler(adminOverviewHandler));
-  app.all('/api/monitoring/error', adaptVercelHandler(monitoringErrorHandler));
+
+  // Payments: all 4 sub-routes → consolidated payments handler
+  app.all('/api/payments/*', adaptVercelHandler(paymentsHandler));
+  app.all('/api/payments',   adaptVercelHandler(paymentsHandler));
+
+  // Account: delete + export → consolidated account handler
+  app.all('/api/account/*', adaptVercelHandler(accountHandler));
+
+  // Studio: invites, relationships, streaks → consolidated studio handler
+  app.all('/api/invites/*',       adaptVercelHandler(studioHandler));
+  app.all('/api/relationships/*', adaptVercelHandler(studioHandler));
+  app.all('/api/streaks/*',       adaptVercelHandler(studioHandler));
+
+  // Auth, Admin, AI, Monitoring
+  app.all('/api/auth/*',       adaptVercelHandler(authHandler));
+  app.all('/api/admin/*',      adaptVercelHandler(adminHandler));
+  app.all('/api/ai/*',         adaptVercelHandler(aiHandler));
+  app.all('/api/monitoring/*', adaptVercelHandler(monitoringHandler));
 
   app.use('/api', (_req, res) => {
     res.status(404).json({ ok: false, error: 'API endpoint not found' });

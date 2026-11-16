@@ -1,4 +1,4 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -56,15 +56,15 @@ import {
 import { createSeedSnapshot } from '../data/demo/fixtures';
 import type { Assignment, CompletionEvent, TrainerReview } from '../types/domain';
 import healthHandler from '../../api/health';
-import generatePlanHandler from '../../api/ai/generate-plan';
-import recalculateStreakHandler from '../../api/streaks/recalculate';
-import respondRelationshipHandler from '../../api/relationships/respond';
-import createOrderHandler from '../../api/payments/create-order';
-import verifyPaymentHandler from '../../api/payments/verify';
-import webhookHandler from '../../api/payments/webhook';
-import refundHandler from '../../api/payments/refund';
-import adminOverviewHandler from '../../api/admin/overview';
-import monitoringErrorHandler from '../../api/monitoring/error';
+import generatePlanHandler from '../../api/_handlers/ai/generate-plan';
+import recalculateStreakHandler from '../../api/_handlers/streaks/recalculate';
+import respondRelationshipHandler from '../../api/_handlers/relationships/respond';
+import createOrderHandler from '../../api/_handlers/payments/create-order';
+import verifyPaymentHandler from '../../api/_handlers/payments/verify';
+import webhookHandler from '../../api/_handlers/payments/webhook';
+import refundHandler from '../../api/_handlers/payments/refund';
+import adminOverviewHandler from '../../api/_handlers/admin/overview';
+import monitoringErrorHandler from '../../api/_handlers/monitoring/error';
 import {
   buildDeterministicWebhookEventId,
   buildTrainerSettlementPreview,

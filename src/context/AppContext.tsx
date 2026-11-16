@@ -878,6 +878,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [pushToast],
   );
 
+function purgeSensitiveLocalStorage(): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (
+        key &&
+        (key.startsWith('fitplus_') ||
+          key.startsWith('firebase:') ||
+          key.includes('token') ||
+          key.includes('profile') ||
+          key.includes('session') ||
+          key.includes('auth'))
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const k of keysToRemove) {
+      window.localStorage.removeItem(k);
+    }
+  } catch (e) {
+    console.warn('Failed to purge sensitive localStorage:', e);
+  }
+}
+
   const deleteMyAccount = useCallback(async () => {
     setAuthBusy(true);
     try {
@@ -888,6 +914,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsPlatformAdmin(false);
         setDemoPreviewOverride(false);
         writeStoredPendingInvite(undefined);
+        purgeSensitiveLocalStorage();
         pushToast('Account and workspace data deleted.', 'info');
       } else {
         pushToast(res.error || 'Could not delete account.', 'error');
@@ -907,6 +934,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsPlatformAdmin(false);
       setDemoPreviewOverride(false);
       writeStoredPendingInvite(undefined);
+      purgeSensitiveLocalStorage();
       pushToast('Signed out.', 'info');
     } catch {
       pushToast('Could not sign out cleanly.', 'error');
@@ -1070,6 +1098,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     setDemoPreviewOverride(false);
+    purgeSensitiveLocalStorage();
     persistLocal((prev) => ({
       ...prev,
       session: {

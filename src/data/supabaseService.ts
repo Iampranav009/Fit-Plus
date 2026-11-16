@@ -1200,14 +1200,26 @@ export async function saveTrainerOnboardingToFirestore(params: {
   trainer: TrainerProfile;
   starterPackage: Package;
 }): Promise<void> {
-  await supabase.from('app_users').update({
+  const userUpdate: {
+    first_name: string;
+    last_name: string;
+    timezone: string;
+    is_adult_confirmed: boolean;
+    onboarding_completed: boolean;
+    role?: 'client' | 'trainer' | 'admin';
+  } = {
     first_name: params.user.firstName,
     last_name: params.user.lastName || '',
-    role: 'trainer',
     timezone: params.user.timezone,
     is_adult_confirmed: true,
     onboarding_completed: true,
-  }).eq('firebase_uid', params.uid);
+  };
+  // Role changes are restricted to platform admins / verification flows
+  if (params.user.role === 'admin') {
+    userUpdate.role = 'admin';
+  }
+
+  await supabase.from('app_users').update(userUpdate).eq('firebase_uid', params.uid);
 
   await supabase.from('trainer_profiles').upsert({
     id: params.trainer.id,

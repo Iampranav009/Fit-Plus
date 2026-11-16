@@ -1,7 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getFirestoreAdminContext, isFirebaseAdminConfigured } from '../_lib/firestoreAdmin.js';
-import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../_lib/supabaseAdmin.js';
-import { applySecurityHeaders } from '../_lib/security.js';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getFirestoreAdminContext, isFirebaseAdminConfigured } from '../../_lib/firestoreAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../../_lib/supabaseAdmin.js';
+import { applySecurityHeaders } from '../../_lib/security.js';
 
 /**
  * POST /api/auth/provision-claims

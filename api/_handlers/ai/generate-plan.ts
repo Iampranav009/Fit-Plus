@@ -1,23 +1,23 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
 import {
   AuthHttpError,
   verifyAuthenticatedRequest,
-} from '../_lib/firebaseAdmin.js';
-import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../_lib/supabaseAdmin.js';
-import { applySecurityHeaders, checkRateLimit, sanitizeErrorMessage } from '../_lib/security.js';
+} from '../../_lib/firebaseAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../../_lib/supabaseAdmin.js';
+import { applySecurityHeaders, checkRateLimit, sanitizeErrorMessage } from '../../_lib/security.js';
 import {
   generateDeterministicPlanDraft,
   sanitizeAIPlanDraftPayload,
-} from '../../src/lib/engines.js';
+} from '../../../src/lib/engines.js';
 import type {
   AIPlanDraft,
   DietaryPreference,
   ExperienceLevel,
   GoalFocus,
   TrainingEnvironment,
-} from '../../src/types/domain.js';
+} from '../../../src/types/domain.js';
 
 const MODEL_NAME = 'gemini-2.5-flash';
 const MAX_REQUESTS_PER_MINUTE = 10;
@@ -193,8 +193,8 @@ Generate a comprehensive workout outline, Indian-friendly nutrition outline, and
           dietary_pref: input.dietaryPreference,
           target_calories: 2000,
           target_protein_g: 120,
-          workout_days: sanitized.workoutDays as unknown as import('../../src/types/database.types.js').Json,
-          meal_slots: sanitized.nutritionOutline as unknown as import('../../src/types/database.types.js').Json,
+          workout_days: sanitized.workoutDays as unknown as import('../../../src/types/database.types.js').Json,
+          meal_slots: sanitized.nutritionOutline as unknown as import('../../../src/types/database.types.js').Json,
           trainer_approved: false,
           status: 'draft',
         });

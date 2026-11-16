@@ -1,13 +1,13 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { FieldValue } from 'firebase-admin/firestore';
-import { getFirestoreAdminContext, isFirebaseAdminConfigured } from '../_lib/firestoreAdmin.js';
+import { getFirestoreAdminContext, isFirebaseAdminConfigured } from '../../_lib/firestoreAdmin.js';
 import {
   activateEnrollmentFromPayment,
   buildDeterministicWebhookEventId,
   getCashfreeConfig,
   recordNonCapturedPaymentState,
   verifyCashfreeWebhookSignature,
-} from '../_lib/payments.js';
+} from '../../_lib/payments.js';
 
 export const config = {
   api: {
