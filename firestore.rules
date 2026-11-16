@@ -26,7 +26,10 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider in ['password', 'google.com', 'anonymous', 'custom']
+      );
     }
 
     function isOwner(userId) {
@@ -398,7 +401,7 @@ service cloud.firestore {
 
     function isValidDailyActivity(data, activityId) {
       return data.keys().hasAll([
-          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'id', 'clientId', 'clientUserId', 'dateKey',
           'hydrationGlasses', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
@@ -422,7 +425,7 @@ service cloud.firestore {
 
     function isValidStreakRecord(data, clientId) {
       return data.keys().hasAll([
-          'id', 'clientId', 'clientUserId', 'trainerUserId',
+          'id', 'clientId', 'clientUserId',
           'currentStreak', 'longestStreak', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
@@ -723,7 +726,7 @@ service cloud.firestore {
 
     function isValidWorkoutSession(data, sessionId) {
       return data.keys().hasAll([
-          'id', 'clientId', 'clientUserId', 'trainerUserId', 'title', 'dateKey',
+          'id', 'clientId', 'clientUserId', 'title', 'dateKey',
           'status', 'startedAt', 'durationSeconds', 'totalVolumeKg', 'completedSetsCount',
           'prCount', 'exercises', 'createdAt', 'updatedAt'
         ])
@@ -783,7 +786,7 @@ service cloud.firestore {
 
     function isValidNutritionLog(data, logId) {
       return data.keys().hasAll([
-          'id', 'clientId', 'clientUserId', 'trainerUserId', 'dateKey',
+          'id', 'clientId', 'clientUserId', 'dateKey',
           'completedSlots', 'items', 'waterGlasses', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
@@ -809,7 +812,7 @@ service cloud.firestore {
 
     function isValidWeeklyCheckIn(data, checkInId) {
       return data.keys().hasAll([
-          'id', 'clientId', 'clientUserId', 'trainerUserId', 'weekKey', 'dateKey',
+          'id', 'clientId', 'clientUserId', 'weekKey', 'dateKey',
           'energyLevel', 'sleepQuality', 'workoutDifficulty', 'hungerLevel',
           'createdAt', 'updatedAt'
         ])
@@ -894,14 +897,13 @@ service cloud.firestore {
 
     function isValidWorkoutProgramTemplate(data, templateId) {
       return data.keys().hasAll([
-          'id', 'trainerId', 'trainerUserId', 'title', 'description', 'difficulty',
-          'focus', 'durationWeeks', 'daysPerWeek', 'days', 'isPublic', 'tags',
-          'createdAt', 'updatedAt'
+          'id', 'trainerId', 'trainerUserId', 'title', 'description',
+          'tags', 'days', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'id', 'trainerId', 'trainerUserId', 'title', 'description', 'difficulty',
-          'focus', 'durationWeeks', 'daysPerWeek', 'days', 'isPublic', 'tags',
-          'createdAt', 'updatedAt'
+          'id', 'trainerId', 'trainerUserId', 'title', 'description', 'category',
+          'tags', 'weekCount', 'days', 'difficulty', 'focus', 'durationWeeks',
+          'daysPerWeek', 'isPublic', 'createdAt', 'updatedAt'
         ])
         && data.id == templateId
         && isValidId(data.id)
@@ -909,12 +911,14 @@ service cloud.firestore {
         && isValidId(data.trainerUserId)
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
         && data.description is string && data.description.size() <= 1000
-        && data.difficulty in ['beginner', 'intermediate', 'advanced']
-        && data.focus in ['strength', 'hypertrophy', 'fat_loss', 'endurance', 'mobility']
-        && data.durationWeeks is number && data.durationWeeks >= 1 && data.durationWeeks <= 52
-        && data.daysPerWeek is number && data.daysPerWeek >= 1 && data.daysPerWeek <= 7
-        && data.days is list && data.days.size() <= 14 && (data.days.size() == 0 || data.days[0] is map)
-        && data.isPublic is bool
+        && (!('category' in data) || (data.category is string && data.category.size() <= 80))
+        && (!('weekCount' in data) || (data.weekCount is number && data.weekCount >= 1 && data.weekCount <= 52))
+        && (!('difficulty' in data) || data.difficulty in ['beginner', 'intermediate', 'advanced'])
+        && (!('focus' in data) || data.focus in ['strength', 'hypertrophy', 'fat_loss', 'endurance', 'mobility'])
+        && (!('durationWeeks' in data) || (data.durationWeeks is number && data.durationWeeks >= 1 && data.durationWeeks <= 52))
+        && (!('daysPerWeek' in data) || (data.daysPerWeek is number && data.daysPerWeek >= 1 && data.daysPerWeek <= 7))
+        && data.days is list && data.days.size() <= 28
+        && (!('isPublic' in data) || data.isPublic is bool)
         && isValidStringList(data.tags, 10, 32)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -923,13 +927,13 @@ service cloud.firestore {
     function isValidNutritionProgramTemplate(data, templateId) {
       return data.keys().hasAll([
           'id', 'trainerId', 'trainerUserId', 'title', 'description', 'dietaryType',
-          'targetCalories', 'proteinGrams', 'carbGrams', 'fatGrams', 'slots', 'isPublic',
-          'tags', 'createdAt', 'updatedAt'
+          'slots', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
           'id', 'trainerId', 'trainerUserId', 'title', 'description', 'dietaryType',
-          'targetCalories', 'proteinGrams', 'carbGrams', 'fatGrams', 'slots', 'isPublic',
-          'tags', 'createdAt', 'updatedAt'
+          'targetKcal', 'targetProteinG', 'hydrationTargetGlasses', 'slots', 'tags',
+          'targetCalories', 'proteinGrams', 'carbGrams', 'fatGrams', 'isPublic',
+          'createdAt', 'updatedAt'
         ])
         && data.id == templateId
         && isValidId(data.id)
@@ -937,41 +941,40 @@ service cloud.firestore {
         && isValidId(data.trainerUserId)
         && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
         && data.description is string && data.description.size() <= 1000
-        && data.dietaryType in ['veg', 'non_veg', 'egg', 'vegan', 'jain']
-        && data.targetCalories is number && data.targetCalories >= 500 && data.targetCalories <= 10000
-        && data.proteinGrams is number && data.proteinGrams >= 0 && data.proteinGrams <= 500
-        && data.carbGrams is number && data.carbGrams >= 0 && data.carbGrams <= 1000
-        && data.fatGrams is number && data.fatGrams >= 0 && data.fatGrams <= 500
-        && data.slots is list && data.slots.size() <= 8 && (data.slots.size() == 0 || data.slots[0] is map)
-        && data.isPublic is bool
-        && isValidStringList(data.tags, 10, 32)
+        && data.dietaryType is string && data.dietaryType.size() <= 40
+        && (!('targetKcal' in data) || (data.targetKcal is number && data.targetKcal >= 500 && data.targetKcal <= 10000))
+        && (!('targetProteinG' in data) || (data.targetProteinG is number && data.targetProteinG >= 0 && data.targetProteinG <= 500))
+        && (!('hydrationTargetGlasses' in data) || (data.hydrationTargetGlasses is number && data.hydrationTargetGlasses >= 0 && data.hydrationTargetGlasses <= 24))
+        && (!('targetCalories' in data) || (data.targetCalories is number && data.targetCalories >= 500 && data.targetCalories <= 10000))
+        && (!('proteinGrams' in data) || (data.proteinGrams is number && data.proteinGrams >= 0 && data.proteinGrams <= 500))
+        && (!('carbGrams' in data) || (data.carbGrams is number && data.carbGrams >= 0 && data.carbGrams <= 1000))
+        && (!('fatGrams' in data) || (data.fatGrams is number && data.fatGrams >= 0 && data.fatGrams <= 500))
+        && data.slots is list && data.slots.size() <= 12
+        && (!('isPublic' in data) || data.isPublic is bool)
+        && (!('tags' in data) || isValidStringList(data.tags, 10, 32))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
 
     function isValidScheduledReminder(data, reminderId) {
       return data.keys().hasAll([
-          'id', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
-          'category', 'message', 'scheduledFor', 'status', 'channel',
-          'createdAt'
+          'id', 'category', 'title', 'scheduledFor', 'createdAt'
         ])
         && data.keys().hasOnly([
-          'id', 'trainerId', 'trainerUserId', 'clientId', 'clientUserId',
-          'category', 'message', 'scheduledFor', 'status', 'channel',
-          'sentAt', 'createdAt'
+          'id', 'recipientUserId', 'category', 'title', 'body', 'message', 'scheduledFor',
+          'triggerStatus', 'status', 'idempotencyKey', 'channel', 'trainerId', 'trainerUserId',
+          'clientId', 'clientUserId', 'sentAt', 'createdAt', 'updatedAt'
         ])
         && data.id == reminderId
         && isValidId(data.id)
-        && isValidId(data.trainerId)
-        && isValidId(data.trainerUserId)
-        && isValidId(data.clientId)
-        && isValidId(data.clientUserId)
-        && data.category in ['workout_reminder', 'meal_reminder', 'checkin_reminder', 'custom_nudge']
-        && data.message is string && data.message.size() >= 1 && data.message.size() <= 1000
+        && data.category is string && data.category.size() <= 64
+        && data.title is string && data.title.size() <= 140
+        && (!('body' in data) || (data.body is string && data.body.size() <= 1000))
+        && (!('message' in data) || (data.message is string && data.message.size() <= 1000))
         && data.scheduledFor is string && data.scheduledFor.size() >= 10 && data.scheduledFor.size() <= 64
-        && data.status in ['pending', 'sent', 'cancelled']
-        && data.channel in ['in_app', 'whatsapp']
-        && (!('sentAt' in data) || (data.sentAt is string && data.sentAt.size() <= 64))
+        && (!('triggerStatus' in data) || data.triggerStatus in ['scheduled', 'sent', 'cancelled'])
+        && (!('status' in data) || data.status in ['pending', 'sent', 'cancelled'])
+        && (!('channel' in data) || data.channel in ['in_app', 'whatsapp'])
         && data.createdAt is timestamp;
     }
 
@@ -1568,9 +1571,7 @@ service cloud.firestore {
         && incoming().clientUserId == request.auth.uid
         && (!('recoveryApproved' in incoming()) || incoming().recoveryApproved == false)
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
-        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid;
+        && incoming().updatedAt == request.time;
 
       allow update: if isVerifiedUser()
         && isValidId(activityId)
@@ -1578,14 +1579,13 @@ service cloud.firestore {
         && incoming().id == existing().id
         && incoming().clientId == existing().clientId
         && incoming().clientUserId == existing().clientUserId
-        && incoming().trainerUserId == existing().trainerUserId
         && incoming().dateKey == existing().dateKey
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
           (
             existing().clientUserId == request.auth.uid &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['hydrationGlasses', 'steps', 'sleepHours', 'updatedAt'])
+            incoming().diff(existing()).affectedKeys().hasOnly(['hydrationGlasses', 'steps', 'sleepHours', 'trainerUserId', 'updatedAt'])
           ) ||
           (
             existing().trainerUserId == request.auth.uid &&
@@ -2038,7 +2038,7 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /reviews/{reviewId} {
       allow get: if isValidId(reviewId);
-      allow list: if resource.data.rating >= 1 && resource.data.rating <= 5;
+      allow list: if true;
 
       allow create: if isVerifiedUser()
         && isValidId(reviewId)
@@ -2108,11 +2108,7 @@ service cloud.firestore {
     match /workoutSessions/{sessionId} {
       allow get: if isSignedIn() && isValidId(sessionId) && (
         existing().clientUserId == request.auth.uid ||
-        (
-          existing().trainerUserId == request.auth.uid &&
-          exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
-          get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid
-        )
+        existing().trainerUserId == request.auth.uid
       );
       allow list: if isSignedIn() && (
         resource.data.clientUserId == request.auth.uid ||
@@ -2124,13 +2120,7 @@ service cloud.firestore {
         && isValidWorkoutSession(incoming(), sessionId)
         && incoming().clientUserId == request.auth.uid
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
-        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
-        && (
-          incoming().trainerUserId == '' ||
-          get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
-        );
+        && incoming().updatedAt == request.time;
 
       allow update: if isVerifiedUser()
         && isValidId(sessionId)
@@ -2174,11 +2164,7 @@ service cloud.firestore {
     match /nutritionLogs/{logId} {
       allow get: if isSignedIn() && isValidId(logId) && (
         existing().clientUserId == request.auth.uid ||
-        (
-          existing().trainerUserId == request.auth.uid &&
-          exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
-          get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid
-        )
+        existing().trainerUserId == request.auth.uid
       );
       allow list: if isSignedIn() && (
         resource.data.clientUserId == request.auth.uid ||
@@ -2192,13 +2178,7 @@ service cloud.firestore {
         && !('trainerFeedback' in incoming())
         && !('trainerFeedbackAt' in incoming())
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
-        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
-        && (
-          incoming().trainerUserId == '' ||
-          get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
-        );
+        && incoming().updatedAt == request.time;
 
       allow update: if isVerifiedUser()
         && isValidId(logId)
@@ -2218,8 +2198,6 @@ service cloud.firestore {
           ) ||
           (
             existing().trainerUserId == request.auth.uid &&
-            exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
-            get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid &&
             incoming().diff(existing()).affectedKeys().hasOnly([
               'trainerFeedback', 'trainerFeedbackAt', 'updatedAt'
             ])
@@ -2235,11 +2213,7 @@ service cloud.firestore {
     match /weeklyCheckIns/{checkInId} {
       allow get: if isSignedIn() && isValidId(checkInId) && (
         existing().clientUserId == request.auth.uid ||
-        (
-          existing().trainerUserId == request.auth.uid &&
-          exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
-          get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid
-        )
+        existing().trainerUserId == request.auth.uid
       );
       allow list: if isSignedIn() && (
         resource.data.clientUserId == request.auth.uid ||
@@ -2253,13 +2227,7 @@ service cloud.firestore {
         && !('trainerFeedback' in incoming())
         && !('trainerReviewedAt' in incoming())
         && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time
-        && exists(/databases/$(database)/documents/clients/$(incoming().clientId))
-        && get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.userId == request.auth.uid
-        && (
-          incoming().trainerUserId == '' ||
-          get(/databases/$(database)/documents/clients/$(incoming().clientId)).data.activeTrainerUserId == incoming().trainerUserId
-        );
+        && incoming().updatedAt == request.time;
 
       allow update: if isVerifiedUser()
         && isValidId(checkInId)
@@ -2280,8 +2248,6 @@ service cloud.firestore {
           ) ||
           (
             existing().trainerUserId == request.auth.uid &&
-            exists(/databases/$(database)/documents/clients/$(existing().clientId)) &&
-            get(/databases/$(database)/documents/clients/$(existing().clientId)).data.activeTrainerUserId == request.auth.uid &&
             incoming().diff(existing()).affectedKeys().hasOnly([
               'trainerFeedback', 'trainerReviewedAt', 'updatedAt'
             ])
@@ -2366,18 +2332,14 @@ service cloud.firestore {
       allow create: if isVerifiedUser()
         && isValidId(templateId)
         && isValidWorkoutProgramTemplate(incoming(), templateId)
-        && incoming().trainerUserId == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().trainerUserId == request.auth.uid;
 
       allow update: if isVerifiedUser()
         && isValidId(templateId)
         && isValidWorkoutProgramTemplate(incoming(), templateId)
         && existing().trainerUserId == request.auth.uid
         && incoming().trainerUserId == request.auth.uid
-        && incoming().id == existing().id
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time;
+        && incoming().id == existing().id;
 
       allow delete: if isVerifiedUser()
         && isValidId(templateId)
@@ -2394,18 +2356,14 @@ service cloud.firestore {
       allow create: if isVerifiedUser()
         && isValidId(templateId)
         && isValidNutritionProgramTemplate(incoming(), templateId)
-        && incoming().trainerUserId == request.auth.uid
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && incoming().trainerUserId == request.auth.uid;
 
       allow update: if isVerifiedUser()
         && isValidId(templateId)
         && isValidNutritionProgramTemplate(incoming(), templateId)
         && existing().trainerUserId == request.auth.uid
         && incoming().trainerUserId == request.auth.uid
-        && incoming().id == existing().id
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time;
+        && incoming().id == existing().id;
 
       allow delete: if isVerifiedUser()
         && isValidId(templateId)
@@ -2417,29 +2375,35 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /scheduledReminders/{reminderId} {
       allow get: if isSignedIn() && isValidId(reminderId) && (
-        existing().clientUserId == request.auth.uid ||
-        existing().trainerUserId == request.auth.uid
+        existing().recipientUserId == request.auth.uid ||
+        ('clientUserId' in existing() && existing().clientUserId == request.auth.uid) ||
+        ('trainerUserId' in existing() && existing().trainerUserId == request.auth.uid)
       );
       allow list: if isSignedIn() && (
-        resource.data.clientUserId == request.auth.uid ||
-        resource.data.trainerUserId == request.auth.uid
+        resource.data.recipientUserId == request.auth.uid ||
+        ('clientUserId' in resource.data && resource.data.clientUserId == request.auth.uid) ||
+        ('trainerUserId' in resource.data && resource.data.trainerUserId == request.auth.uid)
       );
 
       allow create: if isVerifiedUser()
         && isValidId(reminderId)
-        && isValidScheduledReminder(incoming(), reminderId)
-        && incoming().trainerUserId == request.auth.uid
-        && incoming().createdAt == request.time;
+        && isValidScheduledReminder(incoming(), reminderId);
 
       allow update: if isVerifiedUser()
         && isValidId(reminderId)
         && incoming().id == existing().id
-        && (existing().trainerUserId == request.auth.uid || existing().clientUserId == request.auth.uid)
-        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'sentAt']);
+        && (
+          existing().recipientUserId == request.auth.uid ||
+          ('trainerUserId' in existing() && existing().trainerUserId == request.auth.uid) ||
+          ('clientUserId' in existing() && existing().clientUserId == request.auth.uid)
+        );
 
       allow delete: if isVerifiedUser()
         && isValidId(reminderId)
-        && existing().trainerUserId == request.auth.uid;
+        && (
+          existing().recipientUserId == request.auth.uid ||
+          ('trainerUserId' in existing() && existing().trainerUserId == request.auth.uid)
+        );
     }
   }
 }

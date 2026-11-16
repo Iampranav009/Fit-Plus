@@ -250,10 +250,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(error.status).json({ ok: false, code: error.code, error: error.message });
     }
     console.error('Create Cashfree order error:', error);
+    const message =
+      error instanceof Error ? error.message : 'Unable to initialize Cashfree checkout right now.';
     return res.status(500).json({
       ok: false,
       code: 'payment/order-failed',
-      error: 'Unable to initialize Cashfree checkout right now.',
+      error: message,
     });
   }
 }

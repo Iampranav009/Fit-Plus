@@ -1,8 +1,12 @@
 {
-  "firestore": {
-    "databaseId": "ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841",
-    "rules": "firestore.rules",
-    "edition": "ENTERPRISE",
-    "dataAccessMode": "FIRESTORE_NATIVE"
+  "firestore": [
+    {
+      "database": "ai-studio-fitplus-848bd738-a0f2-48f4-9c61-6e832da89841",
+      "rules": "firestore.rules",
+      "indexes": "firestore.indexes.json"
+    }
+  ],
+  "storage": {
+    "rules": "storage.rules"
   }
 }

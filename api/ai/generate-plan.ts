@@ -7,7 +7,10 @@ import {
   getFirebaseAdminContext,
   verifyAuthenticatedRequest,
 } from '../_lib/firebaseAdmin.js';
-import { sanitizeAIPlanDraftPayload } from '../../src/lib/engines.js';
+import {
+  generateDeterministicPlanDraft,
+  sanitizeAIPlanDraftPayload,
+} from '../../src/lib/engines.js';
 import type {
   AIPlanDraft,
   DietaryPreference,
@@ -16,7 +19,7 @@ import type {
   TrainingEnvironment,
 } from '../../src/types/domain.js';
 
-const MODEL_NAME = 'gemini-4-hydrogen';
+const MODEL_NAME = 'gemini-2.5-flash';
 const MAX_REQUESTS_PER_MINUTE = 5;
 const MAX_REQUESTS_PER_DAY = 30;
 
@@ -197,68 +200,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .filter(Boolean)
       .join('\n');
 
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {
-        systemInstruction:
-          'You are a careful fitness coaching assistant helping certified Indian fitness trainers build safe, sustainable workout and nutrition drafts. Never diagnose medical conditions, never prescribe clinical treatments or extreme caloric restriction, and never recommend banned or unsafe performance substances. Respond strictly in JSON matching the requested schema.',
-        responseMimeType: 'application/json',
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.LOW,
-        },
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING, description: 'Short plan title under 120 characters' },
-            summary: { type: Type.STRING, description: 'Concise coaching overview under 600 characters' },
-            workoutDays: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  dayLabel: { type: Type.STRING, description: 'e.g. Mon, Tue, Wed' },
-                  focus: { type: Type.STRING, description: 'Training focus or Active Recovery' },
-                  sampleSession: { type: Type.STRING, description: 'Exercises, duration, sets/reps cue' },
+    let parsedJson: Record<string, unknown> | null = null;
+    let actualModel = MODEL_NAME;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: prompt,
+        config: {
+          systemInstruction:
+            'You are a careful fitness coaching assistant helping certified Indian fitness trainers build safe, sustainable workout and nutrition drafts. Never diagnose medical conditions, never prescribe clinical treatments or extreme caloric restriction, and never recommend banned or unsafe performance substances. Respond strictly in JSON matching the requested schema.',
+          responseMimeType: 'application/json',
+          thinkingConfig: {
+            thinkingLevel: ThinkingLevel.LOW,
+          },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING, description: 'Short plan title under 120 characters' },
+              summary: { type: Type.STRING, description: 'Concise coaching overview under 600 characters' },
+              workoutDays: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    dayLabel: { type: Type.STRING, description: 'e.g. Mon, Tue, Wed' },
+                    focus: { type: Type.STRING, description: 'Training focus or Active Recovery' },
+                    sampleSession: { type: Type.STRING, description: 'Exercises, duration, sets/reps cue' },
+                  },
+                  required: ['dayLabel', 'focus', 'sampleSession'],
                 },
-                required: ['dayLabel', 'focus', 'sampleSession'],
+              },
+              nutritionOutline: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+              habitCommitments: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
               },
             },
-            nutritionOutline: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            habitCommitments: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
+            required: ['title', 'summary', 'workoutDays', 'nutritionOutline', 'habitCommitments'],
           },
-          required: ['title', 'summary', 'workoutDays', 'nutritionOutline', 'habitCommitments'],
         },
-      },
-    });
-
-    const rawText = response.text;
-    if (!rawText) {
-      return res.status(502).json({
-        ok: false,
-        code: 'ai/empty-response',
-        error: 'The AI model returned an empty response. Please try again.',
       });
+
+      const rawText = response.text;
+      if (rawText) {
+        parsedJson = JSON.parse(rawText) as Record<string, unknown>;
+      }
+    } catch (aiErr) {
+      console.warn('Gemini model call failed, activating deterministic plan engine:', aiErr);
     }
 
-    let parsedJson: Record<string, unknown>;
-    try {
-      parsedJson = JSON.parse(rawText) as Record<string, unknown>;
-    } catch {
-      return res.status(502).json({
-        ok: false,
-        code: 'ai/invalid-json',
-        error: 'The AI model returned malformed output. Please try generating again.',
+    let sanitized: ReturnType<typeof sanitizeAIPlanDraftPayload>;
+    if (parsedJson) {
+      sanitized = sanitizeAIPlanDraftPayload(parsedJson);
+    } else {
+      actualModel = 'deterministic-fallback';
+      const fallbackDraft = generateDeterministicPlanDraft({
+        trainerId: resolvedTrainerId,
+        objective: input.objective as GoalFocus,
+        experienceLevel: input.experienceLevel as ExperienceLevel,
+        daysPerWeek: input.daysPerWeek,
+        environment: input.environment as TrainingEnvironment,
+        dietaryPreference: input.dietaryPreference as DietaryPreference,
+        constraints: input.constraints,
       });
+      sanitized = {
+        title: fallbackDraft.title,
+        summary: fallbackDraft.summary,
+        workoutDays: fallbackDraft.workoutDays,
+        nutritionOutline: fallbackDraft.nutritionOutline,
+        habitCommitments: fallbackDraft.habitCommitments,
+      };
     }
-
-    const sanitized = sanitizeAIPlanDraftPayload(parsedJson);
     const generationId = `aigen_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const draftId = `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
     const nowIso = new Date().toISOString();
@@ -271,7 +287,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       trainerId: resolvedTrainerId,
       trainerUserId: authCtx.uid,
       clientId: input.clientId || '',
-      model: MODEL_NAME,
+      model: actualModel,
       status: 'succeeded',
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -311,7 +327,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       nutritionOutline: sanitized.nutritionOutline,
       habitCommitments: sanitized.habitCommitments,
       status: 'draft',
-      model: MODEL_NAME,
+      model: actualModel,
       generationId,
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -321,7 +337,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ok: true,
       draft,
       generationId,
-      model: MODEL_NAME,
+      model: actualModel,
       remainingDailyQuota: Math.max(0, MAX_REQUESTS_PER_DAY - (countLastDay + 1)),
     });
   } catch (error) {

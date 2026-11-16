@@ -18,7 +18,11 @@ export function getCashfreeConfig(): CashfreeServerConfig {
   const appId = (process.env.CASHFREE_APP_ID || '').trim();
   const secretKey = (process.env.CASHFREE_SECRET_KEY || '').trim();
   const rawEnv = (process.env.CASHFREE_ENV || 'sandbox').trim().toLowerCase();
-  const env: CashfreeEnvironment = rawEnv === 'production' ? 'production' : 'sandbox';
+  const isProdKey =
+    secretKey.startsWith('cfsk_ma_prod_') ||
+    appId.startsWith('CF_PROD_') ||
+    appId.startsWith('prod_');
+  const env: CashfreeEnvironment = rawEnv === 'production' || isProdKey ? 'production' : 'sandbox';
   const apiVersion = (process.env.CASHFREE_API_VERSION || '2025-01-01').trim() || '2025-01-01';
   const baseUrl =
     env === 'production' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
