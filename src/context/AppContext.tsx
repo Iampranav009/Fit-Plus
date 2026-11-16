@@ -2191,8 +2191,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bookings: store.bookings,
       });
       if (!res.ok) {
+        const failReason = (res as { ok: false; reason: string }).reason;
         const errorMsg =
-          res.reason === 'duplicate'
+          failReason === 'duplicate'
             ? 'That slot already has an active booking.'
             : 'That slot is no longer available.';
         pushToast(errorMsg, 'error');
@@ -2246,8 +2247,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         bookings: store.bookings,
       });
       if (!res.ok) {
-        pushToast(res.reason, 'error');
-        return { ok: false, error: res.reason };
+        const failReason = (res as { ok: false; reason: string }).reason;
+        pushToast(failReason, 'error');
+        return { ok: false, error: failReason };
       }
       persist((prev) => ({
         ...prev,

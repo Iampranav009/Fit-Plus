@@ -106,7 +106,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({
           size="sm"
           tone="neutral"
           value={viewMode}
-          onChange={setViewMode}
+          onChange={(v) => setViewMode(v as 'table' | 'chart')}
           options={[
             { id: 'chart', label: 'Chart' },
             { id: 'table', label: 'Values' },

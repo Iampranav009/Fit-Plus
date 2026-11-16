@@ -177,7 +177,7 @@ export const StudioConsultationsPage: React.FC = () => {
             <GlassSegmentedControl
               ariaLabel="Filter consultation status"
               value={statusFilter}
-              onChange={setStatusFilter}
+              onChange={(v) => setStatusFilter(v as 'booked' | 'completed' | 'canceled' | 'all')}
               size="sm"
               options={[
                 { id: 'all', label: 'All' },

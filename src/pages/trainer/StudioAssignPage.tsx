@@ -183,7 +183,7 @@ export const StudioAssignPage: React.FC = () => {
               <GlassSegmentedControl
                 ariaLabel="Assignment source"
                 value={sourceMode}
-                onChange={setSourceMode}
+                onChange={(v) => setSourceMode(v as 'custom' | 'template')}
                 size="sm"
                 options={[
                   { id: 'template', label: 'Use template' },

@@ -1,6 +1,5 @@
 import { cert, getApp, getApps, initializeApp, type App, type ServiceAccount } from 'firebase-admin/app';
-import { getAppCheck } from 'firebase-admin/app-check';
-import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getFirestore, initializeFirestore, type Firestore } from 'firebase-admin/firestore';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -182,6 +181,7 @@ export async function verifyAuthenticatedRequest(headers: {
       throw new AuthHttpError(401, 'app-check/missing', 'Missing Firebase App Check token.');
     }
     try {
+      const { getAppCheck } = await import('firebase-admin/app-check');
       await getAppCheck(app).verifyToken(appCheckHeader);
     } catch {
       throw new AuthHttpError(401, 'app-check/invalid', 'Invalid Firebase App Check token.');
@@ -190,6 +190,7 @@ export async function verifyAuthenticatedRequest(headers: {
 
   let decoded: DecodedIdToken;
   try {
+    const { getAuth } = await import('firebase-admin/auth');
     decoded = await getAuth(app).verifyIdToken(idToken, true);
   } catch {
     throw new AuthHttpError(401, 'auth/invalid-token', 'Invalid or expired Firebase ID token.');

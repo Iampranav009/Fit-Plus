@@ -292,7 +292,7 @@ export const ProgressPage: React.FC = () => {
             <GlassSegmentedControl
               ariaLabel="Select time range"
               value={range}
-              onChange={setRange}
+              onChange={(v) => setRange(v as '7d' | '30d' | '12w')}
               size="sm"
               tone="neutral"
               options={[

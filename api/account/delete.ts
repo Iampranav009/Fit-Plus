@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 import {
   AuthHttpError,
@@ -50,6 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     await batch.commit();
+    const { getAuth } = await import('firebase-admin/auth');
     await getAuth(app).deleteUser(uid);
 
     return res.status(200).json({ ok: true, deletedUid: uid });

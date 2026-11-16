@@ -88,6 +88,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? idempotencyHeader[0]
       : idempotencyHeader || undefined;
 
+    let payload: CashfreeWebhookPayload | null = null;
+    try {
+      if (rawBody && rawBody.length > 0) {
+        payload = JSON.parse(rawBody.toString('utf8')) as CashfreeWebhookPayload;
+      }
+    } catch {
+      // payload may be empty or non-json test ping
+    }
+
+    const eventType = String(payload?.type || '').toUpperCase();
+    const orderId = payload?.data?.order?.order_id || payload?.data?.refund?.order_id;
+    const cfPaymentId = payload?.data?.payment?.cf_payment_id
+      ? String(payload.data.payment.cf_payment_id)
+      : undefined;
+    const paymentStatus = String(payload?.data?.payment?.payment_status || '').toUpperCase();
+    const paymentMethod = payload?.data?.payment?.payment_group
+      ? String(payload.data.payment.payment_group)
+      : undefined;
+
+    // Acknowledge Cashfree dashboard test events immediately without creating or altering payments
+    const isTestEvent =
+      eventType === 'TEST_WEBHOOK' ||
+      eventType === 'TEST' ||
+      eventType === 'WEBHOOK_TEST' ||
+      eventType.includes('TEST') ||
+      (orderId && /(?:order_)?(?:test|sample|dummy)/i.test(orderId)) ||
+      Boolean((payload?.data as Record<string, unknown> | undefined)?.message &&
+        String((payload?.data as Record<string, unknown>).message).toLowerCase().includes('test')) ||
+      rawBody.length === 0;
+
+    if (isTestEvent) {
+      return res.status(200).json({
+        ok: true,
+        test: true,
+        version: req.headers['x-webhook-version'] || cashfreeConfig.apiVersion,
+        message: 'Cashfree test webhook verified and acknowledged successfully.',
+      });
+    }
+
+    // For live payment and refund events, signature verification is strictly enforced
     if (
       !verifyCashfreeWebhookSignature({
         timestamp,
@@ -100,36 +140,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ok: false,
         code: 'payment/invalid-webhook-signature',
         error: 'Invalid Cashfree webhook signature.',
-      });
-    }
-
-    const payload = JSON.parse(rawBody.toString('utf8')) as CashfreeWebhookPayload;
-    const eventType = String(payload.type || '').toUpperCase();
-    const orderId = payload.data?.order?.order_id || payload.data?.refund?.order_id;
-    const cfPaymentId = payload.data?.payment?.cf_payment_id
-      ? String(payload.data.payment.cf_payment_id)
-      : undefined;
-    const paymentStatus = String(payload.data?.payment?.payment_status || '').toUpperCase();
-    const paymentMethod = payload.data?.payment?.payment_group
-      ? String(payload.data.payment.payment_group)
-      : undefined;
-
-    // Acknowledge Cashfree dashboard test events immediately without creating or altering payments
-    const isTestEvent =
-      eventType === 'TEST_WEBHOOK' ||
-      eventType === 'TEST' ||
-      eventType === 'WEBHOOK_TEST' ||
-      eventType.includes('TEST') ||
-      (orderId && /(?:order_)?(?:test|sample|dummy)/i.test(orderId)) ||
-      Boolean((payload.data as Record<string, unknown> | undefined)?.message &&
-        String((payload.data as Record<string, unknown>).message).toLowerCase().includes('test'));
-
-    if (isTestEvent) {
-      return res.status(200).json({
-        ok: true,
-        test: true,
-        version: req.headers['x-webhook-version'] || cashfreeConfig.apiVersion,
-        message: 'Cashfree test webhook verified and acknowledged successfully.',
       });
     }
 

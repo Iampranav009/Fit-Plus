@@ -66,7 +66,7 @@ export const PlanPage: React.FC = () => {
           <GlassSegmentedControl
             ariaLabel="Plan sections"
             value={tab}
-            onChange={setTab}
+            onChange={(v) => setTab(v as PlanTab)}
             size="sm"
             options={[
               { id: 'workout', label: 'Workout' },

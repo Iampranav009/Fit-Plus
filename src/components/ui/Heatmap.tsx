@@ -76,7 +76,7 @@ export const Heatmap: React.FC<HeatmapProps> = ({ days, title = 'Consistency ove
           size="sm"
           tone="neutral"
           value={viewMode}
-          onChange={setViewMode}
+          onChange={(v) => setViewMode(v as 'list' | 'grid')}
           options={[
             { id: 'grid', label: 'Grid' },
             { id: 'list', label: 'Text summary' },
