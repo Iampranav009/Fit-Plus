@@ -33,13 +33,64 @@ function checkCashfreeConfig(): {
   };
 }
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
   }
 
   try {
+    if (req.query.inspect) {
+      const results: Record<string, unknown> = {};
+      try {
+        const adminMod = await import('./_lib/firebaseAdmin.js');
+        results.firebaseAdminImport = 'ok';
+        try {
+          results.firebaseAdminStatus = adminMod.getFirebaseAdminStatus();
+        } catch (e: unknown) {
+          results.firebaseAdminStatusError = {
+            message: e instanceof Error ? e.message : String(e),
+            stack: e instanceof Error ? e.stack : undefined,
+          };
+        }
+      } catch (e: unknown) {
+        results.firebaseAdminImportError = {
+          message: e instanceof Error ? e.message : String(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        };
+      }
+
+      try {
+        const paymentsMod = await import('./_lib/payments.js');
+        results.paymentsImport = 'ok';
+        try {
+          results.cashfreeConfig = paymentsMod.getCashfreeConfig();
+        } catch (e: unknown) {
+          results.cashfreeConfigError = {
+            message: e instanceof Error ? e.message : String(e),
+            stack: e instanceof Error ? e.stack : undefined,
+          };
+        }
+      } catch (e: unknown) {
+        results.paymentsImportError = {
+          message: e instanceof Error ? e.message : String(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        };
+      }
+
+      try {
+        const webhookMod = await import('./payments/webhook.js');
+        results.webhookImport = 'ok';
+      } catch (e: unknown) {
+        results.webhookImportError = {
+          message: e instanceof Error ? e.message : String(e),
+          stack: e instanceof Error ? e.stack : undefined,
+        };
+      }
+
+      return res.status(200).json({ ok: true, inspection: results });
+    }
+
     const adminConfigured = checkAdminConfigured();
     const cashfree = checkCashfreeConfig();
 
