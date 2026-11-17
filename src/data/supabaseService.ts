@@ -853,7 +853,7 @@ export async function resolveInvitePublic(token: string): Promise<PublicInviteRe
     const res = await fetch(`/api/invites/resolve?token=${encodeURIComponent(clean)}`);
     if (res.ok) {
       const data = (await res.json()) as PublicInviteResolveResult;
-      if (data.state !== 'unverified_server') return data;
+      if (data.state !== 'unverified_server' && data.state !== 'not_found') return data;
     }
   } catch {
     // fallback
