@@ -452,21 +452,11 @@ export const StudioSettingsPage: React.FC = () => {
                   variant="secondary"
                   fullWidth
                   onClick={() => {
-                    switchDemoPersona('usr_client_aarav');
+                    switchDemoPersona('usr_demo_client');
                     navigate('/app/home');
                   }}
                 >
-                  Preview Client App (Aarav Mehta)
-                </GlassButton>
-                <GlassButton
-                  variant="secondary"
-                  fullWidth
-                  onClick={() => {
-                    switchDemoPersona('usr_client_kavya');
-                    navigate('/app/home');
-                  }}
-                >
-                  Preview Independent Client (Kavya Sharma)
+                  Preview Client App
                 </GlassButton>
               </div>
             </section>

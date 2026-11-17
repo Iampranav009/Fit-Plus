@@ -216,7 +216,7 @@ const ProtectedRoute: React.FC<{
 };
 
 const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthReady, firebaseUser, isEmailVerified, isDemoSandbox } = useApp();
+  const { store, isAuthReady, firebaseUser, isEmailVerified, isCloudSynced, isDemoSandbox } = useApp();
   const location = useLocation();
 
   if (!isAuthReady) {
@@ -241,6 +241,15 @@ const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) 
     );
   }
 
+  if (isCloudSynced && store.session.onboardingCompleted) {
+    return (
+      <Navigate
+        to={store.session.activeRole === 'trainer' ? '/studio/overview' : '/app/home'}
+        replace
+      />
+    );
+  }
+
   return <>{children}</>;
 };
 
@@ -249,7 +258,7 @@ const DemoEntryPage: React.FC = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    startDemoAsRole('client', 'usr_client_aarav');
+    startDemoAsRole('client', 'usr_demo_client');
     navigate('/app/home', { replace: true });
   }, [startDemoAsRole, navigate]);
 

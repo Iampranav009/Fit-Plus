@@ -188,7 +188,7 @@ export const MessagesPage: React.FC = () => {
             {/* Message Composer */}
             <ChatComposer
               conversationId={activeConv.id}
-              senderUserId={activeUser?.id || 'usr_client_aarav'}
+              senderUserId={activeUser?.id || 'usr_demo_client'}
               replyToMessage={replyToMessage}
               onClearReply={() => setReplyToMessage(null)}
               onSendMessage={async (payload) => {

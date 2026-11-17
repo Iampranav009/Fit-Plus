@@ -165,11 +165,11 @@ export const StudioAssignPage: React.FC = () => {
                 size="sm"
                 variant="secondary"
                 onClick={() => {
-                  switchDemoPersona('usr_client_aarav');
+                  switchDemoPersona('usr_demo_client');
                   navigate('/app/home');
                 }}
               >
-                Preview in Aarav&apos;s Today
+                Preview in Client Today
               </GlassButton>
             )}
           </div>

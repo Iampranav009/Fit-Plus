@@ -59,7 +59,7 @@ import { mergeExerciseCatalog } from '../data/exerciseLibrary';
 import { evaluateAchievementsState, ACHIEVEMENT_CATALOG } from '../lib/achievementsEngine';
 import { findEligibleReviewRelationship } from '../lib/commerce';
 import { demoRepository } from '../data/repository';
-import { createSeedSnapshot, STORE_SCHEMA_VERSION } from '../data/demo/fixtures';
+import { STORE_SCHEMA_VERSION } from '../data/repository';
 import { auth, getApiSecurityHeaders } from '../lib/firebase';
 import * as fsService from '../data/supabaseService';
 import { getTodayKey } from '../lib/date';
@@ -969,9 +969,8 @@ function purgeSensitiveLocalStorage(): void {
         return res;
       }
 
-      // Sample demo invites only resolved when not logged into a production cloud workspace (or when matching explicit seed fixture in demo)
       if (!isCloudSynced) {
-        const seedMatch = createSeedSnapshot().invites.find((i) => i.token.toUpperCase() === upper);
+        const seedMatch = localStore.invites.find((i) => i.token.toUpperCase() === upper);
         if (seedMatch) {
           return {
             source: 'client_fallback',
@@ -3788,8 +3787,8 @@ function purgeSensitiveLocalStorage(): void {
       const now = new Date().toISOString();
       const currentRole = store.session.activeRole;
       const currentSenderRole: 'client' | 'trainer' = currentRole === 'trainer' ? 'trainer' : 'client';
-      const currentSenderId = activeUser?.id || (currentSenderRole === 'trainer' ? 'usr_trainer_arjun' : 'usr_client_aarav');
-      const senderName = activeUser ? `${activeUser.firstName} ${activeUser.lastName}`.trim() : (currentSenderRole === 'trainer' ? 'Coach Arjun' : 'Aarav Sharma');
+      const currentSenderId = activeUser?.id || (currentSenderRole === 'trainer' ? 'usr_demo_trainer' : 'usr_demo_client');
+      const senderName = activeUser ? `${activeUser.firstName} ${activeUser.lastName}`.trim() : (currentSenderRole === 'trainer' ? 'Demo Trainer' : 'Demo Client');
       const msgId = uid('msg');
 
       const newMsg: ChatMessage = {
