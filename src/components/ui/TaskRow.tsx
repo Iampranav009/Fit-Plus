@@ -56,8 +56,10 @@ export const TaskRow: React.FC<TaskRowProps> = ({ assignment, completed, onToggl
     <motion.div
       layout="position"
       transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-      className={`surface-card flex items-center gap-3.5 rounded-[18px] px-3.5 py-3 transition-colors ${
-        completed ? 'opacity-80 bg-[#181B23]' : 'hover:border-white/[0.14]'
+      className={`surface-card flex items-center gap-3.5 rounded-[18px] px-3.5 py-3 transition-all ${
+        completed
+          ? 'opacity-70'
+          : 'hover:border-white/[0.14] hover:[box-shadow:inset_0_1px_0_rgba(255,255,255,0.12),0_4px_20px_-6px_rgba(9,11,16,0.55)]'
       }`}
     >
       <motion.button

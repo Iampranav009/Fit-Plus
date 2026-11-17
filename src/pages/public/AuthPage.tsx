@@ -179,7 +179,7 @@ export const AuthPage: React.FC = () => {
       </header>
 
       <main className="flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md rounded-[28px] surface-card p-6 sm:p-8 flex flex-col gap-6">
+        <div className="w-full max-w-md rounded-[28px] glass-overlay p-6 sm:p-8 flex flex-col gap-6">
           {firebaseUser && !isEmailVerified ? (
             <>
               <div>
@@ -334,7 +334,7 @@ export const AuthPage: React.FC = () => {
               <div
                 role="tablist"
                 aria-label="Email authentication mode"
-                className="grid grid-cols-2 p-1 rounded-[14px] bg-[#101218] border border-white/[0.08]"
+                className="grid grid-cols-2 p-1 gap-0.5 rounded-[14px] glass-control"
               >
                 <button
                   type="button"
@@ -345,10 +345,10 @@ export const AuthPage: React.FC = () => {
                     setFormError('');
                     setResetSent(false);
                   }}
-                  className={`min-h-[40px] rounded-[10px] text-[13px] font-medium transition-colors cursor-pointer ${
+                  className={`min-h-[40px] rounded-[10px] text-[13px] font-semibold transition-all cursor-pointer ${
                     emailMode === 'signin' || emailMode === 'reset'
-                      ? 'bg-[#252A35] text-[#F5F5F7]'
-                      : 'text-[#A2A8B5] hover:text-[#F5F5F7]'
+                      ? 'surface-elevated text-[#F5F5F7] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.12)]'
+                      : 'text-[#7C8393] hover:text-[#A2A8B5]'
                   }`}
                 >
                   Sign in
@@ -362,10 +362,10 @@ export const AuthPage: React.FC = () => {
                     setFormError('');
                     setResetSent(false);
                   }}
-                  className={`min-h-[40px] rounded-[10px] text-[13px] font-medium transition-colors cursor-pointer ${
+                  className={`min-h-[40px] rounded-[10px] text-[13px] font-semibold transition-all cursor-pointer ${
                     emailMode === 'signup'
-                      ? 'bg-[#252A35] text-[#F5F5F7]'
-                      : 'text-[#A2A8B5] hover:text-[#F5F5F7]'
+                      ? 'surface-elevated text-[#F5F5F7] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.12)]'
+                      : 'text-[#7C8393] hover:text-[#A2A8B5]'
                   }`}
                 >
                   Create account
@@ -404,7 +404,7 @@ export const AuthPage: React.FC = () => {
                 ) : null}
 
                 {emailMode === 'signup' ? (
-                  <label className="flex items-start gap-2.5 rounded-[14px] surface-elevated p-3 cursor-pointer">
+                  <label className="flex items-start gap-2.5 rounded-[14px] glass-control p-3 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={consentAccepted}

@@ -38,11 +38,15 @@ export const InputField: React.FC<InputFieldProps> = ({
           id={inputId}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : helper ? helperId : undefined}
-          className={`w-full min-h-[48px] rounded-[14px] bg-[#090B10]/85 border px-3.5 py-2.5 text-[15px] text-[#F5F5F7] placeholder:text-[#7C8393] transition-colors ${
-            error
-              ? 'border-[#FF6B70]'
-              : 'border-white/[0.1] focus:border-[#FF803E]/80'
-          } ${unit ? 'pr-12' : ''} ${className}`}
+          className={[
+            'w-full min-h-[48px] rounded-[14px] glass-input',
+            'px-3.5 py-2.5 text-[15px] text-[#F5F5F7] placeholder:text-[#7C8393]',
+            error ? 'border-[#FF6B70]!' : '',
+            unit ? 'pr-12' : '',
+            className,
+          ]
+            .filter(Boolean)
+            .join(' ')}
           {...rest}
         />
         {unit ? (
@@ -96,9 +100,14 @@ export const TextAreaField: React.FC<TextAreaFieldProps> = ({
       <textarea
         id={inputId}
         aria-invalid={Boolean(error)}
-        className={`w-full min-h-[96px] rounded-[14px] bg-[#090B10]/85 border px-3.5 py-2.5 text-[15px] text-[#F5F5F7] placeholder:text-[#7C8393] transition-colors ${
-          error ? 'border-[#FF6B70]' : 'border-white/[0.1] focus:border-[#FF803E]/80'
-        } ${className}`}
+        className={[
+          'w-full min-h-[96px] rounded-[14px] glass-input resize-none',
+          'px-3.5 py-2.5 text-[15px] text-[#F5F5F7] placeholder:text-[#7C8393]',
+          error ? 'border-[#FF6B70]!' : '',
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
         {...rest}
       />
       {error ? (

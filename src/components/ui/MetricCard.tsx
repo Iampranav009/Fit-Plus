@@ -43,7 +43,11 @@ export const MetricCard: React.FC<MetricCardProps> = ({
     const step = (now: number) => {
       const t = Math.min(1, (now - startTime) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      setDisplayNum(Number.isInteger(numericTarget) ? Math.round(start + delta * eased) : Number((start + delta * eased).toFixed(1)));
+      setDisplayNum(
+        Number.isInteger(numericTarget)
+          ? Math.round(start + delta * eased)
+          : Number((start + delta * eased).toFixed(1)),
+      );
       if (t < 1) rafId = requestAnimationFrame(step);
     };
 
@@ -53,23 +57,33 @@ export const MetricCard: React.FC<MetricCardProps> = ({
   }, [numericTarget]);
 
   return (
-    <div className={`surface-card rounded-[20px] p-4 sm:p-5 flex flex-col justify-between gap-2 ${className}`}>
+    <div
+      className={`surface-card rounded-[20px] p-4 sm:p-5 flex flex-col justify-between gap-2.5 ${className}`}
+    >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[12px] font-medium text-[#A2A8B5]">{label}</p>
-        {icon ? <span className="shrink-0">{icon}</span> : null}
+        <p className="text-[12px] font-semibold text-[#7C8393] uppercase tracking-[0.06em]">
+          {label}
+        </p>
+        {icon ? (
+          <span className="shrink-0 opacity-70">{icon}</span>
+        ) : null}
       </div>
 
       <div className="flex items-baseline gap-1.5 tabular-nums">
         <span
-          className="text-[28px] sm:text-[32px] font-semibold tracking-[-0.025em] leading-none"
+          className="text-[28px] sm:text-[32px] font-bold tracking-[-0.03em] leading-none"
           style={{ color: accentColor }}
         >
           {numericTarget !== null ? displayNum : value}
         </span>
-        {unit ? <span className="text-[13px] font-medium text-[#A2A8B5]">{unit}</span> : null}
+        {unit ? (
+          <span className="text-[13px] font-medium text-[#A2A8B5]">{unit}</span>
+        ) : null}
       </div>
 
-      {subtitle ? <p className="text-[12px] text-[#7C8393] leading-snug">{subtitle}</p> : null}
+      {subtitle ? (
+        <p className="text-[11.5px] text-[#7C8393] leading-snug">{subtitle}</p>
+      ) : null}
     </div>
   );
 };

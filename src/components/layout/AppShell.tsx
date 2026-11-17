@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   Apple,
@@ -27,7 +27,7 @@ import { useApp } from '../../context/AppContext';
 import { GlassButton } from '../ui/GlassButton';
 import { SkeletonBlock } from '../ui/FitnessIllustrations';
 import { AchievementUnlockModal } from '../ui/AchievementUnlockModal';
-import { GlassSidebar, GlassTopHeader, type NavItem } from './GlassNavigation';
+import { GlassSidebar, GlassTopHeader, MobileNavDrawer, type NavItem } from './GlassNavigation';
 import { GlassTabBar } from './GlassTabBar';
 
 interface AppShellProps {
@@ -52,6 +52,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   } = useApp();
   const location = useLocation();
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isTrainerRoute = location.pathname.startsWith('/studio');
   const unreadCount = store.notifications.filter(
     (n) => n.recipientUserId === activeUser.id && !n.read,
@@ -116,6 +117,16 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col lg:flex-row">
+      {/* Mobile full-screen nav drawer */}
+      <MobileNavDrawer
+        isOpen={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        navItems={navItems}
+        activeUserName={`${activeUser.firstName} ${activeUser.lastName}`}
+        workspaceCaption={`${workspaceLabel} · ${activeUser.timezone}`}
+        isTrainerRoute={isTrainerRoute}
+      />
+
       <GlassSidebar
         isTrainerRoute={isTrainerRoute}
         navItems={navItems}
@@ -133,6 +144,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           unreadCount={unreadCount}
           pageTitle={pageTitle}
           headerRight={headerRight}
+          onMenuOpen={() => setMobileMenuOpen(true)}
         />
 
         <main className="flex-1 w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-12">

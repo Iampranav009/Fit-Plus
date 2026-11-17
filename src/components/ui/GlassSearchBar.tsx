@@ -28,7 +28,7 @@ export const GlassSearchBar: React.FC<GlassSearchBarProps> = ({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel || placeholder}
-        className="glass-control w-full min-h-[48px] rounded-[14px] pl-11 pr-11 text-[15px] text-[#F5F5F7] placeholder:text-[#7C8393] transition-colors focus:border-[#FF803E]/70"
+        className="glass-input w-full min-h-[48px] rounded-[14px] pl-11 pr-11 text-[15px] text-[#F5F5F7] placeholder:text-[#7C8393]"
       />
       {value ? (
         <button

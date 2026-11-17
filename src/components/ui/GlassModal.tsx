@@ -52,6 +52,9 @@ export const GlassModal: React.FC<GlassModalProps> = ({
     };
   }, [open, onClose]);
 
+  const isSheet = mode === 'sheet' || mode === 'auto';
+  const isModal = mode === 'modal';
+
   const containerAlignment =
     mode === 'sheet'
       ? 'items-end'
@@ -73,12 +76,22 @@ export const GlassModal: React.FC<GlassModalProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-          className={`fixed inset-0 z-50 flex justify-center bg-[#090B10]/72 backdrop-blur-md ${containerAlignment}`}
+          transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
+          className={`fixed inset-0 z-50 flex justify-center ${containerAlignment}`}
+          style={{ backgroundColor: 'var(--lg-scrim)' }}
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) onClose();
           }}
         >
+          {/* Scrim blur layer */}
+          <div
+            className="absolute inset-0 -z-10"
+            style={{
+              backdropFilter: 'blur(6px) saturate(0.9)',
+              WebkitBackdropFilter: 'blur(6px) saturate(0.9)',
+            }}
+          />
+
           <motion.div
             ref={panelRef}
             tabIndex={-1}
@@ -86,22 +99,42 @@ export const GlassModal: React.FC<GlassModalProps> = ({
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={description ? descId : undefined}
-            initial={{ opacity: 0, y: 24, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 18, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            initial={
+              isModal
+                ? { opacity: 0, scale: 0.96, y: 10 }
+                : { opacity: 0, y: 32 }
+            }
+            animate={
+              isModal
+                ? { opacity: 1, scale: 1, y: 0 }
+                : { opacity: 1, y: 0 }
+            }
+            exit={
+              isModal
+                ? { opacity: 0, scale: 0.97, y: 8 }
+                : { opacity: 0, y: 24 }
+            }
+            transition={{ type: 'spring', stiffness: 360, damping: 30 }}
             className={`glass-overlay w-full ${maxWidthClass} max-h-[90vh] flex flex-col ${panelRadius} outline-none overflow-hidden`}
           >
-            {mode !== 'modal' ? (
-              <div className="md:hidden w-10 h-1 bg-white/20 rounded-full mx-auto mt-3 shrink-0" />
+            {/* Sheet drag handle */}
+            {!isModal ? (
+              <div className="md:hidden flex justify-center pt-3 pb-1 shrink-0">
+                <div className="w-9 h-[3px] rounded-full bg-white/20" />
+              </div>
             ) : null}
-            <div className="flex items-start justify-between gap-4 px-5 sm:px-6 pt-4 pb-3.5 border-b border-white/[0.08] shrink-0">
+
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 px-5 sm:px-6 pt-4 pb-3.5 border-b border-white/[0.07] shrink-0">
               <div className="min-w-0">
-                <h2 id={titleId} className="text-[20px] font-semibold text-[#F5F5F7] leading-snug tracking-[-0.015em]">
+                <h2
+                  id={titleId}
+                  className="text-[20px] font-semibold text-[#F5F5F7] leading-snug tracking-[-0.018em]"
+                >
                   {title}
                 </h2>
                 {description ? (
-                  <p id={descId} className="mt-1 text-[13px] text-[#A2A8B5]">
+                  <p id={descId} className="mt-1 text-[13px] text-[#A2A8B5] leading-relaxed">
                     {description}
                   </p>
                 ) : null}
@@ -110,12 +143,16 @@ export const GlassModal: React.FC<GlassModalProps> = ({
                 type="button"
                 onClick={onClose}
                 aria-label="Close dialog"
-                className="min-h-[44px] min-w-[44px] -mr-2 -mt-1 flex items-center justify-center rounded-[12px] text-[#A2A8B5] hover:text-[#F5F5F7] hover:bg-white/[0.08] transition-colors cursor-pointer shrink-0"
+                className="min-h-[44px] min-w-[44px] -mr-2 -mt-1 flex items-center justify-center rounded-[12px] text-[#7C8393] hover:text-[#F5F5F7] hover:bg-white/[0.08] transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="overflow-y-auto overflow-x-hidden px-5 sm:px-6 py-4 pb-safe">{children}</div>
+
+            {/* Content */}
+            <div className="overflow-y-auto overflow-x-hidden px-5 sm:px-6 py-4 pb-safe">
+              {children}
+            </div>
           </motion.div>
         </motion.div>
       ) : null}

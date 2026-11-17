@@ -60,13 +60,17 @@ export const RoleSelectPage: React.FC = () => {
               type="button"
               onClick={() => setRole('client')}
               aria-pressed={role === 'client'}
-              className={`text-left rounded-[20px] p-5 border transition-colors flex items-start gap-4 cursor-pointer ${
+              className={`text-left rounded-[20px] p-5 flex items-start gap-4 cursor-pointer transition-all ${
                 role === 'client'
-                  ? 'bg-[#FF803E]/12 border-[#FF803E]'
-                  : 'surface-card hover:border-white/20'
+                  ? 'glass-nav border border-[#FF803E]/60 [box-shadow:inset_0_1px_0_rgba(255,128,62,0.18),0_0_20px_-6px_rgba(255,128,62,0.22)]'
+                  : 'surface-card border border-transparent hover:border-white/[0.14]'
               }`}
             >
-              <div className="w-11 h-11 rounded-[12px] bg-[#252A35] border border-white/[0.08] flex items-center justify-center text-[#FF803E] shrink-0">
+              <div className={`w-11 h-11 rounded-[12px] border flex items-center justify-center shrink-0 transition-colors ${
+                role === 'client'
+                  ? 'bg-[#FF803E]/16 border-[#FF803E]/36 text-[#FF803E]'
+                  : 'surface-elevated border-white/[0.08] text-[#A2A8B5]'
+              }`}>
                 <Dumbbell className="w-5 h-5" aria-hidden="true" />
               </div>
               <div>
@@ -83,13 +87,17 @@ export const RoleSelectPage: React.FC = () => {
               type="button"
               onClick={() => setRole('trainer')}
               aria-pressed={role === 'trainer'}
-              className={`text-left rounded-[20px] p-5 border transition-colors flex items-start gap-4 cursor-pointer ${
+              className={`text-left rounded-[20px] p-5 flex items-start gap-4 cursor-pointer transition-all ${
                 role === 'trainer'
-                  ? 'bg-[#FF803E]/12 border-[#FF803E]'
-                  : 'surface-card hover:border-white/20'
+                  ? 'glass-nav border border-[#FF803E]/60 [box-shadow:inset_0_1px_0_rgba(255,128,62,0.18),0_0_20px_-6px_rgba(255,128,62,0.22)]'
+                  : 'surface-card border border-transparent hover:border-white/[0.14]'
               }`}
             >
-              <div className="w-11 h-11 rounded-[12px] bg-[#252A35] border border-white/[0.08] flex items-center justify-center text-[#FF803E] shrink-0">
+              <div className={`w-11 h-11 rounded-[12px] border flex items-center justify-center shrink-0 transition-colors ${
+                role === 'trainer'
+                  ? 'bg-[#FF803E]/16 border-[#FF803E]/36 text-[#FF803E]'
+                  : 'surface-elevated border-white/[0.08] text-[#A2A8B5]'
+              }`}>
                 <Users className="w-5 h-5" aria-hidden="true" />
               </div>
               <div>
