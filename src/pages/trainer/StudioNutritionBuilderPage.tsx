@@ -340,352 +340,347 @@ export const StudioNutritionBuilderPage: React.FC = () => {
   const slotLabels = NUTRITION_SLOT_LABELS;
 
   return (
-    <AppShell pageTitle="Nutrition Studio Builder">
-      <div className="max-w-6xl mx-auto space-y-6 pb-20">
-        {/* Back Link & Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+    <AppShell pageTitle="Nutrition Builder">
+      <div className="max-w-4xl mx-auto flex flex-col gap-5 pb-20">
+
+        {/* ── Header ───────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <button
+              type="button"
               onClick={() => navigate('/studio/templates')}
-              className="p-2 rounded-xl bg-white/[0.04] border border-white/5 text-white/60 hover:text-white transition-colors"
+              aria-label="Back to templates"
+              className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-[12px] glass-control text-[#A2A8B5] hover:text-[#F5F5F7] transition-colors cursor-pointer shrink-0"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
             </button>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <Apple className="w-5 h-5 text-emerald-400" />
-                <h1 className="text-xl font-bold text-white tracking-tight">Nutrition Studio Builder</h1>
+                <Apple className="w-[18px] h-[18px] text-[#B8E66C] shrink-0" aria-hidden="true" />
+                <h1 className="text-[20px] font-semibold text-[#F5F5F7] tracking-[-0.02em] truncate">
+                  Nutrition Builder
+                </h1>
               </div>
-              <p className="text-xs text-white/50">Curate regional Indian meal plans with instant macro scaling</p>
+              <p className="text-[12px] text-[#7C8393]">Build Indian meal plans with real macro data</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 shrink-0">
             <button
+              type="button"
               onClick={() => setIsAiModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+              className="min-h-[36px] px-3.5 rounded-[11px] glass-control text-[#FFB06B] hover:text-[#F5F5F7] text-[12px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Draft with AI</span>
+              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              AI Draft
             </button>
-
             <button
+              type="button"
               onClick={handleSaveTemplate}
-              className="px-4 py-2 rounded-xl bg-gradient-to-tr from-emerald-500 to-emerald-400 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 hover:scale-[1.02] transition-all"
+              className="min-h-[36px] px-4 rounded-[11px] bg-[#FF803E] hover:bg-[#FF9259] text-[#101218] text-[12px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Save className="w-3.5 h-3.5" />
-              <span>Save Template</span>
+              <Save className="w-3.5 h-3.5" aria-hidden="true" />
+              Save
             </button>
           </div>
         </div>
 
-        {/* Plan Targets Meta Grid */}
-        <div className="p-5 rounded-2xl bg-[#14171F]/80 border border-white/5 backdrop-blur-xl grid grid-cols-1 sm:grid-cols-5 gap-4">
-          <div className="sm:col-span-2">
-            <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block mb-1.5">
-              Plan Title
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full bg-[#1C2029] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-400 transition-colors"
-            />
+        {/* ── Plan settings ────────────────────────────────────── */}
+        <div className="surface-card rounded-[22px] p-5 flex flex-col gap-4">
+          <p className="text-[12px] font-semibold text-[#A2A8B5] uppercase tracking-[0.06em]">Plan settings</p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="text-[13px] font-medium text-[#F5F5F7] block mb-1.5">Plan title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full min-h-[44px] rounded-[13px] glass-input px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder:text-[#7C8393]"
+              />
+            </div>
+
+            <div>
+              <label className="text-[13px] font-medium text-[#F5F5F7] block mb-1.5">Dietary type</label>
+              <select
+                value={dietaryType}
+                onChange={(e) => setDietaryType(e.target.value as NutritionProgramTemplate['dietaryType'])}
+                className="w-full min-h-[44px] rounded-[13px] glass-input px-3.5 py-2.5 text-[14px] text-[#F5F5F7] capitalize"
+              >
+                <option value="vegetarian">Vegetarian</option>
+                <option value="non_vegetarian">Non-Vegetarian</option>
+                <option value="eggitarian">Eggitarian</option>
+                <option value="vegan">Vegan</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[13px] font-medium text-[#F5F5F7] block mb-1.5">
+                Water target
+              </label>
+              <div className="relative flex items-center min-h-[44px] rounded-[13px] glass-input px-3.5">
+                <Droplet className="w-4 h-4 text-[#70C8ED] shrink-0 mr-2" aria-hidden="true" />
+                <input
+                  type="number"
+                  min={4}
+                  max={20}
+                  value={hydrationTargetGlasses}
+                  onChange={(e) => setHydrationTargetGlasses(Number(e.target.value))}
+                  className="flex-1 bg-transparent text-[14px] text-[#F5F5F7] focus:outline-none font-mono"
+                />
+                <span className="text-[12px] text-[#7C8393] ml-1">glasses / day</span>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block mb-1.5">
-              Dietary Preference
-            </label>
-            <select
-              value={dietaryType}
-              onChange={(e) => setDietaryType(e.target.value as any)}
-              className="w-full bg-[#1C2029] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-400 transition-colors capitalize"
-            >
-              <option value="vegetarian">Vegetarian</option>
-              <option value="non_vegetarian">Non-Vegetarian</option>
-              <option value="eggitarian">Eggitarian</option>
-              <option value="vegan">Vegan</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block mb-1.5">
-              Target Calories (kcal)
-            </label>
-            <input
-              type="number"
-              step={50}
-              value={targetKcal}
-              onChange={(e) => setTargetKcal(Number(e.target.value))}
-              className="w-full bg-[#1C2029] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-400 transition-colors font-mono"
-            />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block mb-1.5">
-              Target Protein (g)
-            </label>
-            <input
-              type="number"
-              step={5}
-              value={targetProteinG}
-              onChange={(e) => setTargetProteinG(Number(e.target.value))}
-              className="w-full bg-[#1C2029] border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-400 transition-colors font-mono"
-            />
-          </div>
-
-          <div className="sm:col-span-4">
-            <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block mb-1.5">
-              Coach Diet Notes
-            </label>
+            <label className="text-[13px] font-medium text-[#F5F5F7] block mb-1.5">Coach notes</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Focus on keeping hydration high and getting 30g protein at lunch and dinner."
-              className="w-full bg-[#1C2029] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/40 focus:outline-none focus:border-emerald-400 transition-colors"
+              placeholder="e.g. Focus on protein at lunch and dinner, avoid refined carbs at night."
+              className="w-full min-h-[44px] rounded-[13px] glass-input px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder:text-[#7C8393]"
             />
           </div>
+        </div>
 
-          <div>
-            <label className="text-[11px] font-semibold text-white/40 uppercase tracking-wider block mb-1.5">
-              Water Target
-            </label>
-            <div className="flex items-center gap-2 bg-[#1C2029] border border-white/10 rounded-xl px-3 py-2">
-              <Droplet className="w-4 h-4 text-cyan-400" />
-              <input
-                type="number"
-                min={4}
-                max={20}
-                value={hydrationTargetGlasses}
-                onChange={(e) => setHydrationTargetGlasses(Number(e.target.value))}
-                className="w-full bg-transparent text-sm text-white focus:outline-none font-mono"
-              />
-              <span className="text-[10px] text-white/40">glasses</span>
+        {/* ── Daily targets + live progress ────────────────────── */}
+        <div className="surface-card rounded-[22px] p-5 flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[12px] font-semibold text-[#A2A8B5] uppercase tracking-[0.06em]">Daily targets</p>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-[12px] text-[#A2A8B5]">kcal</label>
+                <input
+                  type="number"
+                  step={50}
+                  value={targetKcal}
+                  onChange={(e) => setTargetKcal(Number(e.target.value))}
+                  className="w-20 min-h-[36px] rounded-[10px] glass-input px-2.5 text-[13px] text-[#F5F5F7] font-mono text-right"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-[12px] text-[#A2A8B5]">protein g</label>
+                <input
+                  type="number"
+                  step={5}
+                  value={targetProteinG}
+                  onChange={(e) => setTargetProteinG(Number(e.target.value))}
+                  className="w-16 min-h-[36px] rounded-[10px] glass-input px-2.5 text-[13px] text-[#F5F5F7] font-mono text-right"
+                />
+              </div>
             </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Energy', value: dayTotals.calories, target: targetKcal, unit: 'kcal', color: '#FF803E' },
+              { label: 'Protein', value: dayTotals.proteinG, target: targetProteinG, unit: 'g', color: '#B8E66C' },
+              { label: 'Carbs', value: dayTotals.carbsG, target: 300, unit: 'g', color: '#70C8ED' },
+              { label: 'Fats', value: dayTotals.fatG, target: 80, unit: 'g', color: '#FFB06B' },
+            ].map((m) => (
+              <div key={m.label} className="rounded-[14px] bg-white/[0.03] border border-white/[0.07] p-3">
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <span className="text-[11px] text-[#7C8393]">{m.label}</span>
+                  <span className="text-[12px] font-semibold font-mono" style={{ color: m.color }}>
+                    {m.value}<span className="text-[#7C8393] font-normal">/{m.target}{m.unit}</span>
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.round((m.value / m.target) * 100))}%`, backgroundColor: m.color }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Live Macro Distribution Summary Bar */}
-        <div className="p-4 rounded-2xl bg-[#14171F]/80 border border-white/5 backdrop-blur-xl grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-white/40">Total Energy</span>
-              <span className="font-semibold text-white font-mono">{dayTotals.calories} / {targetKcal} kcal</span>
-            </div>
-            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-orange-400 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, Math.round((dayTotals.calories / targetKcal) * 100))}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-white/40">Protein</span>
-              <span className="font-semibold text-emerald-400 font-mono">{dayTotals.proteinG}g / {targetProteinG}g</span>
-            </div>
-            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-400 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, Math.round((dayTotals.proteinG / targetProteinG) * 100))}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-white/40">Carbs</span>
-              <span className="font-semibold text-cyan-400 font-mono">{dayTotals.carbsG}g</span>
-            </div>
-            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-cyan-400 rounded-full"
-                style={{ width: `${Math.min(100, (dayTotals.carbsG / 300) * 100)}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5">
-            <div className="flex items-center justify-between text-xs mb-1">
-              <span className="text-white/40">Fats</span>
-              <span className="font-semibold text-amber-400 font-mono">{dayTotals.fatG}g</span>
-            </div>
-            <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-amber-400 rounded-full"
-                style={{ width: `${Math.min(100, (dayTotals.fatG / 80) * 100)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Meal Slot Navigation Tabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          {(['breakfast', 'lunch', 'evening_snack', 'dinner'] as const).map((slotKey) => {
-            const plan = slots.find((s) => s.slot === slotKey);
-            const count = plan?.items.length || 0;
-            return (
-              <button
-                key={slotKey}
-                onClick={() => setActiveSlot(slotKey)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2 border ${
-                  activeSlot === slotKey
-                    ? 'bg-emerald-500/15 border-emerald-500 text-white shadow-sm'
-                    : 'bg-[#14171F] border-white/5 text-white/60 hover:text-white hover:border-white/10'
-                }`}
-              >
-                <span>{slotLabels[slotKey]}</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/10 text-white/70">
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Active Slot Foods Panel */}
-        <div className="p-6 rounded-2xl bg-[#14171F]/80 border border-white/5 backdrop-blur-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-white/5">
-            <div>
-              <h2 className="text-sm font-bold text-white capitalize">{slotLabels[activeSlot]} Menu</h2>
-              <p className="text-xs text-white/50">Add and scale Indian foods for this meal window</p>
-            </div>
-            <button
-              onClick={() => setIsFoodPickerOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Food</span>
-            </button>
-          </div>
-
-          {activeSlotPlan.items.length === 0 ? (
-            <div className="p-8 text-center border border-dashed border-white/10 rounded-2xl text-white/40 text-xs">
-              No food items added to {slotLabels[activeSlot]} yet.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {activeSlotPlan.items.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="p-4 rounded-xl bg-[#1C2029]/80 border border-white/5 hover:border-white/10 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+        {/* ── Meal slots ───────────────────────────────────────── */}
+        <div className="surface-card rounded-[22px] overflow-hidden">
+          {/* Tab bar */}
+          <div className="flex border-b border-white/[0.07] overflow-x-auto">
+            {(['breakfast', 'lunch', 'evening_snack', 'dinner'] as const).map((slotKey) => {
+              const count = slots.find((s) => s.slot === slotKey)?.items.length ?? 0;
+              const isActive = activeSlot === slotKey;
+              return (
+                <button
+                  key={slotKey}
+                  type="button"
+                  onClick={() => setActiveSlot(slotKey)}
+                  className={`flex-1 min-w-[90px] py-3.5 px-3 flex flex-col items-center gap-0.5 text-[12px] font-semibold transition-colors whitespace-nowrap cursor-pointer border-b-2 ${
+                    isActive
+                      ? 'text-[#FF803E] border-[#FF803E] bg-[#FF803E]/05'
+                      : 'text-[#7C8393] border-transparent hover:text-[#A2A8B5]'
+                  }`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <span className="text-sm font-semibold text-white block truncate">{item.name}</span>
-                    <span className="text-xs text-white/50 block mt-0.5">{item.servingLabel}</span>
-                  </div>
+                  {slotLabels[slotKey]}
+                  {count > 0 && (
+                    <span className={`text-[10px] font-bold tabular-nums ${isActive ? 'text-[#FFB06B]' : 'text-[#7C8393]'}`}>
+                      {count} items
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-                  <div className="flex items-center gap-3">
-                    {/* Servings counter */}
-                    <div className="flex items-center gap-1 bg-[#101218] border border-white/10 rounded-lg p-1">
+          {/* Active slot content */}
+          <div className="p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[15px] font-semibold text-[#F5F5F7]">{slotLabels[activeSlot]}</p>
+                <p className="text-[12px] text-[#7C8393]">
+                  {activeSlotPlan.items.length === 0
+                    ? 'No food added yet'
+                    : `${activeSlotPlan.items.reduce((s, i) => s + i.estimatedCalories, 0)} kcal · ${activeSlotPlan.items.reduce((s, i) => s + i.estimatedProteinG, 0)}g protein`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsFoodPickerOpen(true)}
+                className="min-h-[36px] px-3 rounded-[10px] bg-[#FF803E]/12 border border-[#FF803E]/22 text-[#FFB06B] hover:bg-[#FF803E]/20 text-[12px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                Add food
+              </button>
+            </div>
+
+            {activeSlotPlan.items.length === 0 ? (
+              <div className="py-10 text-center border border-dashed border-white/[0.1] rounded-[16px]">
+                <Apple className="w-8 h-8 text-[#3A3F4B] mx-auto mb-2" aria-hidden="true" />
+                <p className="text-[13px] text-[#7C8393]">Tap "Add food" to build this meal</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {activeSlotPlan.items.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="rounded-[14px] bg-white/[0.03] border border-white/[0.07] p-3.5 flex items-center gap-3"
+                  >
+                    {/* Food info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-[#F5F5F7] truncate">{item.name}</p>
+                      <p className="text-[11px] text-[#7C8393] mt-0.5">{item.servingLabel}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[11px] font-mono text-[#FFB06B]">{item.estimatedCalories} kcal</span>
+                        <span className="text-[11px] font-mono font-semibold" style={{ color: '#B8E66C' }}>{item.estimatedProteinG}g P</span>
+                        <span className="text-[11px] font-mono text-[#70C8ED]">{item.estimatedCarbsG}g C</span>
+                      </div>
+                    </div>
+
+                    {/* Serving stepper */}
+                    <div className="flex items-center rounded-[9px] glass-control overflow-hidden shrink-0">
                       <button
+                        type="button"
                         onClick={() => handleUpdateServings(item.id, Math.max(0.5, item.servings - 0.5))}
-                        className="w-6 h-6 rounded flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 text-xs"
+                        className="w-8 h-8 flex items-center justify-center text-[#A2A8B5] hover:text-[#F5F5F7] text-lg leading-none cursor-pointer"
                       >
-                        -
+                        −
                       </button>
-                      <span className="text-xs font-mono px-2 text-white font-semibold">
-                        {item.servings}x
+                      <span className="px-2 text-[12px] font-mono font-semibold text-[#F5F5F7] min-w-[28px] text-center">
+                        {item.servings}
                       </span>
                       <button
+                        type="button"
                         onClick={() => handleUpdateServings(item.id, item.servings + 0.5)}
-                        className="w-6 h-6 rounded flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 text-xs"
+                        className="w-8 h-8 flex items-center justify-center text-[#A2A8B5] hover:text-[#F5F5F7] text-lg leading-none cursor-pointer"
                       >
                         +
                       </button>
                     </div>
 
-                    {/* Macro snapshot */}
-                    <div className="flex items-center gap-2 text-xs font-mono">
-                      <span className="text-orange-400">{item.estimatedCalories} kcal</span>
-                      <span className="text-white/30">|</span>
-                      <span className="text-emerald-400 font-semibold">{item.estimatedProteinG}g P</span>
-                    </div>
-
-                    {/* Move / Delete controls */}
-                    <div className="flex items-center gap-1">
+                    {/* Reorder + delete */}
+                    <div className="flex flex-col gap-0.5 shrink-0">
                       <button
+                        type="button"
                         onClick={() => handleMoveFood(index, 'up')}
                         disabled={index === 0}
-                        className="p-1 text-white/40 hover:text-white disabled:opacity-20"
+                        className="w-6 h-6 flex items-center justify-center text-[#A2A8B5] hover:text-[#F5F5F7] disabled:opacity-25 cursor-pointer"
                       >
-                        <ArrowUp className="w-3.5 h-3.5" />
+                        <ArrowUp className="w-3 h-3" aria-hidden="true" />
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleMoveFood(index, 'down')}
                         disabled={index === activeSlotPlan.items.length - 1}
-                        className="p-1 text-white/40 hover:text-white disabled:opacity-20"
+                        className="w-6 h-6 flex items-center justify-center text-[#A2A8B5] hover:text-[#F5F5F7] disabled:opacity-25 cursor-pointer"
                       >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteFood(item.id)}
-                        className="p-1 text-rose-400/60 hover:text-rose-400 ml-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <ArrowDown className="w-3 h-3" aria-hidden="true" />
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFood(item.id)}
+                      className="w-7 h-7 flex items-center justify-center rounded-[8px] text-[#7C8393] hover:text-[#FF6B70] hover:bg-[#FF6B70]/10 transition-colors cursor-pointer shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Indian Food Picker Modal */}
+        {/* ── Food picker modal ─────────────────────────────────── */}
         {isFoodPickerOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="relative w-full max-w-2xl bg-[#14171F] border border-white/10 rounded-2xl p-6 shadow-2xl max-h-[85vh] flex flex-col">
-              <div className="flex items-center justify-between pb-4 border-b border-white/5">
-                <div className="flex items-center gap-2">
-                  <Apple className="w-5 h-5 text-emerald-400" />
-                  <h3 className="text-base font-semibold text-white">Select Indian Food Item</h3>
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setIsFoodPickerOpen(false); }}
+          >
+            <div className="relative w-full sm:max-w-xl glass-overlay rounded-t-[28px] sm:rounded-[26px] flex flex-col max-h-[88vh] sm:max-h-[80vh]">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] shrink-0">
+                <div>
+                  <p className="text-[15px] font-semibold text-[#F5F5F7]">Add Indian food</p>
+                  <p className="text-[12px] text-[#7C8393]">Adding to: {slotLabels[activeSlot]}</p>
                 </div>
-                <button
-                  onClick={() => setIsFoodPickerOpen(false)}
-                  className="p-1.5 rounded-lg text-white/40 hover:text-white"
+                <button type="button" onClick={() => setIsFoodPickerOpen(false)}
+                  className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-[12px] text-[#A2A8B5] hover:text-[#F5F5F7] hover:bg-white/[0.07] transition-colors cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5" aria-hidden="true" />
                 </button>
               </div>
 
-              {/* Search & Category Filter */}
-              <div className="py-3 space-y-2.5">
+              {/* Search */}
+              <div className="px-5 py-3 shrink-0">
                 <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+                  <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#7C8393]" aria-hidden="true" />
                   <input
                     type="text"
-                    placeholder="Search Indian foods (e.g. paneer, chana, roti, dal)..."
+                    placeholder="Search — paneer, dal, roti, chana..."
                     value={foodSearch}
                     onChange={(e) => setFoodSearch(e.target.value)}
-                    className="w-full bg-[#1C2029] border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400"
+                    autoFocus
+                    className="w-full min-h-[44px] glass-input rounded-[13px] pl-10 pr-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder:text-[#7C8393]"
                   />
                 </div>
               </div>
 
-              {/* Food Items Scroll */}
-              <div className="flex-1 overflow-y-auto divide-y divide-white/5">
-                {filteredFoods.map((food) => (
+              {/* Food list */}
+              <div className="flex-1 overflow-y-auto px-5 pb-5 flex flex-col gap-2">
+                {filteredFoods.length === 0 ? (
+                  <p className="text-[13px] text-[#7C8393] text-center py-8">No foods match your search.</p>
+                ) : filteredFoods.map((food) => (
                   <div
                     key={food.id}
-                    className="py-3 flex items-center justify-between hover:bg-white/[0.02] px-2 rounded-xl transition-colors"
+                    className="flex items-center gap-3 p-3 rounded-[14px] bg-white/[0.03] border border-white/[0.07] hover:border-white/[0.12] transition-colors"
                   >
-                    <div>
-                      <span className="text-xs font-semibold text-white block">{food.name}</span>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-white/40">
-                        <span>{food.servingLabel}</span>
-                        <span>·</span>
-                        <span className="text-orange-400 font-mono">{food.estimatedCalories} kcal</span>
-                        <span>·</span>
-                        <span className="text-emerald-400 font-mono font-semibold">{food.estimatedProteinG}g protein</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-[#F5F5F7] truncate">{food.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-[11px] text-[#7C8393]">{food.servingLabel}</span>
+                        <span className="text-[11px] font-mono text-[#FFB06B]">{food.estimatedCalories} kcal</span>
+                        <span className="text-[11px] font-mono font-semibold" style={{ color: '#B8E66C' }}>{food.estimatedProteinG}g P</span>
                       </div>
                     </div>
                     <button
+                      type="button"
                       onClick={() => handleAddFoodToSlot(food)}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white text-xs font-semibold transition-all"
+                      className="min-h-[32px] px-3 rounded-[9px] bg-[#FF803E]/12 border border-[#FF803E]/22 text-[#FFB06B] hover:bg-[#FF803E]/22 text-[12px] font-semibold transition-colors cursor-pointer shrink-0"
                     >
                       Add
                     </button>
@@ -696,58 +691,55 @@ export const StudioNutritionBuilderPage: React.FC = () => {
           </div>
         )}
 
-        {/* Gemini AI Copilot Modal */}
+        {/* ── AI draft modal ────────────────────────────────────── */}
         {isAiModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="relative w-full max-w-lg bg-[#14171F] border border-white/10 rounded-2xl p-6 shadow-2xl">
-              <div className="flex items-center justify-between pb-4 border-b border-white/5">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)' }}
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setIsAiModalOpen(false); }}
+          >
+            <div className="relative w-full sm:max-w-md glass-overlay rounded-t-[28px] sm:rounded-[26px]">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-purple-400" />
-                  <h3 className="text-base font-semibold text-white">Gemini AI Nutrition Drafter</h3>
+                  <Sparkles className="w-4 h-4 text-[#FFB06B]" aria-hidden="true" />
+                  <p className="text-[15px] font-semibold text-[#F5F5F7]">AI Nutrition Draft</p>
                 </div>
-                <button
-                  onClick={() => setIsAiModalOpen(false)}
-                  className="p-1.5 rounded-lg text-white/40 hover:text-white"
+                <button type="button" onClick={() => setIsAiModalOpen(false)}
+                  className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-[12px] text-[#A2A8B5] hover:text-[#F5F5F7] hover:bg-white/[0.07] transition-colors cursor-pointer"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5" aria-hidden="true" />
                 </button>
               </div>
 
-              <div className="py-4 space-y-3">
-                <label className="text-xs font-semibold text-white/70 block">
-                  Describe nutrition goals or dietary habits:
-                </label>
-                <textarea
-                  rows={3}
-                  value={aiPromptGoal}
-                  onChange={(e) => setAiPromptGoal(e.target.value)}
-                  className="w-full bg-[#1C2029] border border-white/10 rounded-xl p-3 text-xs text-white placeholder-white/40 focus:outline-none focus:border-purple-400 transition-colors"
-                />
-                <p className="text-[11px] text-white/40">
-                  Gemini drafts balanced Indian meals matching your calorie and protein targets.
+              <div className="px-5 py-5 flex flex-col gap-3">
+                <div>
+                  <label className="text-[13px] font-medium text-[#F5F5F7] block mb-1.5">Nutrition goals</label>
+                  <textarea
+                    rows={3}
+                    value={aiPromptGoal}
+                    onChange={(e) => setAiPromptGoal(e.target.value)}
+                    placeholder="e.g. 2,000 kcal high-protein vegetarian thali with paneer and dal"
+                    className="w-full glass-input rounded-[13px] px-3.5 py-2.5 text-[14px] text-[#F5F5F7] placeholder:text-[#7C8393] resize-none"
+                  />
+                </div>
+                <p className="text-[12px] text-[#7C8393]">
+                  Drafts balanced Indian meals matching your calorie and protein targets. Trainer review required.
                 </p>
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-white/5">
-                <button
-                  onClick={() => setIsAiModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs text-white/60 hover:text-white"
+              <div className="px-5 pb-5 flex gap-2.5">
+                <button type="button" onClick={() => setIsAiModalOpen(false)}
+                  className="flex-1 min-h-[44px] rounded-[13px] glass-control text-[#A2A8B5] text-[13px] font-semibold hover:text-[#F5F5F7] transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleGenerateAiPlan}
                   disabled={isGeneratingAi}
-                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-purple-600/20 transition-all"
+                  className="flex-1 min-h-[44px] rounded-[13px] bg-[#FF803E] hover:bg-[#FF9259] disabled:opacity-60 text-[#101218] text-[13px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  {isGeneratingAi ? (
-                    <span>Generating...</span>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Draft Day Plan</span>
-                    </>
-                  )}
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                  {isGeneratingAi ? 'Drafting...' : 'Draft plan'}
                 </button>
               </div>
             </div>

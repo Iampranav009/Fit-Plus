@@ -25,32 +25,37 @@ export const GlassModal: React.FC<GlassModalProps> = ({
   const descId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
 
+  // Focus management and scroll lock — only re-runs when modal opens/closes
   useEffect(() => {
     if (!open) return;
     previousFocusRef.current = document.activeElement as HTMLElement | null;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-
     const timer = window.setTimeout(() => {
       panelRef.current?.focus();
     }, 15);
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener('keydown', onKeyDown);
       document.body.style.overflow = prevOverflow;
       previousFocusRef.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
+
+  // Escape key — uses ref so onClose changes don't retrigger this effect
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onCloseRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open]);
 
   const isSheet = mode === 'sheet' || mode === 'auto';
   const isModal = mode === 'modal';

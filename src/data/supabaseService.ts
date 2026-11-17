@@ -852,7 +852,8 @@ export async function resolveInvitePublic(token: string): Promise<PublicInviteRe
   try {
     const res = await fetch(`/api/invites/resolve?token=${encodeURIComponent(clean)}`);
     if (res.ok) {
-      return (await res.json()) as PublicInviteResolveResult;
+      const data = (await res.json()) as PublicInviteResolveResult;
+      if (data.state !== 'unverified_server') return data;
     }
   } catch {
     // fallback
@@ -1791,6 +1792,7 @@ export async function updateTrainerProfileDoc(
   if (updates.whatsappBusinessE164 !== undefined) rowUpdates.whatsapp_business_e164 = updates.whatsappBusinessE164;
   if (updates.certifications) rowUpdates.certifications = updates.certifications;
   if (updates.acceptingClients !== undefined) rowUpdates.accepting_clients = updates.acceptingClients;
+  if (updates.isPublished !== undefined) rowUpdates.is_published = updates.isPublished;
 
   await supabase.from('trainer_profiles').update(rowUpdates).eq('id', trainerId);
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, ExternalLink } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import * as supabaseService from '../../data/supabaseService';
@@ -105,6 +105,34 @@ export const StudioStorefrontPage: React.FC = () => {
               <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
             </Link>
           </div>
+        </div>
+
+        {/* Publish visibility banner */}
+        <div className={`rounded-[18px] p-4 flex items-center justify-between gap-3 border ${activeTrainer.isPublished ? 'bg-[#1A2B1A] border-[#4CAF50]/30' : 'bg-[#2A1A0E] border-[#FF803E]/25'}`}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            {activeTrainer.isPublished ? (
+              <Eye className="w-4 h-4 text-[#4CAF50] shrink-0" aria-hidden="true" />
+            ) : (
+              <EyeOff className="w-4 h-4 text-[#FF803E] shrink-0" aria-hidden="true" />
+            )}
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[#F5F5F7]">
+                {activeTrainer.isPublished ? 'Visible in Discover' : 'Hidden from Discover'}
+              </p>
+              <p className="text-[12px] text-[#A2A8B5]">
+                {activeTrainer.isPublished
+                  ? 'Your profile is listed in the public trainer directory.'
+                  : 'Only people with your direct invite link can find you.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateTrainerProfile({ isPublished: !activeTrainer.isPublished })}
+            className={`shrink-0 min-h-[36px] px-3.5 rounded-[10px] text-[12px] font-semibold transition-colors cursor-pointer ${activeTrainer.isPublished ? 'bg-white/[0.07] text-[#A2A8B5] hover:text-[#F5F5F7] hover:bg-white/[0.1]' : 'bg-[#FF803E]/15 text-[#FFB06B] hover:bg-[#FF803E]/25 border border-[#FF803E]/25'}`}
+          >
+            {activeTrainer.isPublished ? 'Hide' : 'Publish'}
+          </button>
         </div>
 
         <form

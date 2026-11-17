@@ -1,13 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
   ArrowRight,
-  CheckCircle2,
-  Gift,
   IndianRupee,
   PlayCircle,
-  TrendingUp,
 } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { PublicTopBar } from '../../components/layout/PublicTopBar';
@@ -25,14 +22,6 @@ const inView = {
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-
-  const [clientCount, setClientCount] = useState(15);
-  const [monthlyFee, setMonthlyFee] = useState(3500);
-
-  const grossEarnings = clientCount * monthlyFee;
-  const fitPlusTakeHome = Math.round(grossEarnings * 0.9);
-  const gymTakeHome = Math.round(grossEarnings * 0.3);
-  const monthlyExtra = fitPlusTakeHome - gymTakeHome;
 
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
@@ -231,164 +220,6 @@ export const LandingPage: React.FC = () => {
               </motion.article>
             ))}
           </div>
-        </section>
-
-        {/* ── Trainer Independence & ROI Calculator ─────────────────── */}
-        <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 py-14 border-t border-white/[0.07]">
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-60px' }}
-            variants={inView}
-            className="surface-card rounded-[32px] p-6 sm:p-10 relative overflow-hidden"
-          >
-            {/* Orange ambient glow */}
-            <div className="pointer-events-none absolute -right-24 -top-24 w-96 h-96 rounded-full bg-[#FF803E]/10 blur-3xl" />
-            <div className="pointer-events-none absolute -left-16 bottom-0 w-72 h-72 rounded-full bg-[#C1ACF9]/06 blur-3xl" />
-
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
-              {/* Left description */}
-              <div className="lg:col-span-6 space-y-5">
-                <span className="fp-stat-badge">
-                  <TrendingUp className="w-3.5 h-3.5" aria-hidden="true" />
-                  Trainer Commercial Independence
-                </span>
-                <h2 className="fp-heading-lg text-[26px] sm:text-[32px]">
-                  Stop giving 60% of your earnings to gyms.
-                </h2>
-                <p className="fp-body-md">
-                  Traditional fitness chains in India take 60–70% of what your clients pay. On
-                  FitPlus, you retain{' '}
-                  <strong className="text-[#F5F5F7] font-semibold">90% of every rupee</strong> with
-                  automated Cashfree payouts and zero monthly software fees.
-                </p>
-
-                {/* Slider: Clients */}
-                <div className="space-y-2 pt-1">
-                  <div className="flex justify-between text-[13px]">
-                    <span className="text-[#7C8393]">Active Coaching Clients</span>
-                    <span className="font-bold text-[#F5F5F7]">{clientCount} clients</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="50"
-                    step="1"
-                    value={clientCount}
-                    onChange={(e) => setClientCount(Number(e.target.value))}
-                    aria-label="Number of active coaching clients"
-                    className="w-full accent-[#FF803E] rounded-lg h-2 cursor-pointer"
-                    style={{ background: 'rgba(255,255,255,0.08)' }}
-                  />
-                </div>
-
-                {/* Slider: Fee */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-[13px]">
-                    <span className="text-[#7C8393]">Monthly Package Price (INR)</span>
-                    <span className="font-bold text-[#F5F5F7]">
-                      ₹{monthlyFee.toLocaleString('en-IN')}/mo
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1500"
-                    max="10000"
-                    step="500"
-                    value={monthlyFee}
-                    onChange={(e) => setMonthlyFee(Number(e.target.value))}
-                    aria-label="Monthly package price in INR"
-                    className="w-full accent-[#FF803E] rounded-lg h-2 cursor-pointer"
-                    style={{ background: 'rgba(255,255,255,0.08)' }}
-                  />
-                </div>
-              </div>
-
-              {/* Right comparison card */}
-              <div className="lg:col-span-6">
-                <div className="glass-overlay rounded-[24px] p-6 sm:p-8 space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="surface-elevated p-4 rounded-[16px]">
-                      <span className="text-[11px] font-semibold text-[#7C8393] uppercase tracking-[0.05em] block mb-1.5">
-                        Traditional Gym
-                      </span>
-                      <span className="text-[20px] sm:text-[22px] font-bold text-[#7C8393] line-through">
-                        ₹{gymTakeHome.toLocaleString('en-IN')}
-                      </span>
-                      <span className="text-[11px] text-[#7C8393] block mt-0.5">30% typical split</span>
-                    </div>
-
-                    <div className="rounded-[16px] p-4 bg-[#B8E66C]/08 border border-[#B8E66C]/22">
-                      <span className="text-[11px] font-bold text-[#B8E66C] uppercase tracking-[0.05em] block mb-1.5">
-                        FitPlus Take-Home
-                      </span>
-                      <span className="text-[20px] sm:text-[26px] font-extrabold text-[#B8E66C]">
-                        ₹{fitPlusTakeHome.toLocaleString('en-IN')}
-                      </span>
-                      <span className="text-[11px] text-[#B8E66C]/70 block mt-0.5">90% keep rate</span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[16px] p-4 bg-[#FF803E]/10 border border-[#FF803E]/25 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div>
-                      <span className="text-[11px] font-bold text-[#FFB06B] uppercase tracking-[0.07em] block mb-1">
-                        Monthly Extra Take-Home
-                      </span>
-                      <span className="text-[22px] font-extrabold text-[#F5F5F7]">
-                        +₹{monthlyExtra.toLocaleString('en-IN')}
-                        <span className="text-[14px] font-semibold text-[#A2A8B5]"> / month</span>
-                      </span>
-                    </div>
-                    <GlassButton onClick={() => navigate('/auth')}>
-                      Start Free Studio
-                      <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                    </GlassButton>
-                  </div>
-
-                  <div className="flex flex-wrap items-center justify-center gap-4 text-[12px] text-[#7C8393] pt-1 border-t border-white/[0.06]">
-                    {[
-                      'T+2 Cashfree Bank Transfers',
-                      '18% GST Compliant Invoices',
-                      'No Fixed Monthly Charge',
-                    ].map((point) => (
-                      <span key={point} className="flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-[#B8E66C]" aria-hidden="true" />
-                        {point}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        </section>
-
-        {/* ── Referral banner ───────────────────────────────────────── */}
-        <section className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-10 pb-6">
-          <motion.div
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: '-40px' }}
-            variants={inView}
-            className="surface-card rounded-[22px] p-5 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-[14px] fp-icon-orange flex items-center justify-center shrink-0">
-                <Gift className="w-5 h-5" aria-hidden="true" />
-              </div>
-              <div>
-                <h3 className="text-[16px] font-bold text-[#F5F5F7]">Give ₹500, Get ₹500</h3>
-                <p className="text-[13px] text-[#A2A8B5]">
-                  Invite friends to start their fitness journey. They get ₹500 off, and you earn
-                  ₹500 coaching credits.
-                </p>
-              </div>
-            </div>
-            <GlassButton variant="glass" onClick={() => navigate('/discover')}>
-              Find Your Coach
-              <ArrowRight className="w-4 h-4" aria-hidden="true" />
-            </GlassButton>
-          </motion.div>
         </section>
 
         {/* ── Three value sections ──────────────────────────────────── */}
