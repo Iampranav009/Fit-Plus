@@ -11,7 +11,6 @@ import {
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
-import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField } from '../../components/ui/InputField';
 import { SEOHelmet } from '../../components/seo/SEOHelmet';
@@ -175,8 +174,6 @@ export const AuthPage: React.FC = () => {
       });
     }
   };
-
-  useDocumentTitle('FitPlus | Sign In');
 
   return (
     <MarketingLayout compactFooter>
