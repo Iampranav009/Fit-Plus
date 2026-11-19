@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 import {
   BadgeCheck,
   Calendar,
@@ -22,7 +23,6 @@ import { formatIndiaDate, formatINR } from '../../lib/date';
 import { launchCashfreeCheckout } from '../../lib/cashfree';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
 import { Breadcrumb } from '../../components/marketing/Breadcrumb';
-import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
 import { GlassSheet } from '../../components/ui/GlassSheet';
@@ -126,26 +126,38 @@ export const TrainerPublicProfilePage: React.FC = () => {
     }
   }, [existingClientReview]);
 
-  useDocumentTitle(trainer ? `FitPlus | ${trainer.displayName}` : 'FitPlus | Trainer Profile');
-
-  const jsonLd = useMemo(() => {
-    if (!trainer) return null;
-    const base: Record<string, unknown> = {
-      '@context': 'https://schema.org',
-      '@type': 'ProfessionalService',
-      name: trainer.displayName,
-      description: trainer.headline || trainer.bio,
-      areaServed: trainer.city,
-      url: typeof window !== 'undefined' ? window.location.href : `https://fitplus-kappa.vercel.app/trainers/${trainer.slug}`,
-    };
+  const profileJsonLd = useMemo(() => {
+    if (!trainer) return undefined;
+    const ld: Record<string, unknown>[] = [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'ProfilePage',
+        mainEntity: {
+          '@type': 'Person',
+          name: trainer.displayName,
+          description: trainer.headline || trainer.bio,
+          address: { '@type': 'PostalAddress', addressLocality: trainer.city },
+          url: `https://fitplus-kappa.vercel.app/trainers/${trainer.slug}`,
+        },
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fitplus-kappa.vercel.app/' },
+          { '@type': 'ListItem', position: 2, name: 'Trainer Directory', item: 'https://fitplus-kappa.vercel.app/discover' },
+          { '@type': 'ListItem', position: 3, name: trainer.displayName },
+        ],
+      },
+    ];
     if (reviewStats.count > 0) {
-      base.aggregateRating = {
+      (ld[0].mainEntity as Record<string, unknown>).aggregateRating = {
         '@type': 'AggregateRating',
         ratingValue: reviewStats.averageRating,
         reviewCount: reviewStats.count,
       };
     }
-    return JSON.stringify(base);
+    return ld;
   }, [trainer, reviewStats]);
 
   if (!trainer) {
@@ -322,9 +334,15 @@ export const TrainerPublicProfilePage: React.FC = () => {
 
   return (
     <MarketingLayout>
-      {jsonLd ? (
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
-      ) : null}
+      {trainer && (
+        <SEOHelmet
+          title={`${trainer.displayName} — FitPlus Coach (${trainer.city})`}
+          description={trainer.headline || trainer.bio || `Personal fitness coach on FitPlus in ${trainer.city}.`}
+          path={`/trainers/${trainer.slug}`}
+          ogType="profile"
+          jsonLd={profileJsonLd}
+        />
+      )}
 
       <div className="mkt-container max-w-[1120px] pt-4 pb-20">
         <Breadcrumb

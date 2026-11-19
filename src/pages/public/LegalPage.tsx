@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Shield, FileText, RefreshCw, AlertTriangle } from 'lucide-react';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
 import { Breadcrumb } from '../../components/marketing/Breadcrumb';
-import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 
 const LEGAL_TABS = [
   { key: 'privacy', label: 'Privacy Policy', to: '/privacy' },
@@ -21,6 +21,13 @@ export const LegalPage: React.FC = () => {
   else if (path.includes('refund')) activeTab = 'refund';
   else if (path.includes('disclaimer')) activeTab = 'disclaimer';
 
+  const legalMeta: Record<typeof activeTab, { title: string; description: string; path: string }> = {
+    privacy: { title: 'Privacy Policy — FitPlus', description: 'How FitPlus collects, stores and protects your personal data.', path: '/privacy' },
+    terms: { title: 'Terms of Service — FitPlus', description: 'The terms governing your use of the FitPlus platform.', path: '/terms' },
+    refund: { title: 'Refund Policy — FitPlus', description: 'FitPlus refund and cancellation terms for coaching packages paid in INR.', path: '/refund-policy' },
+    disclaimer: { title: 'Disclaimers — FitPlus', description: 'Health, fitness and liability disclaimers for the FitPlus platform.', path: '/disclaimer' },
+  };
+  const meta = legalMeta[activeTab];
   const TAB_TITLES: Record<string, string> = {
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
@@ -28,10 +35,21 @@ export const LegalPage: React.FC = () => {
     disclaimer: 'Disclaimers',
   };
 
-  useDocumentTitle(`FitPlus | ${TAB_TITLES[activeTab]}`);
-
   return (
     <MarketingLayout>
+      <SEOHelmet
+        title={meta.title}
+        description={meta.description}
+        path={meta.path}
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fitplus-kappa.vercel.app/' },
+            { '@type': 'ListItem', position: 2, name: meta.title.replace(' — FitPlus', '') },
+          ],
+        }}
+      />
       <div className="mkt-container max-w-[900px] py-8 md:py-12 space-y-8">
         {/* Navigation header */}
         <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5">

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { MotionConfig } from 'motion/react';
 import { AppProvider, useApp } from './context/AppContext';
 import type { UserRole } from './types/domain';
@@ -323,6 +324,7 @@ const NotFoundPage: React.FC = () => {
 export default function App() {
   return (
     <ErrorBoundary>
+      <HelmetProvider>
       <MotionConfig reducedMotion="user">
         <AppProvider>
           <BrowserRouter>
@@ -675,6 +677,7 @@ export default function App() {
         </BrowserRouter>
       </AppProvider>
     </MotionConfig>
+      </HelmetProvider>
     </ErrorBoundary>
   );
 }

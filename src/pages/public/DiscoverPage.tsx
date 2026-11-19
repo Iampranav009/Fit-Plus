@@ -9,7 +9,7 @@ import { CompareDock } from '../../components/ui/CompareDock';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
 import { Breadcrumb } from '../../components/marketing/Breadcrumb';
 import { CTA } from '../../components/marketing/links';
-import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 
 export const DiscoverPage: React.FC = () => {
   const { store, reviews, isDemoSandbox, publicDirectory } = useApp();
@@ -72,10 +72,21 @@ export const DiscoverPage: React.FC = () => {
   const isTrainer = store.session.activeRole === 'trainer';
   const isLoading = !isDemoSandbox && !publicDirectory.loaded;
 
-  useDocumentTitle('FitPlus | Find a Trainer');
-
   return (
     <MarketingLayout>
+      <SEOHelmet
+        title="Find a fitness coach in India — FitPlus Trainer Directory"
+        description="Browse independent personal trainers by goal, city or name. Compare profiles, check INR packages and book a consultation — all on FitPlus."
+        path="/discover"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fitplus-kappa.vercel.app/' },
+            { '@type': 'ListItem', position: 2, name: 'Trainer Directory' },
+          ],
+        }}
+      />
       <div className="mkt-container pt-8 pb-24 lg:pt-12">
         <Breadcrumb items={[{ label: 'Find a Trainer' }]} />
         <header className="mt-3">

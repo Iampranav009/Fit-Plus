@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 import {
   AlertCircle,
   ArrowRight,
@@ -104,6 +105,12 @@ export const PaymentResultPage: React.FC = () => {
 
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
+      <SEOHelmet
+        title="Payment result — FitPlus"
+        description="Payment confirmation page."
+        path="/payments/result"
+        noindex
+      />
       <PublicTopBar />
 
       <main className="flex-1 max-w-xl w-full mx-auto px-4 py-12 flex items-center justify-center">
