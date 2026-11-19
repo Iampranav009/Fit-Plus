@@ -1,0 +1,15 @@
+# FitPlus
+
+> India-first personal fitness coaching platform connecting independent trainers and clients.
+
+FitPlus lets clients find a personal trainer, book consultations, follow daily
+workout and nutrition plans, and check in weekly — all priced in INR. Trainers
+get a single workspace to manage clients, build plans, track progress and earn.
+
+## Stable public pages
+
+- Homepage: https://fitplus-kappa.vercel.app/
+- How it works: https://fitplus-kappa.vercel.app/welcome
+- Trainer directory: https://fitplus-kappa.vercel.app/discover
+- Privacy policy: https://fitplus-kappa.vercel.app/privacy
+- Terms of service: https://fitplus-kappa.vercel.app/terms

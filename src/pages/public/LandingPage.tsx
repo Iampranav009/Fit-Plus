@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 import {
   ArrowRight,
   BadgeCheck,
@@ -360,16 +361,21 @@ export const LandingPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [location.hash, location.key]);
 
-  useEffect(() => {
-    const prev = document.title;
-    document.title = 'FitPlus — Personal fitness coaching built around your real life';
-    return () => {
-      document.title = prev;
-    };
-  }, []);
-
   return (
     <MarketingLayout>
+      <SEOHelmet
+        title="FitPlus — Personal fitness coaching built around your real life"
+        description="India-first personal fitness coaching platform. Find an independent trainer, or run your coaching practice from one workspace. Plans in INR."
+        path="/"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'Organization',
+          name: 'FitPlus',
+          url: 'https://fitplus-kappa.vercel.app/',
+          logo: 'https://fitplus-kappa.vercel.app/pwa-512x512.png',
+          description: 'India-first personal fitness coaching platform connecting independent trainers and clients.',
+        }}
+      />
       <HomeHero />
       <AudiencePaths />
       <Walkthrough />

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 import { BadgeCheck, CalendarX2, CheckCircle2, CreditCard, Lock } from 'lucide-react';
 import { COPY, formatCopy } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
@@ -170,6 +171,12 @@ export const InvitePage: React.FC = () => {
 
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
+      <SEOHelmet
+        title="Accept invitation — FitPlus"
+        description="Join your trainer on FitPlus."
+        path={`/join/${token}`}
+        noindex
+      />
       <PublicTopBar />
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-10">
