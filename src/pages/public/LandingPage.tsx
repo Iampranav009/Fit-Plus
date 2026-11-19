@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import {
   ArrowRight,
   BadgeCheck,
@@ -360,13 +361,7 @@ export const LandingPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [location.hash, location.key]);
 
-  useEffect(() => {
-    const prev = document.title;
-    document.title = 'FitPlus — Personal fitness coaching built around your real life';
-    return () => {
-      document.title = prev;
-    };
-  }, []);
+  useDocumentTitle('FitPlus | Personal Fitness Coaching');
 
   return (
     <MarketingLayout>

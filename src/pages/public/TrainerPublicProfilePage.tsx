@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   BadgeCheck,
   Calendar,
   Check,
@@ -22,6 +21,8 @@ import {
 import { formatIndiaDate, formatINR } from '../../lib/date';
 import { launchCashfreeCheckout } from '../../lib/cashfree';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
+import { Breadcrumb } from '../../components/marketing/Breadcrumb';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
 import { GlassSheet } from '../../components/ui/GlassSheet';
@@ -125,14 +126,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
     }
   }, [existingClientReview]);
 
-  useEffect(() => {
-    if (!trainer) return;
-    const prevTitle = document.title;
-    document.title = `${trainer.displayName} — FitPlus Coach (${trainer.city})`;
-    return () => {
-      document.title = prevTitle;
-    };
-  }, [trainer]);
+  useDocumentTitle(trainer ? `FitPlus | ${trainer.displayName}` : 'FitPlus | Trainer Profile');
 
   const jsonLd = useMemo(() => {
     if (!trainer) return null;
@@ -333,13 +327,12 @@ export const TrainerPublicProfilePage: React.FC = () => {
       ) : null}
 
       <div className="mkt-container max-w-[1120px] pt-4 pb-20">
-        <Link
-          to="/discover"
-          className="inline-flex items-center gap-1.5 text-[0.9375rem] text-[#ABA59D] hover:text-[#F3EEE7] min-h-[44px] transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          All coaches
-        </Link>
+        <Breadcrumb
+          items={[
+            { label: 'Find a Trainer', to: '/discover' },
+            { label: trainer.displayName },
+          ]}
+        />
 
         {isDemoSandbox ? (
           <p className="mt-2 rounded-[14px] border border-[#FF803E]/30 bg-[#FF803E]/[0.07] px-4 py-3 text-[0.875rem] text-[#F3EEE7]">

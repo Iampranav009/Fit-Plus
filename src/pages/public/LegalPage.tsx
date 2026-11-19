@@ -1,7 +1,9 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ArrowLeft, Shield, FileText, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Shield, FileText, RefreshCw, AlertTriangle } from 'lucide-react';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
+import { Breadcrumb } from '../../components/marketing/Breadcrumb';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 const LEGAL_TABS = [
   { key: 'privacy', label: 'Privacy Policy', to: '/privacy' },
@@ -19,18 +21,21 @@ export const LegalPage: React.FC = () => {
   else if (path.includes('refund')) activeTab = 'refund';
   else if (path.includes('disclaimer')) activeTab = 'disclaimer';
 
+  const TAB_TITLES: Record<string, string> = {
+    privacy: 'Privacy Policy',
+    terms: 'Terms of Service',
+    refund: 'Refund Policy',
+    disclaimer: 'Disclaimers',
+  };
+
+  useDocumentTitle(`FitPlus | ${TAB_TITLES[activeTab]}`);
+
   return (
     <MarketingLayout>
       <div className="mkt-container max-w-[900px] py-8 md:py-12 space-y-8">
         {/* Navigation header */}
         <div className="flex flex-col gap-4 border-b border-white/[0.08] pb-5">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 min-h-[44px] w-fit text-[0.9375rem] text-[#ABA59D] hover:text-[#F3EEE7] transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-            Back to FitPlus
-          </Link>
+          <Breadcrumb items={[{ label: TAB_TITLES[activeTab] }]} />
           <nav aria-label="Legal documents" className="flex flex-wrap gap-2">
             {LEGAL_TABS.map((tab) => (
               <Link

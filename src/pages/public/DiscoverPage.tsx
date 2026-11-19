@@ -7,7 +7,9 @@ import { CoachCard } from '../../components/ui/CoachCard';
 import { CoachComparisonModal } from '../../components/ui/CoachComparisonModal';
 import { CompareDock } from '../../components/ui/CompareDock';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
+import { Breadcrumb } from '../../components/marketing/Breadcrumb';
 import { CTA } from '../../components/marketing/links';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
 export const DiscoverPage: React.FC = () => {
   const { store, reviews, isDemoSandbox, publicDirectory } = useApp();
@@ -70,10 +72,13 @@ export const DiscoverPage: React.FC = () => {
   const isTrainer = store.session.activeRole === 'trainer';
   const isLoading = !isDemoSandbox && !publicDirectory.loaded;
 
+  useDocumentTitle('FitPlus | Find a Trainer');
+
   return (
     <MarketingLayout>
       <div className="mkt-container pt-8 pb-24 lg:pt-12">
-        <header>
+        <Breadcrumb items={[{ label: 'Find a Trainer' }]} />
+        <header className="mt-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="mkt-display text-[clamp(2.25rem,1.7rem+2.2vw,3.25rem)] leading-none">
               {COPY.discovery.heading}
