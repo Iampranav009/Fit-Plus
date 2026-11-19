@@ -244,14 +244,27 @@ const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) 
   return <>{children}</>;
 };
 
+/**
+ * /demo            → sample client workspace (Aarav)
+ * /demo?role=coach → sample Trainer Studio (Coach Arjun)
+ * Both reuse the same sandbox entry points as the demo buttons on /auth.
+ */
 const DemoEntryPage: React.FC = () => {
   const { startDemoAsRole } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+  const role = new URLSearchParams(location.search).get('role');
+  const isCoach = role === 'coach' || role === 'trainer';
 
   useEffect(() => {
-    startDemoAsRole('client', 'usr_client_aarav');
-    navigate('/app/home', { replace: true });
-  }, [startDemoAsRole, navigate]);
+    if (isCoach) {
+      startDemoAsRole('trainer', 'usr_trainer_arjun');
+      navigate('/studio/overview', { replace: true });
+    } else {
+      startDemoAsRole('client', 'usr_client_aarav');
+      navigate('/app/home', { replace: true });
+    }
+  }, [startDemoAsRole, navigate, isCoach]);
 
   return <AuthLoadingSplash />;
 };

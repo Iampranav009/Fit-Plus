@@ -36,10 +36,16 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Manrope (app UI font) loads without blocking first paint; text uses fallbacks until it arrives. -->
     <link
       href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    </noscript>
   </head>
   <body class="bg-[#101218] text-[#F5F5F7] antialiased selection:bg-[#FF803E]/30 selection:text-[#F5F5F7]">
     <div id="root"></div>

@@ -1876,7 +1876,9 @@ export function createSeedSnapshot(now = new Date()): StoreSnapshot {
     generatedAt: isoNow,
     anchorDateKey: todayKey,
     session: {
-      isAuthenticated: true,
+      // A fresh visitor is NOT in the demo sandbox. /demo, the /auth demo buttons
+      // and persona switching all opt in explicitly (startDemoAsRole sets this).
+      isAuthenticated: false,
       activeUserId: 'usr_client_aarav',
       activeRole: 'client',
       onboardingCompleted: true,

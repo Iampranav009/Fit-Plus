@@ -44,20 +44,21 @@ export const CoachCard: React.FC<CoachCardProps> = ({
   const isVerified = trainer.verificationStatus === 'verified' || (isDemoMode && trainer.isDemoVerified);
 
   return (
-    <article className="surface-card rounded-[22px] p-5 flex flex-col gap-4 transition-colors hover:border-white/[0.14] relative">
+    <article className="rounded-[22px] p-5 flex flex-col gap-4 bg-[#111114] border border-white/[0.09] transition-colors duration-200 hover:border-white/[0.18] relative">
       {onToggleSave && (
         <button
           type="button"
           onClick={onToggleSave}
-          className={`absolute top-4 right-4 p-2 rounded-full transition-colors ${
+          className={`absolute top-3 right-3 w-11 h-11 inline-flex items-center justify-center rounded-full transition-colors duration-150 cursor-pointer ${
             isSaved
-              ? 'text-rose-400 bg-rose-500/10 hover:bg-rose-500/20'
-              : 'text-zinc-400 hover:text-white hover:bg-white/10'
+              ? 'text-[#FF803E] bg-[#FF803E]/12 hover:bg-[#FF803E]/20'
+              : 'text-[#ABA59D] hover:text-white hover:bg-white/10'
           }`}
           title={isSaved ? 'Remove from saved coaches' : 'Save coach'}
-          aria-label={isSaved ? 'Remove from saved coaches' : 'Save coach'}
+          aria-label={`Save ${trainer.displayName}`}
+          aria-pressed={isSaved}
         >
-          <Heart className={`w-4 h-4 ${isSaved ? 'fill-rose-400' : ''}`} />
+          <Heart className={`w-[18px] h-[18px] ${isSaved ? 'fill-[#FF803E]' : ''}`} aria-hidden="true" />
         </button>
       )}
 
@@ -79,17 +80,17 @@ export const CoachCard: React.FC<CoachCardProps> = ({
         )}
         <div className="min-w-0 flex-1 pr-6">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-[17px] font-semibold text-[#F5F5F7]">{trainer.displayName}</h3>
+            <h3 className="text-[17px] font-semibold text-[#F3EEE7]">{trainer.displayName}</h3>
             {isVerified ? (
               <span
                 title={trainer.demoVerificationNote}
                 className="inline-flex items-center gap-1 text-[12px] text-[#FF803E]"
               >
                 <BadgeCheck className="w-4 h-4" aria-hidden="true" />
-                <span>{isDemoMode ? 'Demo verified' : 'Verified coach'}</span>
+                <span>{isDemoMode ? 'Demo verified (sample)' : 'Verified coach'}</span>
               </span>
             ) : (
-              <span className="text-[12px] text-[#7C8393]">
+              <span className="text-[12px] text-[#8E8880]">
                 {isDemoMode
                   ? 'Demo profile'
                   : trainer.verificationStatus === 'pending'
@@ -99,9 +100,9 @@ export const CoachCard: React.FC<CoachCardProps> = ({
             )}
           </div>
 
-          <p className="mt-1 text-[14px] text-[#A2A8B5] line-clamp-2">{trainer.headline}</p>
+          <p className="mt-1 text-[14px] text-[#ABA59D] line-clamp-2">{trainer.headline}</p>
 
-          <p className="mt-2 text-[12px] text-[#7C8393] flex flex-wrap items-center gap-x-1.5 tabular-nums">
+          <p className="mt-2 text-[12px] text-[#ABA59D] flex flex-wrap items-center gap-x-1.5 tabular-nums">
             <span className="inline-flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
               {trainer.city}
@@ -123,11 +124,17 @@ export const CoachCard: React.FC<CoachCardProps> = ({
         </div>
       </div>
 
+      {trainer.languages.length > 0 ? (
+        <p className="-mt-1 text-[12px] text-[#ABA59D]">
+          <span className="text-[#8E8880]">Languages:</span> {trainer.languages.join(', ')}
+        </p>
+      ) : null}
+
       <div className="pt-3.5 border-t border-white/[0.08] flex flex-wrap items-center justify-between gap-3">
-        <div className="text-[13px] text-[#A2A8B5]">
+        <div className="text-[13px] text-[#F3EEE7]">
           <span>{trainer.specialties.slice(0, 2).join(' · ')}</span>
           {lowestPrice !== undefined ? (
-            <span className="block text-[12px] text-[#7C8393] tabular-nums mt-0.5">
+            <span className="block text-[12px] text-[#ABA59D] tabular-nums mt-0.5">
               {isDemoMode ? 'Sample plans from' : 'Plans from'}{' '}
               {lowestPrice === 0 ? 'Free' : `${formatINR(lowestPrice)}/mo`}
             </span>
@@ -139,20 +146,23 @@ export const CoachCard: React.FC<CoachCardProps> = ({
             <button
               type="button"
               onClick={onToggleCompare}
-              className={`inline-flex items-center gap-1.5 min-h-[44px] px-3 py-1.5 rounded-[13px] text-[13px] font-medium transition-colors ${
+              aria-pressed={isComparing}
+              aria-label={`Compare ${trainer.displayName}`}
+              className={`inline-flex items-center gap-1.5 min-h-[44px] px-3.5 py-1.5 rounded-full text-[13px] font-medium transition-colors duration-150 cursor-pointer ${
                 isComparing
-                  ? 'bg-[#FF803E]/20 text-[#FF9D5C] border border-[#FF803E]/40'
-                  : 'bg-white/[0.05] text-zinc-400 hover:text-white hover:bg-white/[0.09] border border-white/10'
+                  ? 'bg-[#FF803E]/15 text-[#FFC08F] border border-[#FF803E]/50'
+                  : 'bg-white/[0.05] text-[#ABA59D] hover:text-white hover:bg-white/[0.09] border border-white/10'
               }`}
             >
-              <Scale className="w-3.5 h-3.5" />
+              <Scale className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{isComparing ? 'Comparing' : 'Compare'}</span>
             </button>
           )}
 
           <Link
             to={`/trainers/${trainer.slug}`}
-            className="glass-control inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-[13px] text-[14px] font-semibold text-[#F5F5F7] hover:bg-[#2E3442]/80 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center justify-center min-h-[44px] px-4 py-2 rounded-full bg-[#FF803E] text-[#0B0B0B] text-[14px] font-semibold hover:bg-[#FF9259] transition-colors duration-150 whitespace-nowrap shrink-0"
+            aria-label={`View ${trainer.displayName}'s profile`}
           >
             View profile
           </Link>

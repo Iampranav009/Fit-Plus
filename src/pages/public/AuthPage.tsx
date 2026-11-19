@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   CheckCircle2,
   KeyRound,
   LogOut,
@@ -11,7 +10,7 @@ import {
 } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
-import { BrandMark } from '../../components/ui/BrandMark';
+import { MarketingLayout } from '../../components/marketing/MarketingLayout';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField } from '../../components/ui/InputField';
 
@@ -46,7 +45,11 @@ export const AuthPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const redirectTarget = useMemo(() => getSafeRedirect(searchParams.get('redirect')), [searchParams]);
 
-  const [emailMode, setEmailMode] = useState<EmailAuthMode>('signin');
+  // `?mode=signup` / `?mode=reset` deep-link straight to account creation or recovery.
+  const [emailMode, setEmailMode] = useState<EmailAuthMode>(() => {
+    const m = searchParams.get('mode');
+    return m === 'signup' || m === 'reset' ? m : 'signin';
+  });
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -162,24 +165,13 @@ export const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
-      <header className="sticky top-0 z-20 px-3 sm:px-6 lg:px-8 pt-2.5 pt-safe">
-        <div className="glass-nav max-w-[1280px] mx-auto h-14 rounded-[18px] px-4 sm:px-6 flex items-center justify-between">
-          <Link to="/" aria-label="FitPlus home">
-            <BrandMark />
-          </Link>
-          <Link
-            to="/welcome"
-            className="inline-flex items-center gap-1.5 text-[14px] text-[#A2A8B5] hover:text-[#F5F5F7] min-h-[44px] transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-            Back
-          </Link>
-        </div>
-      </header>
-
-      <main className="flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md rounded-[28px] glass-overlay p-6 sm:p-8 flex flex-col gap-6">
+    <MarketingLayout compactFooter>
+      <div className="relative flex-1 flex items-center justify-center px-4 py-10 sm:py-14">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_40%_at_50%_20%,rgba(255,128,62,0.10),transparent_70%)]"
+        />
+        <div className="relative w-full max-w-md rounded-[28px] mkt-glass p-6 sm:p-8 flex flex-col gap-6">
           {firebaseUser && !isEmailVerified ? (
             <>
               <div>
@@ -285,16 +277,28 @@ export const AuthPage: React.FC = () => {
           ) : (
             <>
               <div>
-                <p className="text-[12px] font-medium text-[#FFB06B]">
-                  {store.session.pendingInviteToken
-                    ? `Invitation ${store.session.pendingInviteToken} ready`
-                    : 'Personal coaching account'}
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="mkt-chip !text-[#B8E66C] !border-[#B8E66C]/30 !bg-[#B8E66C]/10">
+                    <ShieldCheck className="w-3.5 h-3.5" aria-hidden="true" />
+                    Live account
+                  </span>
+                  {store.session.pendingInviteToken ? (
+                    <span className="text-[12px] font-medium text-[#FFC08F]">
+                      Invitation {store.session.pendingInviteToken} ready
+                    </span>
+                  ) : null}
                 </p>
-                <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-                  {COPY.public.authTitle}
+                <h1 className="mkt-display mt-3 text-[2.5rem] leading-none">
+                  {emailMode === 'signup'
+                    ? 'Create your account'
+                    : emailMode === 'reset'
+                      ? 'Reset your password'
+                      : COPY.public.authTitle}
                 </h1>
-                <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                  Sign in with Google or email & password to sync your coaching workspace across devices.
+                <p className="mt-3 text-[0.9375rem] text-[#ABA59D] leading-relaxed">
+                  {emailMode === 'signup'
+                    ? 'Use Google or email. After you verify your email, choose whether you’re here to get fitter or to coach.'
+                    : 'Sign in with Google or email & password to sync your coaching workspace across devices.'}
                 </p>
               </div>
 
@@ -470,10 +474,13 @@ export const AuthPage: React.FC = () => {
                 ) : null}
               </form>
 
-              <div className="pt-4 border-t border-white/[0.08] flex flex-col gap-2.5">
-                <p className="text-[13px] font-medium text-[#F5F5F7]">
-                  Interactive Demo Sandbox (offline sample data)
-                </p>
+              <div className="mt-1 rounded-[18px] border border-dashed border-[#FF803E]/35 bg-[#FF803E]/[0.04] p-4 flex flex-col gap-2.5">
+                <div>
+                  <span className="mkt-chip mkt-chip-sample">Sample workspaces · no account</span>
+                  <p className="mt-2 text-[0.8125rem] text-[#ABA59D] leading-relaxed">
+                    Explore with offline sample data. Nothing you do here creates an account or charges you.
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <GlassButton
                     variant="secondary"
@@ -513,7 +520,7 @@ export const AuthPage: React.FC = () => {
             </>
           )}
         </div>
-      </main>
-    </div>
+      </div>
+    </MarketingLayout>
   );
 };

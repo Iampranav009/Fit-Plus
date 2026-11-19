@@ -1,348 +1,226 @@
-import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
-import { ArrowRight, Flame, Shield, Users, Zap, ChevronRight } from 'lucide-react';
-import { COPY } from '../../data/copy';
-import { BrandMark } from '../../components/ui/BrandMark';
-import { GlassButton } from '../../components/ui/GlassButton';
-import { MediaImage } from '../../components/ui/MediaImage';
+import React, { useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowRight } from 'lucide-react';
+import { MarketingLayout } from '../../components/marketing/MarketingLayout';
+import {
+  AssignPlanPreview,
+  CheckInReviewPreview,
+  DirectoryPreview,
+  ProgressPreview,
+  TodayPreview,
+} from '../../components/marketing/ProductPreviews';
+import { Reveal, stagger } from '../../components/marketing/Reveal';
+import { CTA } from '../../components/marketing/links';
 
-const featureItems = [
+const CLIENT_STEPS = [
   {
-    icon: Flame,
-    cls: 'fp-icon-orange',
-    title: 'Daily streaks & commitments',
-    desc: 'Your trainer sets the rhythm. Workout, nutrition, recovery — all in one calm daily view.',
+    title: 'Find a coach',
+    body: 'Search the public directory by goal, city, language and coaching mode. Save coaches and compare up to three side by side.',
   },
   {
-    icon: Users,
-    cls: 'fp-icon-cyan',
-    title: 'Real coach, real feedback',
-    desc: 'Assigned blocks, weekly check-ins, and direct chat with your personal Indian fitness coach.',
+    title: 'Request coaching or book a consultation',
+    body: 'Sign in with a client account to request coaching, book a consultation slot, or enrol in a package priced in INR.',
   },
   {
-    icon: Shield,
-    cls: 'fp-icon-lime',
-    title: 'Transparent INR packages',
-    desc: 'Know exactly what you pay. Clear monthly or quarterly packages, no hidden gym splits.',
+    title: 'Follow Today',
+    body: 'Your coach assigns workouts, meals and habits. Today shows what’s due and you tick items off as you go.',
   },
   {
-    icon: Zap,
-    cls: 'fp-icon-purple',
-    title: 'AI-powered planning',
-    desc: 'Trainers draft workout and nutrition blocks in seconds with built-in Gemini AI assistance.',
+    title: 'Check in every week',
+    body: 'Send a short weekly check-in. Your coach reviews it with your logged sessions and adjusts next week.',
   },
-] as const;
-
-const stats = [
-  { value: '90%', label: 'Coach keep rate' },
-  { value: '10K+', label: 'Active clients' },
-  { value: '₹0', label: 'Monthly software fee' },
 ];
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  show: (delay = 0) => ({
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.55, delay, ease: [0.32, 0.72, 0, 1] as [number, number, number, number] },
-  }),
-};
+const TRAINER_STEPS = [
+  {
+    title: 'Create an account and choose “coach”',
+    body: 'Sign up with Google or email, verify your email, then pick “I’m here to coach” to start your studio profile.',
+  },
+  {
+    title: 'Publish your profile and packages',
+    body: 'Add specialties, languages, city and coaching mode, and set monthly or quarterly packages in INR.',
+  },
+  {
+    title: 'Assign plans',
+    body: 'Build workout and nutrition templates, optionally starting from an AI-assisted draft, and assign them with per-client changes.',
+  },
+  {
+    title: 'Review check-ins',
+    body: 'See what each client completed, read their weekly check-in and reply from one place.',
+  },
+];
+
+const DESTINATIONS = [
+  { cta: CTA.findTrainer, opens: 'Public coach directory', mode: 'Public · no account needed' },
+  { cta: CTA.clientDemo, opens: 'Aarav’s sample client workspace', mode: 'Sample data · no account, nothing charged' },
+  { cta: CTA.coachDemo, opens: 'Coach Arjun’s sample Trainer Studio', mode: 'Sample data · no account, nothing charged' },
+  { cta: CTA.createAccount, opens: 'Account creation (Google or email)', mode: 'Live account · email verification required' },
+  { cta: CTA.signIn, opens: 'Sign in to an existing account', mode: 'Live account' },
+] as const;
+
+const StepList: React.FC<{ steps: typeof CLIENT_STEPS }> = ({ steps }) => (
+  <ol className="space-y-7">
+    {steps.map((s, i) => (
+      <Reveal as="li" key={s.title} delay={stagger(i)} className="flex gap-4">
+        <span
+          className="w-9 h-9 rounded-full border border-[#FF803E]/40 text-[#FF803E] text-[0.9375rem] font-semibold inline-flex items-center justify-center shrink-0 tabular-nums"
+          aria-hidden="true"
+        >
+          {i + 1}
+        </span>
+        <div>
+          <h3 className="text-[1.125rem] font-semibold text-[#F3EEE7]">
+            <span className="sr-only">Step {i + 1}: </span>
+            {s.title}
+          </h3>
+          <p className="mkt-body mt-1">{s.body}</p>
+        </div>
+      </Reveal>
+    ))}
+  </ol>
+);
 
 export const WelcomePage: React.FC = () => {
-  const navigate = useNavigate();
+  useEffect(() => {
+    const prev = document.title;
+    document.title = 'How FitPlus works — for clients and trainers';
+    return () => {
+      document.title = prev;
+    };
+  }, []);
 
   return (
-    <div className="min-h-screen fp-ambient-canvas-vibrant text-[#F5F5F7] overflow-x-hidden">
+    <MarketingLayout>
+      <section aria-labelledby="hiw-title" className="mkt-container pt-12 pb-12 lg:pt-20 lg:pb-16">
+        <p className="mkt-eyebrow">How it works</p>
+        <h1 id="hiw-title" className="mkt-h1 mt-4 max-w-[16ch]">
+          One plan, shared by you and your coach.
+        </h1>
+        <p className="mkt-lead mt-6 max-w-[38rem]">
+          Clients follow a daily plan and check in weekly. Trainers assign plans and review those check-ins. Here’s each
+          side, step by step, and exactly where every button takes you.
+        </p>
+        <nav aria-label="On this page" className="mt-8 flex flex-wrap gap-3">
+          <a href="#clients" className="mkt-btn mkt-btn-secondary mkt-btn-sm">
+            For clients
+          </a>
+          <a href="#trainers" className="mkt-btn mkt-btn-secondary mkt-btn-sm">
+            For trainers
+          </a>
+          <a href="#buttons" className="mkt-btn mkt-btn-secondary mkt-btn-sm">
+            Where each button goes
+          </a>
+        </nav>
+      </section>
 
-      {/* ── Sticky top nav ─────────────────────────────────────────── */}
-      <header className="fixed top-0 inset-x-0 z-20 px-4 pt-3">
-        <div className="glass-nav max-w-[720px] mx-auto h-14 rounded-[20px] px-5 flex items-center justify-between">
-          <Link to="/" aria-label="FitPlus home">
-            <BrandMark />
-          </Link>
-          <div className="flex items-center gap-3">
-            <Link
-              to="/auth"
-              className="text-[13px] font-medium text-[#A2A8B5] hover:text-[#F5F5F7] transition-colors min-h-[44px] flex items-center"
-            >
-              Sign in
-            </Link>
-            <span className="glass-control rounded-full px-3.5 py-1.5 text-[12px] font-semibold text-[#FFB06B]">
-              Demo preview
-            </span>
+      <section id="clients" aria-labelledby="clients-title" className="py-16 lg:py-20 border-t border-white/[0.07]">
+        <div className="mkt-container grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14">
+          <div className="lg:col-span-5">
+            <Reveal>
+              <p className="mkt-eyebrow">For clients</p>
+              <h2 id="clients-title" className="mkt-h2 mt-3">
+                Get coached on a plan that fits your week.
+              </h2>
+            </Reveal>
+            <div className="mt-8">
+              <StepList steps={CLIENT_STEPS} />
+            </div>
+            <div className="mt-9 flex flex-wrap items-center gap-x-4 gap-y-3">
+              <Link to={CTA.findTrainer.to} className="mkt-btn mkt-btn-primary">
+                {CTA.findTrainer.label}
+                <ArrowRight className="mkt-arrow w-[18px] h-[18px]" aria-hidden="true" />
+              </Link>
+              <Link to={CTA.clientDemo.to} className="mkt-btn mkt-btn-tertiary">
+                {CTA.clientDemo.label}
+              </Link>
+            </div>
+          </div>
+          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            <DirectoryPreview />
+            <TodayPreview className="md:mt-16" />
+            <ProgressPreview className="md:col-start-2" />
           </div>
         </div>
-      </header>
+      </section>
 
-      {/* ── Hero ───────────────────────────────────────────────────── */}
-      <section className="relative min-h-[100svh] flex flex-col justify-end pb-14 pt-28 overflow-hidden">
-        {/* Background photo */}
-        <div className="absolute inset-0">
-          <MediaImage
-            assetKey="welcomeHero"
-            alt="Adult Indian athlete resting calmly in a dark studio gym"
-            aspectClass="w-full h-full"
-            imgClassName="object-cover object-center"
-          />
-          {/* Deep vignette gradient */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#090B10] via-[#090B10]/65 to-[#090B10]/25" />
-          {/* Orange ambient from bottom-left */}
-          <div className="absolute inset-0 bg-gradient-to-tr from-[#FF803E]/10 via-transparent to-transparent" />
-        </div>
-
-        <div className="relative z-10 max-w-[720px] mx-auto w-full px-6">
-          <motion.div
-            initial="hidden"
-            animate="show"
-            variants={{ hidden: {}, show: {} }}
-            className="flex flex-col gap-5"
-          >
-            {/* Label */}
-            <motion.p
-              custom={0}
-              variants={fadeUp}
-              className="fp-stat-badge w-fit"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#FF803E]" />
-              India-first personal coaching
-            </motion.p>
-
-            {/* Headline */}
-            <motion.h1
-              custom={0.08}
-              variants={fadeUp}
-              className="fp-heading-xl"
-            >
-              {COPY.public.welcomeHeadline}
-            </motion.h1>
-
-            {/* Body */}
-            <motion.p
-              custom={0.16}
-              variants={fadeUp}
-              className="fp-body-lg max-w-[500px]"
-            >
-              {COPY.public.welcomeSupport}
-            </motion.p>
-
-            {/* CTAs */}
-            <motion.div
-              custom={0.24}
-              variants={fadeUp}
-              className="flex flex-col sm:flex-row gap-3 pt-1"
-            >
-              <GlassButton onClick={() => navigate('/onboarding/role')}>
-                {COPY.public.getStarted}
-                <ArrowRight className="w-4 h-4" aria-hidden="true" />
-              </GlassButton>
-              <GlassButton variant="glass" onClick={() => navigate('/auth')}>
-                {COPY.public.signIn}
-              </GlassButton>
-            </motion.div>
-
-            {/* Demo link */}
-            <motion.div custom={0.3} variants={fadeUp}>
-              <Link
-                to="/demo"
-                className="inline-flex items-center gap-1.5 text-[13px] text-[#7C8393] hover:text-[#A2A8B5] transition-colors"
-              >
-                Try the interactive demo
-                <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+      <section
+        id="trainers"
+        aria-labelledby="trainers-hiw-title"
+        className="py-16 lg:py-20 border-t border-white/[0.07] bg-[#0B0B0C]"
+      >
+        <div className="mkt-container grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14">
+          <div className="lg:col-span-5">
+            <Reveal>
+              <p className="mkt-eyebrow">For trainers</p>
+              <h2 id="trainers-hiw-title" className="mkt-h2 mt-3">
+                Run every client from one Trainer Studio.
+              </h2>
+            </Reveal>
+            <div className="mt-8">
+              <StepList steps={TRAINER_STEPS} />
+            </div>
+            <div className="mt-9 flex flex-wrap items-center gap-x-4 gap-y-3">
+              <Link to={CTA.coachDemo.to} className="mkt-btn mkt-btn-primary">
+                {CTA.coachDemo.label}
+                <ArrowRight className="mkt-arrow w-[18px] h-[18px]" aria-hidden="true" />
               </Link>
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── Features grid ──────────────────────────────────────────── */}
-      <section className="max-w-[720px] mx-auto w-full px-6 py-16 flex flex-col gap-10">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-60px' }}
-          transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-        >
-          <p className="fp-section-label mb-2">What you get</p>
-          <h2 className="fp-heading-lg">Everything in one place</h2>
-          <p className="mt-2 fp-body-md max-w-[440px]">
-            Your daily fitness journey, guided by a real Indian coach.
-          </p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {featureItems.map((item, i) => {
-            const Icon = item.icon;
-            return (
-              <motion.div
-                key={item.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.42, delay: i * 0.07, ease: [0.32, 0.72, 0, 1] }}
-                className="surface-card glass-card-hover rounded-[22px] p-5 flex flex-col gap-3.5"
-              >
-                <div className={`w-10 h-10 rounded-[12px] flex items-center justify-center ${item.cls}`}>
-                  <Icon className="w-5 h-5" aria-hidden="true" />
-                </div>
-                <div>
-                  <h3 className="fp-heading-md text-[15px]">{item.title}</h3>
-                  <p className="mt-1.5 text-[13px] text-[#A2A8B5] leading-relaxed">{item.desc}</p>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* ── Stats strip ────────────────────────────────────────────── */}
-      <div className="border-t border-b border-white/[0.06]">
-        <div className="max-w-[720px] mx-auto px-6 py-12">
-          <div className="grid grid-cols-3 gap-6 text-center">
-            {stats.map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ duration: 0.4, delay: i * 0.09, ease: [0.32, 0.72, 0, 1] }}
-              >
-                <p className="text-[32px] sm:text-[40px] font-bold tracking-[-0.035em] text-[#FF803E]">
-                  {stat.value}
-                </p>
-                <p className="mt-1 text-[12px] font-medium text-[#7C8393] uppercase tracking-[0.05em]">
-                  {stat.label}
-                </p>
-              </motion.div>
-            ))}
+              <Link to={CTA.createAccount.to} className="mkt-btn mkt-btn-tertiary">
+                {CTA.createAccount.label}
+              </Link>
+            </div>
+          </div>
+          <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            <AssignPlanPreview />
+            <CheckInReviewPreview className="md:mt-16" />
           </div>
         </div>
-      </div>
-
-      {/* ── Role showcase ──────────────────────────────────────────── */}
-      <section className="max-w-[720px] mx-auto px-6 py-16 flex flex-col gap-10">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-60px' }}
-          transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
-        >
-          <p className="fp-section-label mb-2">Two roles, one platform</p>
-          <h2 className="fp-heading-lg">Built for trainers & clients</h2>
-        </motion.div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {[
-            {
-              label: 'For clients',
-              color: '#70C8ED',
-              colorBg: 'rgba(112,200,237,0.08)',
-              colorBorder: 'rgba(112,200,237,0.18)',
-              title: 'Stay consistent effortlessly',
-              points: [
-                'Daily task view — workout, nutrition, recovery',
-                'Streak tracking with gentle accountability',
-                'Direct chat & weekly check-in with your coach',
-                'Indian meal guidance, zero guilt alerts',
-              ],
-              cta: { label: 'Find a coach', to: '/discover' },
-            },
-            {
-              label: 'For trainers',
-              color: '#FF803E',
-              colorBg: 'rgba(255,128,62,0.08)',
-              colorBorder: 'rgba(255,128,62,0.18)',
-              title: 'Run your independent studio',
-              points: [
-                'Assign workout & nutrition blocks in seconds',
-                'AI-assisted block drafting with Gemini',
-                'INR packages with 90% take-home',
-                'Cashfree payouts, GST-compliant invoices',
-              ],
-              cta: { label: 'Set up your studio', to: '/auth' },
-            },
-          ].map((card, i) => (
-            <motion.div
-              key={card.label}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-40px' }}
-              transition={{ duration: 0.42, delay: i * 0.08, ease: [0.32, 0.72, 0, 1] }}
-              className="surface-card glass-card-hover rounded-[24px] p-6 flex flex-col gap-5"
-            >
-              <div>
-                <span
-                  className="inline-block text-[11px] font-bold uppercase tracking-[0.08em] px-2.5 py-1 rounded-full"
-                  style={{ background: card.colorBg, border: `1px solid ${card.colorBorder}`, color: card.color }}
-                >
-                  {card.label}
-                </span>
-                <h3 className="mt-3 text-[18px] font-semibold text-[#F5F5F7] tracking-[-0.02em]">
-                  {card.title}
-                </h3>
-              </div>
-              <ul className="flex flex-col gap-2.5">
-                {card.points.map((pt) => (
-                  <li key={pt} className="flex items-start gap-2.5 text-[13px] text-[#A2A8B5]">
-                    <span
-                      className="mt-0.5 w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold"
-                      style={{ background: card.colorBg, color: card.color }}
-                      aria-hidden="true"
-                    >
-                      ✓
-                    </span>
-                    {pt}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                to={card.cta.to}
-                className="mt-auto inline-flex items-center gap-1.5 text-[13px] font-semibold transition-colors"
-                style={{ color: card.color }}
-              >
-                {card.cta.label}
-                <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-              </Link>
-            </motion.div>
-          ))}
-        </div>
       </section>
 
-      {/* ── Final CTA ──────────────────────────────────────────────── */}
-      <section className="max-w-[720px] mx-auto px-6 pb-20">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.55, ease: [0.32, 0.72, 0, 1] }}
-          className="glass-overlay rounded-[28px] p-8 sm:p-10 text-center flex flex-col items-center gap-6"
-        >
-          <BrandMark />
-          <div>
-            <h2 className="text-[22px] sm:text-[26px] font-bold tracking-[-0.025em] text-[#F5F5F7]">
-              Ready to start your journey?
+      <section id="buttons" aria-labelledby="buttons-title" className="py-16 lg:py-20 border-t border-white/[0.07]">
+        <div className="mkt-container">
+          <Reveal className="max-w-[40rem]">
+            <h2 id="buttons-title" className="mkt-h2">
+              Where each button goes.
             </h2>
-            <p className="mt-2 text-[14px] text-[#A2A8B5] max-w-[320px] mx-auto leading-relaxed">
-              {COPY.public.demoAuthBody}
+            <p className="mkt-lead mt-4">
+              Demo buttons open a sandbox with sample people and data on your device. Account buttons use your real
+              email or Google account.
             </p>
+          </Reveal>
+          <div className="mt-10 rounded-[22px] mkt-matte overflow-hidden">
+            <table className="w-full text-left">
+              <caption className="sr-only">Button destinations and whether they use live or sample data</caption>
+              <thead className="hidden md:table-header-group">
+                <tr className="text-[0.8125rem] text-[#ABA59D] border-b border-white/[0.08]">
+                  <th scope="col" className="px-6 py-3 font-medium">Button</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Opens</th>
+                  <th scope="col" className="px-6 py-3 font-medium">Mode</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.07]">
+                {DESTINATIONS.map((d) => (
+                  <tr key={d.cta.label} className="flex flex-col md:table-row px-5 py-4 md:p-0">
+                    <th scope="row" className="md:px-6 md:py-4 font-normal">
+                      <Link
+                        to={d.cta.to}
+                        className="inline-flex items-center gap-1.5 min-h-[40px] font-semibold text-[#F3EEE7] hover:text-[#FF803E] transition-colors"
+                      >
+                        {d.cta.label}
+                        <ArrowRight className="w-4 h-4 text-[#FF803E]" aria-hidden="true" />
+                      </Link>
+                    </th>
+                    <td className="md:px-6 md:py-4 text-[0.9375rem] text-[#F3EEE7]">{d.opens}</td>
+                    <td className="md:px-6 md:py-4 text-[0.875rem] text-[#ABA59D]">{d.mode}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-[340px]">
-            <GlassButton fullWidth onClick={() => navigate('/onboarding/role')}>
-              {COPY.public.getStarted}
-            </GlassButton>
-            <GlassButton fullWidth variant="glass" onClick={() => navigate('/auth')}>
-              {COPY.public.signIn}
-            </GlassButton>
-          </div>
-          <p className="text-[12px] text-[#7C8393]">
-            Or{' '}
-            <Link to="/demo" className="text-[#FFB06B] hover:text-[#FF803E] transition-colors">
-              try the interactive demo
-            </Link>{' '}
-            — no sign-up needed
+          <p className="mt-4 mkt-small">
+            Have an invite link from a trainer? Open it to review the coach and plan before you accept.
           </p>
-        </motion.div>
+        </div>
       </section>
-    </div>
+    </MarketingLayout>
   );
 };

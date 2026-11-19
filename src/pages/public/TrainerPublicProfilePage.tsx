@@ -21,7 +21,7 @@ import {
 } from '../../lib/commerce';
 import { formatIndiaDate, formatINR } from '../../lib/date';
 import { launchCashfreeCheckout } from '../../lib/cashfree';
-import { PublicTopBar } from '../../components/layout/PublicTopBar';
+import { MarketingLayout } from '../../components/marketing/MarketingLayout';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
 import { GlassSheet } from '../../components/ui/GlassSheet';
@@ -50,6 +50,13 @@ export const TrainerPublicProfilePage: React.FC = () => {
   } = useApp();
   const navigate = useNavigate();
 
+  // A plain public visit has neither a live session nor the demo sandbox. In that
+  // case the local demo store still holds a sample client (Aarav) with an active
+  // coach, which must not leak into the page as "Your active coach" etc.
+  const hasSession = isCloudSynced || isDemoSandbox;
+  const viewerClient = hasSession ? activeClient : undefined;
+  const viewerCoach = hasSession ? activeCoach : undefined;
+
   const trainersSource = isCloudSynced || isDemoSandbox ? store.trainers : publicDirectory.trainers;
   const packagesSource = isCloudSynced || isDemoSandbox ? store.packages : publicDirectory.packages;
 
@@ -71,24 +78,25 @@ export const TrainerPublicProfilePage: React.FC = () => {
   const reviewStats = useMemo(() => computeReviewStats(trainerReviews), [trainerReviews]);
 
   const eligibleRelationship = useMemo(
-    () => (trainer ? findEligibleReviewRelationship(activeClient?.id, trainer.id, store.relationships) : undefined),
-    [trainer, activeClient?.id, store.relationships],
+    () => (trainer ? findEligibleReviewRelationship(viewerClient?.id, trainer.id, store.relationships) : undefined),
+    [trainer, viewerClient?.id, store.relationships],
   );
 
   const existingClientReview = useMemo(
     () =>
-      activeClient && trainer
-        ? trainerReviews.find((r) => r.clientId === activeClient.id)
+      viewerClient && trainer
+        ? trainerReviews.find((r) => r.clientId === viewerClient.id)
         : undefined,
-    [activeClient, trainer, trainerReviews],
+    [viewerClient, trainer, trainerReviews],
   );
 
   const availableSlots = useMemo(() => {
-    if (!trainer) return [];
+    // Anonymous visitors must not see the local demo store's slots.
+    if (!trainer || !hasSession) return [];
     return store.consultationSlots.filter(
       (s) => s.trainerId === trainer.id && s.status === 'available',
     );
-  }, [trainer, store.consultationSlots]);
+  }, [trainer, hasSession, store.consultationSlots]);
 
   const [checkoutPkg, setCheckoutPkg] = useState<Package | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -143,25 +151,32 @@ export const TrainerPublicProfilePage: React.FC = () => {
 
   if (!trainer) {
     return (
-      <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7]">
-        <PublicTopBar />
-        <main className="max-w-xl mx-auto px-4 py-16 text-center space-y-4">
-          <h1 className="text-[26px] font-semibold">Trainer profile not found</h1>
-          <p className="text-[14px] text-[#A2A8B5]">
-            This coach profile is unavailable or has not been published yet.
-          </p>
-          <GlassButton onClick={() => navigate('/discover')}>Find a trainer</GlassButton>
-        </main>
-      </div>
+      <MarketingLayout>
+        <div className="mkt-container max-w-xl py-20 text-center flex flex-col items-center gap-4">
+          {!hasSession && !publicDirectory.loaded ? (
+            <p className="mkt-body" role="status">
+              Loading coach profile…
+            </p>
+          ) : (
+            <>
+              <h1 className="mkt-h2">Trainer profile not found</h1>
+              <p className="mkt-body">This coach profile is unavailable or has not been published yet.</p>
+            </>
+          )}
+          <Link to="/discover" className="mkt-btn mkt-btn-primary">
+            Find a trainer
+          </Link>
+        </div>
+      </MarketingLayout>
     );
   }
 
-  const isCurrentCoach = activeCoach?.id === trainer.id;
+  const isCurrentCoach = viewerCoach?.id === trainer.id;
   const isPendingRequest = Boolean(
-    activeClient &&
+    viewerClient &&
       store.relationships.some(
         (r) =>
-          r.clientId === activeClient.id &&
+          r.clientId === viewerClient.id &&
           r.trainerId === trainer.id &&
           r.status === 'pending',
       ),
@@ -169,9 +184,23 @@ export const TrainerPublicProfilePage: React.FC = () => {
   const isVerifiedBadge =
     trainer.verificationStatus === 'verified' || (isDemoSandbox && trainer.isDemoVerified);
 
+  const modeLabel =
+    trainer.coachingMode === 'hybrid'
+      ? 'Online + in person'
+      : trainer.coachingMode === 'in_person'
+        ? 'In person'
+        : 'Online';
+  const lowestPkg = trainerPackages.reduce<Package | undefined>(
+    (min, p) => (!min || p.priceInr < min.priceInr ? p : min),
+    undefined,
+  );
+  const intervalLabel = (pkg: Package) =>
+    pkg.cadence === 'monthly' ? 'month' : pkg.cadence === 'quarterly' ? 'quarter' : `${computePackageDurationDays(pkg)} days`;
+  const signInPath = `/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`;
+
   const handleRequestCoaching = async () => {
-    if (!activeClient) {
-      navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
+    if (!viewerClient) {
+      navigate(signInPath);
       return;
     }
     setRequestBusy(true);
@@ -184,9 +213,9 @@ export const TrainerPublicProfilePage: React.FC = () => {
 
   const handleConfirmEnrollment = async () => {
     if (!checkoutPkg) return;
-    if (!activeClient) {
+    if (!viewerClient) {
       setCheckoutPkg(null);
-      navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
+      navigate(signInPath);
       return;
     }
 
@@ -238,9 +267,9 @@ export const TrainerPublicProfilePage: React.FC = () => {
 
   const handleConfirmBooking = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeClient) {
+    if (!viewerClient) {
       setConsultOpen(false);
-      navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
+      navigate(signInPath);
       return;
     }
     if (!selectedSlotId) {
@@ -275,61 +304,87 @@ export const TrainerPublicProfilePage: React.FC = () => {
     }
   };
 
+  const facts: Array<[string, React.ReactNode]> = [
+    ['Location & mode', `${trainer.city} · ${modeLabel}`],
+    ['Languages', trainer.languages.join(', ') || '—'],
+    ['Experience', `${trainer.experienceYears} years`],
+    [
+      isDemoSandbox ? 'Sample price from' : 'Packages from',
+      lowestPkg ? (
+        <>
+          {lowestPkg.priceInr === 0 ? 'Free' : formatINR(lowestPkg.priceInr)}
+          {lowestPkg.priceInr === 0 ? '' : ` / ${intervalLabel(lowestPkg)}`}
+        </>
+      ) : (
+        'No packages yet'
+      ),
+    ],
+  ];
+
   return (
-    <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
+    <MarketingLayout>
       {jsonLd ? (
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
       ) : null}
-      <PublicTopBar />
 
-      <main className="flex-1 max-w-[1080px] w-full mx-auto px-4 sm:px-6 py-6 pb-16">
+      <div className="mkt-container max-w-[1120px] pt-4 pb-20">
         <Link
           to="/discover"
-          className="inline-flex items-center gap-1.5 text-[14px] text-[#A2A8B5] hover:text-[#F5F5F7] mb-4 min-h-[44px]"
+          className="inline-flex items-center gap-1.5 text-[0.9375rem] text-[#ABA59D] hover:text-[#F3EEE7] min-h-[44px] transition-colors"
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />
           All coaches
         </Link>
 
-        {/* Cover & Profile Header */}
-        <section className="rounded-[28px] surface-card overflow-hidden">
-          <div className="relative">
+        {isDemoSandbox ? (
+          <p className="mt-2 rounded-[14px] border border-[#FF803E]/30 bg-[#FF803E]/[0.07] px-4 py-3 text-[0.875rem] text-[#F3EEE7]">
+            <span className="font-semibold">Sample profile in the demo.</span>{' '}
+            <span className="text-[#ABA59D]">
+              Verification, reviews, consultation slots, WhatsApp and package prices are examples. Nothing is charged.
+            </span>
+          </p>
+        ) : null}
+
+        {/* Identity */}
+        <section aria-labelledby="coach-name" className="mt-4 rounded-[28px] mkt-matte overflow-hidden">
+          <div className="mkt-media aspect-[16/7] sm:aspect-[16/5]">
             <MediaImage
               assetKey={trainer.coverKey}
               alt={`${trainer.displayName} training studio`}
-              aspectClass="aspect-[16/9] max-h-[300px] w-full"
+              aspectClass="w-full h-full"
             />
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#1C2029] via-[#1C2029]/25 to-transparent" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#111114] via-[#111114]/30 to-transparent" />
           </div>
 
-          <div className="px-5 sm:px-8 pb-8 -mt-12 relative">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-              <div className="flex items-end gap-4">
+          <div className="px-5 sm:px-8 pb-7 -mt-14 sm:-mt-16 relative">
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+              <div className="flex flex-col sm:flex-row sm:items-end gap-4">
                 {trainer.photoUrl ? (
                   <img
                     src={trainer.photoUrl}
-                    alt={trainer.displayName}
-                    className="w-24 h-24 rounded-[20px] border-4 border-[#1C2029] object-cover shrink-0 bg-[#1C2029]"
+                    alt=""
+                    className="w-24 h-24 rounded-[22px] border-4 border-[#111114] object-cover shrink-0 bg-[#1E1E23]"
                   />
                 ) : (
                   <MediaImage
                     assetKey={trainer.avatarKey}
-                    alt={trainer.displayName}
-                    aspectClass="w-24 h-24 rounded-[20px] border-4 border-[#1C2029] shrink-0"
+                    alt=""
+                    aspectClass="w-24 h-24 rounded-[22px] border-4 border-[#111114] shrink-0"
                   />
                 )}
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-[26px] sm:text-[32px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-                      {trainer.displayName}
-                    </h1>
+                <div className="min-w-0">
+                  <h1 id="coach-name" className="mkt-display text-[clamp(2rem,1.6rem+1.8vw,2.75rem)] leading-none">
+                    {trainer.displayName}
+                  </h1>
+                  <p className="mt-2 text-[1rem] text-[#F3EEE7]">{trainer.headline}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     {isVerifiedBadge ? (
-                      <span className="inline-flex items-center gap-1 text-[12px] text-[#FFB06B]">
-                        <BadgeCheck className="w-4 h-4" aria-hidden="true" />
-                        {isDemoSandbox ? 'Demo verified' : 'Verified coach'}
+                      <span className={`mkt-chip ${isDemoSandbox ? 'mkt-chip-sample' : ''}`}>
+                        <BadgeCheck className="w-3.5 h-3.5 text-[#FF803E]" aria-hidden="true" />
+                        {isDemoSandbox ? 'Demo verified (sample)' : 'Verified coach'}
                       </span>
                     ) : (
-                      <span className="text-[12px] text-[#7C8393]">
+                      <span className="mkt-chip">
                         {isDemoSandbox
                           ? 'Demo profile'
                           : trainer.verificationStatus === 'pending'
@@ -338,238 +393,243 @@ export const TrainerPublicProfilePage: React.FC = () => {
                       </span>
                     )}
                     {reviewStats.count > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-[12px] font-medium text-[#FFB06B]">
-                        <Star className="w-3.5 h-3.5 fill-[#FFB06B]" aria-hidden="true" />
-                        {reviewStats.averageRating} ({reviewStats.count}{' '}
-                        {reviewStats.count === 1 ? 'review' : 'reviews'})
+                      <span className="mkt-chip">
+                        <Star className="w-3.5 h-3.5 fill-[#FFC08F] text-[#FFC08F]" aria-hidden="true" />
+                        {reviewStats.averageRating} · {reviewStats.count}{' '}
+                        {reviewStats.count === 1 ? 'review' : 'reviews'}
+                        {isDemoSandbox ? ' (sample)' : ''}
+                      </span>
+                    ) : null}
+                    {isCurrentCoach ? (
+                      <span className="mkt-chip !text-[#B8E66C] !border-[#B8E66C]/30">
+                        {isDemoSandbox ? 'Your coach in this demo' : 'Your active coach'}
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-[14px] text-[#A2A8B5]">{trainer.headline}</p>
-                  <p className="mt-1.5 text-[12px] text-[#7C8393] flex flex-wrap items-center gap-x-2 tabular-nums">
-                    <span className="inline-flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5" aria-hidden="true" />
-                      {trainer.city}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span>{trainer.experienceYears} years experience</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{trainer.languages.join(', ')}</span>
-                  </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2.5">
-                {!isCurrentCoach ? (
-                  <GlassButton
-                    variant="secondary"
-                    size="sm"
-                    disabled={isPendingRequest || requestBusy}
-                    onClick={() => void handleRequestCoaching()}
-                  >
-                    {isPendingRequest
-                      ? 'Request pending'
-                      : requestBusy
-                        ? 'Sending...'
-                        : 'Request coaching'}
-                  </GlassButton>
-                ) : null}
-                <GlassButton
-                  variant="glass"
-                  size="sm"
-                  onClick={() => setWhatsAppOpen(true)}
-                >
-                  <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                  {isDemoSandbox ? 'WhatsApp (demo)' : 'Message on WhatsApp'}
-                </GlassButton>
-                <GlassButton
-                  size="sm"
-                  onClick={() => {
-                    setSelectedSlotId(availableSlots[0]?.id || '');
-                    setConsultOpen(true);
-                  }}
-                >
-                  <Calendar className="w-4 h-4" aria-hidden="true" />
-                  Book consultation
-                </GlassButton>
-              </div>
-            </div>
-
-            {/* Bio & Coaching Style */}
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-white/[0.08]">
-              <div>
-                <h2 className="text-[17px] font-semibold text-[#F5F5F7]">About</h2>
-                <p className="mt-2 text-[15px] text-[#A2A8B5] leading-relaxed">{trainer.bio}</p>
-                {trainer.certifications && trainer.certifications.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {trainer.certifications.map((cert) => (
-                      <span
-                        key={cert}
-                        className="px-2.5 py-1 rounded-[8px] bg-[#252A35] border border-white/[0.08] text-[12px] text-[#A2A8B5]"
-                      >
-                        {cert}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-              <div>
-                <h2 className="text-[17px] font-semibold text-[#F5F5F7]">Coaching style</h2>
-                <p className="mt-2 text-[15px] text-[#A2A8B5] leading-relaxed">
-                  {trainer.coachingStyle}
-                </p>
-                <p className="mt-3 text-[13px] text-[#7C8393]">
-                  Specialties: {trainer.specialties.join(' · ')}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Coaching Packages */}
-        <section className="mt-8">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-            <div>
-              <h2 className="text-[22px] font-semibold text-[#F5F5F7]">Coaching packages</h2>
-              <p className="text-[13px] text-[#7C8393]">
-                {isDemoSandbox
-                  ? 'Example INR packages for demo preview · No real payment processed'
-                  : 'Transparent INR packages · Instant enrollment via Cashfree Payments or free tier'}
-              </p>
-            </div>
-            {isCurrentCoach ? (
-              <span className="text-[13px] font-medium text-[#B8E66C]">
-                Your active coach
-              </span>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {trainerPackages.map((pkg) => {
-              const durationDays = computePackageDurationDays(pkg);
-              const consultCount = pkg.consultationsIncluded ?? 2;
-              return (
-                <div
-                  key={pkg.id}
-                  className="rounded-[22px] surface-card p-5 flex flex-col justify-between gap-5"
-                >
-                  <div>
-                    <h3 className="text-[18px] font-semibold text-[#F5F5F7]">{pkg.name}</h3>
-                    <p className="mt-2 text-[28px] font-semibold text-[#F5F5F7] tabular-nums">
-                      {pkg.priceInr === 0 ? 'Free' : formatINR(pkg.priceInr)}
-                      <span className="text-[14px] font-normal text-[#7C8393]">
-                        {pkg.priceInr === 0
-                          ? ` · ${durationDays}d`
-                          : `/${pkg.cadence === 'monthly' ? 'month' : pkg.cadence === 'quarterly' ? 'quarter' : `${durationDays}d`}`}
-                      </span>
-                    </p>
-                    <p className="mt-1 text-[12px] text-[#7C8393] tabular-nums">
-                      {durationDays} days · {consultCount} check-in {consultCount === 1 ? 'call' : 'calls'} included
-                    </p>
-                    <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">{pkg.summary}</p>
-                    <ul className="mt-4 space-y-2 text-[13px] text-[#A2A8B5]">
-                      {pkg.features.map((feat) => (
-                        <li key={feat} className="flex items-start gap-2">
-                          <Check className="w-4 h-4 text-[#FF803E] shrink-0 mt-0.5" aria-hidden="true" />
-                          <span>{feat}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <GlassButton
-                    fullWidth
-                    variant={isCurrentCoach ? 'secondary' : 'primary'}
+              <div className="flex flex-col gap-2 lg:items-end shrink-0">
+                <div className="flex flex-wrap gap-2.5">
+                  {!isCurrentCoach ? (
+                    <button
+                      type="button"
+                      className="mkt-btn mkt-btn-primary disabled:opacity-50"
+                      disabled={isPendingRequest || requestBusy}
+                      onClick={() => void handleRequestCoaching()}
+                    >
+                      {isPendingRequest ? 'Request pending' : requestBusy ? 'Sending…' : 'Request coaching'}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={`mkt-btn ${isCurrentCoach ? 'mkt-btn-primary' : 'mkt-btn-secondary'}`}
                     onClick={() => {
-                      setCheckoutError('');
-                      setCheckoutPkg(pkg);
+                      setSelectedSlotId(availableSlots[0]?.id || '');
+                      setConsultOpen(true);
                     }}
                   >
-                    {isCurrentCoach
-                      ? 'Switch package'
-                      : isDemoSandbox
-                        ? 'Select package (demo)'
-                        : pkg.priceInr === 0
-                          ? 'Start free plan'
-                          : `Enroll · ${formatINR(pkg.priceInr)}`}
-                  </GlassButton>
+                    <Calendar className="w-4 h-4" aria-hidden="true" />
+                    {isDemoSandbox ? 'Book consultation (demo)' : 'Book consultation'}
+                  </button>
+                  <button type="button" className="mkt-btn mkt-btn-secondary" onClick={() => setWhatsAppOpen(true)}>
+                    <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                    {isDemoSandbox ? 'WhatsApp (demo)' : 'WhatsApp'}
+                  </button>
                 </div>
-              );
-            })}
+                {!viewerClient ? (
+                  <p className="mkt-small lg:text-right">Requesting or booking asks you to sign in with a client account first.</p>
+                ) : null}
+              </div>
+            </div>
+
+            <dl className="mt-7 grid grid-cols-2 lg:grid-cols-4 gap-px rounded-[18px] overflow-hidden bg-white/[0.08] border border-white/[0.08]">
+              {facts.map(([label, value]) => (
+                <div key={label} className="bg-[#111114] px-4 py-3.5">
+                  <dt className="text-[0.75rem] text-[#ABA59D]">{label}</dt>
+                  <dd className="mt-0.5 text-[0.9375rem] font-semibold text-[#F3EEE7] tabular-nums">{value}</dd>
+                </div>
+              ))}
+            </dl>
+
+            {/* Coaching fit */}
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div>
+                <h2 className="text-[1.125rem] font-semibold text-[#F3EEE7]">About</h2>
+                <p className="mt-2 mkt-body max-w-[60ch]">{trainer.bio}</p>
+                {trainer.certifications && trainer.certifications.length > 0 ? (
+                  <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Certifications">
+                    {trainer.certifications.map((cert) => (
+                      <li key={cert} className="mkt-chip">
+                        {cert}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              <div>
+                <h2 className="text-[1.125rem] font-semibold text-[#F3EEE7]">Coaching style & fit</h2>
+                <p className="mt-2 mkt-body max-w-[60ch]">{trainer.coachingStyle}</p>
+                <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Specialties">
+                  {trainer.specialties.map((sp) => (
+                    <li key={sp} className="mkt-chip !text-[#F3EEE7]">
+                      {sp}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* Verified Client Reviews */}
-        <section className="mt-8 rounded-[26px] surface-card p-5 sm:p-7 space-y-5">
+        {/* Coaching packages */}
+        <section aria-labelledby="packages-title" className="mt-10">
+          <div className="flex flex-wrap items-end justify-between gap-2 mb-5">
+            <div>
+              <h2 id="packages-title" className="mkt-h3">
+                Coaching packages
+              </h2>
+              <p className="mt-1 text-[0.875rem] text-[#ABA59D]">
+                {isDemoSandbox
+                  ? 'Example INR packages for the demo · No real payment is processed'
+                  : 'Prices in INR · Paid packages check out through Cashfree Payments; free tiers activate instantly'}
+              </p>
+            </div>
+          </div>
+
+          {trainerPackages.length === 0 ? (
+            <p className="rounded-[18px] mkt-matte p-5 mkt-body">
+              {trainer.displayName} hasn’t published packages yet. Request coaching or book a consultation to discuss options.
+            </p>
+          ) : (
+            <ul className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {trainerPackages.map((pkg) => {
+                const durationDays = computePackageDurationDays(pkg);
+                const consultCount = pkg.consultationsIncluded ?? 2;
+                return (
+                  <li key={pkg.id} className="rounded-[22px] mkt-matte p-5 flex flex-col justify-between gap-5">
+                    <div>
+                      <h3 className="text-[1.125rem] font-semibold text-[#F3EEE7]">{pkg.name}</h3>
+                      <p className="mt-3 tabular-nums">
+                        <span className="mkt-display text-[2.25rem] leading-none">
+                          {pkg.priceInr === 0 ? 'Free' : formatINR(pkg.priceInr)}
+                        </span>
+                        {pkg.priceInr === 0 ? null : (
+                          <span className="ml-1 text-[0.9375rem] text-[#ABA59D]">/ {intervalLabel(pkg)}</span>
+                        )}
+                        {isDemoSandbox ? <span className="ml-2 mkt-chip mkt-chip-sample align-middle">Example</span> : null}
+                      </p>
+                      <dl className="mt-3 grid grid-cols-2 gap-2 text-[0.8125rem]">
+                        <div className="rounded-[12px] bg-white/[0.04] px-3 py-2">
+                          <dt className="text-[#ABA59D]">Length</dt>
+                          <dd className="text-[#F3EEE7] font-medium tabular-nums">{durationDays} days</dd>
+                        </div>
+                        <div className="rounded-[12px] bg-white/[0.04] px-3 py-2">
+                          <dt className="text-[#ABA59D]">Check-in calls</dt>
+                          <dd className="text-[#F3EEE7] font-medium tabular-nums">{consultCount} included</dd>
+                        </div>
+                      </dl>
+                      <p className="mt-3 text-[0.9375rem] text-[#ABA59D] leading-relaxed">{pkg.summary}</p>
+                      <ul className="mt-4 space-y-2 text-[0.875rem] text-[#ABA59D]">
+                        {pkg.features.map((feat) => (
+                          <li key={feat} className="flex items-start gap-2">
+                            <Check className="w-4 h-4 text-[#FF803E] shrink-0 mt-0.5" aria-hidden="true" />
+                            <span>{feat}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={`mkt-btn w-full ${isCurrentCoach ? 'mkt-btn-secondary' : 'mkt-btn-primary'}`}
+                      onClick={() => {
+                        setCheckoutError('');
+                        setCheckoutPkg(pkg);
+                      }}
+                    >
+                      {isCurrentCoach
+                        ? 'Switch package'
+                        : isDemoSandbox
+                          ? 'Select package (demo)'
+                          : pkg.priceInr === 0
+                            ? 'Start free plan'
+                            : `Enrol · ${formatINR(pkg.priceInr)}`}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        {/* Client reviews */}
+        <section aria-labelledby="reviews-title" className="mt-10 rounded-[26px] mkt-matte p-5 sm:p-7 space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-[20px] font-semibold text-[#F5F5F7]">Verified client reviews</h2>
-              <p className="text-[13px] text-[#A2A8B5]">
-                Reviews come strictly from clients with a confirmed FitPlus coaching relationship.
+              <h2 id="reviews-title" className="mkt-h3">
+                {isDemoSandbox ? 'Client reviews (sample)' : 'Verified client reviews'}
+              </h2>
+              <p className="mt-1 text-[0.875rem] text-[#ABA59D]">
+                {isDemoSandbox
+                  ? 'Example reviews for the demo. On live profiles, only clients with a confirmed FitPlus coaching relationship can review.'
+                  : 'Reviews come strictly from clients with a confirmed FitPlus coaching relationship.'}
               </p>
             </div>
             {reviewStats.count > 0 ? (
-              <div className="flex items-center gap-2 rounded-[14px] bg-[#101218] border border-white/[0.08] px-3.5 py-2">
-                <Star className="w-4 h-4 text-[#FFB06B] fill-[#FFB06B]" aria-hidden="true" />
-                <span className="text-[16px] font-semibold text-[#F5F5F7] tabular-nums">
-                  {reviewStats.averageRating}
-                </span>
-                <span className="text-[12px] text-[#7C8393]">({reviewStats.count})</span>
+              <div className="flex items-center gap-2 rounded-full bg-[#080808] border border-white/[0.1] px-4 py-2">
+                <Star className="w-4 h-4 text-[#FFC08F] fill-[#FFC08F]" aria-hidden="true" />
+                <span className="text-[1rem] font-semibold text-[#F3EEE7] tabular-nums">{reviewStats.averageRating}</span>
+                <span className="text-[0.8125rem] text-[#ABA59D]">({reviewStats.count})</span>
               </div>
             ) : null}
           </div>
 
           {trainerReviews.length === 0 ? (
-            <p className="text-[14px] text-[#7C8393]">
-              No reviews posted yet for {trainer.displayName}.
-            </p>
+            <p className="text-[0.9375rem] text-[#ABA59D]">No reviews posted yet for {trainer.displayName}.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <ul className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {trainerReviews.map((rev) => {
-                const isOwn = activeClient && rev.clientId === activeClient.id;
+                const isOwn = viewerClient && rev.clientId === viewerClient.id;
                 return (
-                  <article
-                    key={rev.id}
-                    className="rounded-[18px] bg-[#101218] border border-white/[0.08] p-4 space-y-2"
-                  >
+                  <li key={rev.id} className="rounded-[18px] bg-[#080808] border border-white/[0.08] p-4 space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <div>
-                        <p className="text-[14px] font-semibold text-[#F5F5F7]">{rev.authorName}</p>
-                        <p className="text-[11px] text-[#7C8393]">
-                          Verified client · {formatIndiaDate(rev.createdAt.slice(0, 10), 'short')}
+                        <p className="text-[0.9375rem] font-semibold text-[#F3EEE7]">{rev.authorName}</p>
+                        <p className="text-[0.75rem] text-[#ABA59D]">
+                          {isDemoSandbox ? 'Sample review' : 'Verified client'} ·{' '}
+                          {formatIndiaDate(rev.createdAt.slice(0, 10), 'short')}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center gap-0.5 text-[#FFB06B] text-[13px] font-semibold tabular-nums">
-                          <Star className="w-3.5 h-3.5 fill-[#FFB06B]" aria-hidden="true" />
+                        <span className="inline-flex items-center gap-0.5 text-[#FFC08F] text-[0.875rem] font-semibold tabular-nums">
+                          <Star className="w-3.5 h-3.5 fill-[#FFC08F]" aria-hidden="true" />
                           {rev.rating}.0
+                          <span className="sr-only"> out of 5</span>
                         </span>
                         {isOwn ? (
                           <button
                             type="button"
                             onClick={() => void deleteTrainerReview(rev.id)}
                             aria-label="Delete your review"
-                            className="p-1.5 rounded-lg text-[#7C8393] hover:text-[#FF6B70] cursor-pointer"
+                            className="w-10 h-10 inline-flex items-center justify-center rounded-full text-[#ABA59D] hover:text-[#FF6B70] hover:bg-white/5 cursor-pointer"
                           >
-                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                            <Trash2 className="w-4 h-4" aria-hidden="true" />
                           </button>
                         ) : null}
                       </div>
                     </div>
-                    <p className="text-[14px] text-[#A2A8B5] leading-relaxed">{rev.comment}</p>
-                  </article>
+                    <p className="text-[0.9375rem] text-[#ABA59D] leading-relaxed">{rev.comment}</p>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
 
           {eligibleRelationship ? (
-            <form
-              onSubmit={(e) => void handleReviewSubmit(e)}
-              className="pt-4 border-t border-white/[0.08] space-y-3"
-            >
+            <form onSubmit={(e) => void handleReviewSubmit(e)} className="pt-4 border-t border-white/[0.08] space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[14px] font-semibold text-[#F5F5F7]">
+                <p className="text-[0.9375rem] font-semibold text-[#F3EEE7]">
                   {existingClientReview ? 'Update your verified review' : `Share feedback on ${trainer.displayName}`}
                 </p>
                 <div className="flex items-center gap-1" role="group" aria-label="Rating out of 5">
@@ -579,14 +639,12 @@ export const TrainerPublicProfilePage: React.FC = () => {
                       type="button"
                       onClick={() => setReviewRating(star)}
                       aria-label={`Rate ${star} out of 5`}
-                      className="p-1.5 cursor-pointer"
+                      aria-pressed={star === reviewRating}
+                      className="w-10 h-10 inline-flex items-center justify-center cursor-pointer rounded-full"
                     >
                       <Star
-                        className={`w-5 h-5 ${
-                          star <= reviewRating
-                            ? 'text-[#FFB06B] fill-[#FFB06B]'
-                            : 'text-[#7C8393]'
-                        }`}
+                        className={`w-5 h-5 ${star <= reviewRating ? 'text-[#FFC08F] fill-[#FFC08F]' : 'text-[#8E8880]'}`}
+                        aria-hidden="true"
                       />
                     </button>
                   ))}
@@ -600,18 +658,14 @@ export const TrainerPublicProfilePage: React.FC = () => {
                 rows={2}
                 placeholder="How has coaching structure, adherence, and support felt?"
               />
-              {reviewError ? <p className="text-[12px] text-[#FF6B70]">{reviewError}</p> : null}
-              <GlassButton type="submit" size="sm" disabled={reviewBusy}>
-                {reviewBusy
-                  ? 'Saving…'
-                  : existingClientReview
-                    ? 'Update review'
-                    : 'Publish verified review'}
-              </GlassButton>
+              {reviewError ? <p className="text-[0.8125rem] text-[#FF6B70]">{reviewError}</p> : null}
+              <button type="submit" className="mkt-btn mkt-btn-primary mkt-btn-sm" disabled={reviewBusy}>
+                {reviewBusy ? 'Saving…' : existingClientReview ? 'Update review' : 'Publish verified review'}
+              </button>
             </form>
           ) : null}
         </section>
-      </main>
+      </div>
 
       {/* Enrollment & Cashfree Checkout Sheet */}
       <GlassSheet
@@ -623,7 +677,9 @@ export const TrainerPublicProfilePage: React.FC = () => {
             ? checkoutPkg?.priceInr === 0
               ? 'Activate your free coaching tier immediately.'
               : 'Secure INR payment processed via Cashfree Payments. Your coaching workspace activates upon verification.'
-            : COPY.discovery.checkoutNotice
+            : isDemoSandbox
+              ? COPY.discovery.checkoutNotice
+              : 'Sign in with a FitPlus client account to enrol.'
         }
       >
         {checkoutPkg ? (
@@ -641,7 +697,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
               <p className="text-[13px] text-[#A2A8B5]">{checkoutPkg.summary}</p>
             </div>
 
-            {!activeClient ? (
+            {!viewerClient ? (
               <p className="text-[13px] text-[#FFB06B]">
                 Sign in with a FitPlus client account to enroll with {trainer.displayName}.
               </p>
@@ -659,7 +715,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
                 disabled={checkoutBusy}
                 onClick={() => void handleConfirmEnrollment()}
               >
-                {!activeClient ? (
+                {!viewerClient ? (
                   'Sign in & enroll'
                 ) : checkoutBusy ? (
                   'Opening Cashfree checkout…'
@@ -703,7 +759,7 @@ export const TrainerPublicProfilePage: React.FC = () => {
             <p className="text-[13px] font-medium text-[#F5F5F7]">Select a time</p>
             {availableSlots.length === 0 ? (
               <p className="text-[14px] text-[#A2A8B5]">
-                {!activeClient
+                {!viewerClient
                   ? 'Sign in as a client to view and book live consultation slots.'
                   : 'No open consultation slots right now.'}
               </p>
@@ -753,20 +809,20 @@ export const TrainerPublicProfilePage: React.FC = () => {
             <GlassButton type="button" variant="secondary" fullWidth onClick={() => setConsultOpen(false)}>
               Cancel
             </GlassButton>
-            {!activeClient ? (
+            {!viewerClient ? (
               <GlassButton
                 type="button"
                 fullWidth
                 onClick={() => {
                   setConsultOpen(false);
-                  navigate(`/auth?redirect=${encodeURIComponent(`/trainers/${trainer.slug}`)}`);
+                  navigate(signInPath);
                 }}
               >
                 Sign in to book
               </GlassButton>
             ) : (
               <GlassButton type="submit" fullWidth disabled={availableSlots.length === 0}>
-                {COPY.discovery.confirmBooking}
+                {isDemoSandbox ? COPY.discovery.confirmBooking : 'Confirm booking'}
               </GlassButton>
             )}
           </div>
@@ -780,6 +836,6 @@ export const TrainerPublicProfilePage: React.FC = () => {
         whatsappE164={trainer.whatsappBusinessE164}
         isDemoSandbox={isDemoSandbox}
       />
-    </div>
+    </MarketingLayout>
   );
 };
