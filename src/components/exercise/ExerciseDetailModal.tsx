@@ -62,7 +62,7 @@ export const ExerciseDetailModal: React.FC<ExerciseDetailModalProps> = ({
             <h2 className="text-xl sm:text-2xl font-bold text-white mt-0.5 flex items-center gap-2">
               <span>{exercise.name}</span>
               {exercise.isVerified && (
-                <ShieldCheck className="w-5 h-5 text-[#FF803E]" title="Certified Biomechanical Cues" />
+                <span title="Certified Biomechanical Cues" className="inline-flex"><ShieldCheck className="w-5 h-5 text-[#FF803E]" aria-label="Certified Biomechanical Cues" /></span>
               )}
             </h2>
             {exercise.aliases && exercise.aliases.length > 0 && (

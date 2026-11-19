@@ -702,6 +702,9 @@ export function mapScheduledReminder(row: Database['public']['Tables']['schedule
 
 export async function ensureUserDocument(
   fbUser: FirebaseAuthUser,
+  // Optional role hint; previously referenced but never declared, which threw a
+  // ReferenceError on the claims fallback path for new users.
+  overrides?: { role?: UserRole },
 ): Promise<FirebaseUserBootstrapResult> {
   const uid = fbUser.uid;
   const displayParts = (fbUser.displayName || 'FitPlus Member').trim().split(/\s+/);

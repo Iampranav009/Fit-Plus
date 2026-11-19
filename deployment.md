@@ -24,6 +24,14 @@ FitPlus deploys as a **Vite React SPA** combined with **Vercel Node.js Serverles
 
 Configure these in **Vercel Project Settings -> Environment Variables** (Production & Preview; never commit real secrets to Git):
 
+### Required at build time (client)
+| Variable | Purpose | Notes |
+|---|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL used by the browser client | **Build fails on Vercel if missing** (guard in `vite.config.ts`). Without it the app would ship but every live data call fails. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) key | Same build guard. Publishable keys are safe in the client bundle. |
+
+`VITE_*` values are inlined at build time, so changing them requires a redeploy.
+
 ### Required for Stage 3A Backend APIs
 | Variable | Purpose | Notes |
 |---|---|---|
@@ -85,3 +93,13 @@ Before going live with production traffic, complete these one-time Firebase Cons
    - **Cashfree Webhook Endpoint Test**: In Cashfree Merchant Dashboard -> **Payment Gateway** -> **Developers** -> **Webhooks**:
      - Register `https://fitplus-kappa.vercel.app/api/payments/webhook` with version `2025-01-01`.
      - Click **Send Test Webhook**. Dashboard reports **Success (HTTP 200)**.
+
+
+---
+
+## 5. Public site (marketing redesign) release checklist
+
+- Routes served by the SPA rewrite: `/`, `/welcome`, `/discover` (accepts `?q=`), `/trainers/:slug`, `/auth` (accepts `?mode=signup|reset` and `?redirect=`), `/demo` (client sandbox) and `/demo?role=coach` (Trainer Studio sandbox), `/privacy`, `/terms`, `/refund-policy`, `/disclaimer`.
+- Fonts (Barlow Condensed 600, Inter Variable, latin only) and images (AVIF/WebP variants) are bundled under `/assets/*` with immutable caching; no new external origins are needed.
+- The demo seed no longer marks first-time visitors as inside the sandbox. Anonymous visitors see the live public directory; `/app/*` and `/studio/*` redirect to `/auth` unless the visitor enters a demo.
+- After deploying, spot-check: homepage renders, `/discover` lists published coaches, `/demo` and `/demo?role=coach` open their workspaces, `/api/health` returns `ok: true`.

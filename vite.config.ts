@@ -1,10 +1,24 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import {defineConfig, loadEnv} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
+// Fail the Vercel build early (instead of shipping a blank page) when the
+// client-side Supabase settings are missing.
+const REQUIRED_CLIENT_ENV = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY'] as const;
+
+export default defineConfig(({ mode }) => {
+  if (process.env.VERCEL) {
+    const env = loadEnv(mode, process.cwd(), 'VITE_');
+    const missing = REQUIRED_CLIENT_ENV.filter((k) => !env[k] && !process.env[k]);
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing required environment variables for the Vercel build: ${missing.join(', ')}. ` +
+          'Add them in Vercel → Project Settings → Environment Variables.',
+      );
+    }
+  }
   return {
     plugins: [
       react(),
