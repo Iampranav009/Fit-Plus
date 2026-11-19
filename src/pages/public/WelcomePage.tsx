@@ -15,7 +15,7 @@ import { CTA } from '../../components/marketing/links';
 const CLIENT_STEPS = [
   {
     title: 'Find a coach',
-    body: 'Search the public directory by goal, city, language and coaching mode. Save coaches and compare up to three side by side.',
+    body: 'Search the public directory by goal, city or name. Each profile shows languages, coaching mode and INR packages. Save coaches and compare up to three side by side.',
   },
   {
     title: 'Request coaching or book a consultation',
@@ -52,8 +52,8 @@ const TRAINER_STEPS = [
 
 const DESTINATIONS = [
   { cta: CTA.findTrainer, opens: 'Public coach directory', mode: 'Public · no account needed' },
-  { cta: CTA.clientDemo, opens: 'Aarav’s sample client workspace', mode: 'Sample data · no account, nothing charged' },
-  { cta: CTA.coachDemo, opens: 'Coach Arjun’s sample Trainer Studio', mode: 'Sample data · no account, nothing charged' },
+  { cta: CTA.clientDemo, opens: 'A sample client workspace', mode: 'Sample data · no account, nothing charged' },
+  { cta: CTA.coachDemo, opens: 'A sample Trainer Studio', mode: 'Sample data · no account, nothing charged' },
   { cta: CTA.createAccount, opens: 'Account creation (Google or email)', mode: 'Live account · email verification required' },
   { cta: CTA.signIn, opens: 'Sign in to an existing account', mode: 'Live account' },
 ] as const;

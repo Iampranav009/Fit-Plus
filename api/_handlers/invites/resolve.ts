@@ -1,5 +1,5 @@
 ﻿import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getFirebaseAdminContext, isFirebaseAdminConfigured } from '../../_lib/firebaseAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from '../../_lib/supabaseAdmin.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -12,76 +12,88 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ ok: false, state: 'not_found', error: 'Invalid invite token format.' });
   }
 
-  if (!isFirebaseAdminConfigured()) {
+  if (!isSupabaseAdminConfigured()) {
     return res.status(200).json({ ok: true, source: 'client_fallback', state: 'unverified_server' });
   }
 
   try {
-    const { db } = getFirebaseAdminContext();
-    const inviteSnap = await db.collection('invites').doc(rawToken).get();
-    if (!inviteSnap.exists) {
+    const db = getSupabaseAdminClient();
+
+    const { data: inv } = await db
+      .from('trainer_invites')
+      .select('*')
+      .eq('token', rawToken)
+      .maybeSingle();
+
+    if (!inv) {
       return res.status(200).json({ ok: true, state: 'not_found' });
     }
 
-    const inv = inviteSnap.data()!;
-    const trainerSnap = inv.trainerId
-      ? await db.collection('trainers').doc(String(inv.trainerId)).get()
-      : null;
-    const pkgQuery = inv.trainerId
-      ? await db
-          .collection('packages')
-          .where('trainerId', '==', String(inv.trainerId))
-          .where('status', '==', 'active')
-          .get()
-      : null;
+    if (inv.status === 'revoked') {
+      return res.status(200).json({ ok: true, source: 'supabase_admin', state: 'revoked' });
+    }
+    if (inv.status === 'redeemed') {
+      return res.status(200).json({ ok: true, source: 'supabase_admin', state: 'redeemed' });
+    }
 
-    const trainer = trainerSnap?.exists
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const isExpired = inv.expires_at && inv.expires_at.slice(0, 10) < todayKey;
+    const state = isExpired ? 'expired' : 'active';
+
+    const [trRes, pkgRes] = await Promise.all([
+      db.from('trainer_profiles').select('*').eq('user_id', inv.trainer_user_id).maybeSingle(),
+      db.from('coaching_packages').select('*').eq('trainer_user_id', inv.trainer_user_id).eq('status', 'active'),
+    ]);
+
+    const tr = trRes.data;
+    const trainer = tr
       ? {
-          id: trainerSnap.id,
-          slug: trainerSnap.data()!.slug,
-          displayName: trainerSnap.data()!.displayName,
-          headline: trainerSnap.data()!.headline,
-          city: trainerSnap.data()!.city,
-          languages: trainerSnap.data()!.languages || [],
-          experienceYears: trainerSnap.data()!.experienceYears || 1,
-          avatarKey: trainerSnap.data()!.avatarKey || 'coachArjun',
-          coverKey: trainerSnap.data()!.coverKey || 'coachCover',
-          isVerified: Boolean(trainerSnap.data()!.verificationStatus === 'verified'),
+          id: tr.id,
+          slug: tr.slug,
+          displayName: tr.display_name,
+          headline: tr.headline,
+          bio: tr.bio,
+          city: tr.city,
+          coachingMode: tr.coaching_mode,
+          specialties: tr.specialties || [],
+          languages: tr.languages || [],
+          certifications: tr.certifications || [],
+          experienceYears: tr.experience_years || 1,
+          avatarKey: tr.avatar_key || '',
+          coverKey: tr.cover_key || '',
+          photoUrl: tr.photo_url || undefined,
+          verificationStatus: tr.verification_status || 'unverified',
+          isDemoVerified: tr.is_demo_verified || false,
+          isPublished: tr.is_published,
+          acceptingClients: tr.accepting_clients,
+          whatsappBusinessE164: tr.whatsapp_business_e164 || undefined,
         }
       : null;
 
-    const packages = (pkgQuery?.docs || []).map((docSnap) => {
-      const p = docSnap.data();
-      return {
-        id: docSnap.id,
-        trainerId: p.trainerId,
-        name: p.name,
-        summary: p.summary,
-        priceInr: p.priceInr,
-        cadence: p.cadence,
-        features: p.features || [],
-        status: p.status,
-      };
-    });
-
-    const expiresAt = String(inv.expiresAt || '');
-    const todayKey = new Date().toISOString().slice(0, 10);
-    let state: 'active' | 'expired' | 'redeemed' | 'revoked' = inv.status || 'active';
-    if (state === 'active' && expiresAt && expiresAt.slice(0, 10) < todayKey) {
-      state = 'expired';
-    }
+    const packages = (pkgRes.data || []).map((p) => ({
+      id: p.id,
+      trainerId: p.trainer_id,
+      name: p.name,
+      summary: p.summary || '',
+      priceInr: p.price_inr,
+      cadence: p.cadence,
+      features: p.features || [],
+      status: p.status,
+    }));
 
     return res.status(200).json({
       ok: true,
-      source: 'firestore_admin',
+      source: 'supabase_admin',
       state,
       invite: {
-        id: inviteSnap.id,
-        token: inv.token || inviteSnap.id,
-        trainerId: inv.trainerId,
-        suggestedPackageId: inv.suggestedPackageId || undefined,
+        id: inv.id,
+        token: inv.token,
+        trainerId: inv.trainer_id,
+        clientEmailOrLabel: inv.client_email_or_label,
+        suggestedPackageId: inv.suggested_package_id || undefined,
         status: state,
-        expiresAt,
+        expiresAt: inv.expires_at,
+        createdAt: inv.created_at,
       },
       trainer,
       packages,

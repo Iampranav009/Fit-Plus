@@ -216,7 +216,7 @@ const ProtectedRoute: React.FC<{
 };
 
 const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthReady, firebaseUser, isEmailVerified, isDemoSandbox } = useApp();
+  const { store, isAuthReady, firebaseUser, isEmailVerified, isCloudSynced, isDemoSandbox } = useApp();
   const location = useLocation();
 
   if (!isAuthReady) {
@@ -241,12 +241,21 @@ const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) 
     );
   }
 
+  if (isCloudSynced && store.session.onboardingCompleted) {
+    return (
+      <Navigate
+        to={store.session.activeRole === 'trainer' ? '/studio/overview' : '/app/home'}
+        replace
+      />
+    );
+  }
+
   return <>{children}</>;
 };
 
 /**
- * /demo            → sample client workspace (Aarav)
- * /demo?role=coach → sample Trainer Studio (Coach Arjun)
+ * /demo            → sample client workspace (Demo Client)
+ * /demo?role=coach → sample Trainer Studio (Demo Trainer)
  * Both reuse the same sandbox entry points as the demo buttons on /auth.
  */
 const DemoEntryPage: React.FC = () => {
@@ -258,10 +267,10 @@ const DemoEntryPage: React.FC = () => {
 
   useEffect(() => {
     if (isCoach) {
-      startDemoAsRole('trainer', 'usr_trainer_arjun');
+      startDemoAsRole('trainer', 'usr_demo_trainer');
       navigate('/studio/overview', { replace: true });
     } else {
-      startDemoAsRole('client', 'usr_client_aarav');
+      startDemoAsRole('client', 'usr_demo_client');
       navigate('/app/home', { replace: true });
     }
   }, [startDemoAsRole, navigate, isCoach]);

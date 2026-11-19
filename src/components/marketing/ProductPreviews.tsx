@@ -229,10 +229,10 @@ const DIRECTORY_ROWS = [
 ];
 
 export const DirectoryPreview: React.FC<{ className?: string; highlight?: boolean }> = ({ className, highlight }) => (
-  <PreviewFrame title="Find a trainer" subtitle="Directory · filtered by goal and language" className={className} badge="Example profiles">
+  <PreviewFrame title="Find a trainer" subtitle="Directory · searched for “strength”" className={className} badge="Example profiles">
     <div className="flex items-center gap-2 rounded-full bg-[#080808] border border-white/[0.14] px-3.5 min-h-[40px] text-[0.8125rem] text-[#ABA59D]">
       <Search className="w-4 h-4" aria-hidden="true" />
-      Strength · Hindi · Online
+      strength
     </div>
     <ul className="mt-3 space-y-2">
       {DIRECTORY_ROWS.map((row, i) => (

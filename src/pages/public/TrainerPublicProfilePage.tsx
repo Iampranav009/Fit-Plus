@@ -57,13 +57,18 @@ export const TrainerPublicProfilePage: React.FC = () => {
   const viewerClient = hasSession ? activeClient : undefined;
   const viewerCoach = hasSession ? activeCoach : undefined;
 
-  const trainersSource = isCloudSynced || isDemoSandbox ? store.trainers : publicDirectory.trainers;
-  const packagesSource = isCloudSynced || isDemoSandbox ? store.packages : publicDirectory.packages;
+  // Same source as /discover: the public directory for real data, the local store only
+  // for the demo sandbox. A signed-in trainer viewing their own unpublished profile
+  // falls back to their cloud workspace.
+  const directoryTrainer = isDemoSandbox
+    ? store.trainers.find((t) => t.slug === slug)
+    : publicDirectory.trainers.find((t) => t.slug === slug);
+  const workspaceTrainer =
+    !directoryTrainer && isCloudSynced ? store.trainers.find((t) => t.slug === slug) : undefined;
+  const useWorkspace = Boolean(workspaceTrainer);
+  const packagesSource = isDemoSandbox || useWorkspace ? store.packages : publicDirectory.packages;
 
-  const trainer = useMemo(
-    () => trainersSource.find((t) => t.slug === slug),
-    [trainersSource, slug],
-  );
+  const trainer = directoryTrainer ?? workspaceTrainer;
 
   const trainerPackages = useMemo(() => {
     if (!trainer) return [];

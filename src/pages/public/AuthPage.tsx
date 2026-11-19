@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CheckCircle2,
@@ -28,6 +28,7 @@ export const AuthPage: React.FC = () => {
   const {
     store,
     firebaseUser,
+    isAuthReady,
     isEmailVerified,
     isPlatformAdmin,
     isCloudSynced,
@@ -44,6 +45,15 @@ export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTarget = useMemo(() => getSafeRedirect(searchParams.get('redirect')), [searchParams]);
+
+  // Auto-redirect if already authenticated and onboarded
+  useEffect(() => {
+    if (!isAuthReady || !isCloudSynced || !store.session.onboardingCompleted) return;
+    const dest =
+      redirectTarget ??
+      (isPlatformAdmin ? '/admin' : store.session.activeRole === 'trainer' ? '/studio/overview' : '/app/home');
+    navigate(dest, { replace: true });
+  }, [isAuthReady, isCloudSynced, store.session.onboardingCompleted]);
 
   // `?mode=signup` / `?mode=reset` deep-link straight to account creation or recovery.
   const [emailMode, setEmailMode] = useState<EmailAuthMode>(() => {
@@ -487,35 +497,24 @@ export const AuthPage: React.FC = () => {
                     size="sm"
                     fullWidth
                     onClick={() => {
-                      startDemoAsRole('client', 'usr_client_aarav');
+                      startDemoAsRole('client', 'usr_demo_client');
                       navigate('/app/home');
                     }}
                   >
-                    Demo: Client (Aarav)
+                    Demo: Client
                   </GlassButton>
                   <GlassButton
                     variant="secondary"
                     size="sm"
                     fullWidth
                     onClick={() => {
-                      startDemoAsRole('trainer', 'usr_trainer_arjun');
+                      startDemoAsRole('trainer', 'usr_demo_trainer');
                       navigate('/studio/overview');
                     }}
                   >
-                    Demo: Coach (Arjun)
+                    Demo: Coach
                   </GlassButton>
                 </div>
-                <GlassButton
-                  variant="tertiary"
-                  size="sm"
-                  fullWidth
-                  onClick={() => {
-                    startDemoAsRole('client', 'usr_client_kavya');
-                    navigate('/app/home');
-                  }}
-                >
-                  Demo: Independent Client (Kavya)
-                </GlassButton>
               </div>
             </>
           )}

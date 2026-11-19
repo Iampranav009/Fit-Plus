@@ -200,7 +200,7 @@ const ForTrainers: React.FC = () => (
         <div className="max-w-[40rem]">
           <p className="text-[1.125rem] font-semibold text-[#F3EEE7]">Try it with sample clients first.</p>
           <p className="mkt-body mt-1">
-            The coach demo opens Coach Arjun’s Trainer Studio with sample clients. When you’re ready, create an account,
+            The coach demo opens a sample Trainer Studio on this device, with no account needed. When you’re ready, create an account,
             verify your email and choose “I’m here to coach” to set up your studio profile.
           </p>
         </div>
@@ -222,7 +222,7 @@ const ForTrainers: React.FC = () => (
 
 const VISIBLE_BEFORE = [
   { Icon: Target, title: 'Specialties', body: 'Weight management, strength, mobility, nutrition and more, in the coach’s own words.' },
-  { Icon: Languages, title: 'Languages', body: 'Hindi, English, Marathi, Tamil, Punjabi… filter for a coach you can talk to easily.' },
+  { Icon: Languages, title: 'Languages', body: 'Each profile lists the languages a coach works in, so you can pick one you can talk to easily.' },
   { Icon: MapPin, title: 'Coaching mode & city', body: 'Online, in person or hybrid, with the city for in-person sessions.' },
   { Icon: IndianRupee, title: 'Package prices in INR', body: 'Monthly or quarterly packages with what’s included, before you request anything.' },
   { Icon: CalendarCheck, title: 'Check-in cadence', body: 'How many check-in calls each package includes, and its length in days.' },
@@ -232,15 +232,15 @@ const VISIBLE_BEFORE = [
 const FAQ = [
   {
     q: 'How do I choose a coach?',
-    a: 'Start with your goal and language, then shortlist two or three coaches. You can save coaches and compare up to three side by side, including package prices and check-in calls. Book a consultation or request coaching from the profile you like.',
+    a: 'Search by goal, city or name, then shortlist two or three coaches. You can save coaches and compare up to three side by side, including package prices and check-in calls. Book a consultation or request coaching from the profile you like.',
   },
   {
     q: 'What’s the difference between online and in-person coaching?',
-    a: 'Online coaches plan your workouts and meals and review check-ins remotely. In-person and hybrid coaches also train with you in their city. Each profile shows its mode, so you can filter for it.',
+    a: 'Online coaches plan your workouts and meals and review check-ins remotely. In-person and hybrid coaches also train with you in their city. Each profile shows its coaching mode and city.',
   },
   {
     q: 'Is the demo real?',
-    a: 'The demo is a sandbox with sample people (Aarav, Coach Arjun and others) so you can click around safely. Its profiles, reviews, “demo verified” badges and package prices are examples. Nothing is charged and no account is created; changes stay on your device.',
+    a: 'The demo is a sandbox with a sample client and a sample coach so you can click around safely. Anything it shows, including profiles, reviews, “demo verified” badges and package prices, is an example. Nothing is charged and no account is created; changes stay on your device.',
   },
   {
     q: 'What happens when I click each button?',

@@ -4,9 +4,9 @@
  *
  * Mode notes (verified against App.tsx / AuthPage.tsx):
  *  - /discover            Public coach directory. No account needed.
- *  - /demo                Sample client workspace (Aarav). Offline sample data, no account.
- *  - /demo?role=coach     Sample Trainer Studio (Coach Arjun). Same sandbox entry as the
- *                         "Demo: Coach (Arjun)" option on /auth.
+ *  - /demo                Sample client workspace (Demo Client). Offline sample data, no account.
+ *  - /demo?role=coach     Sample Trainer Studio (Demo Trainer). Same sandbox entry as the
+ *                         "Demo: Coach" option on /auth.
  *  - /auth                Live sign-in (Google or email).
  *  - /auth?mode=signup    Live account creation. After email verification the user picks
  *                         "I'm here to coach" or "I'm here to get fitter" on /onboarding/role.

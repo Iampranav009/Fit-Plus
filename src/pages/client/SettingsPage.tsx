@@ -96,10 +96,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   const clientPersonas = [
-    { id: 'usr_client_aarav', label: 'Aarav Mehta — Active client with plan & streak' },
-    { id: 'usr_client_ananya', label: 'Ananya Iyer — Recovery day fixture' },
-    { id: 'usr_client_karan', label: 'Karan Malhotra — No commitments today' },
-    { id: 'usr_client_kavya', label: 'Kavya Sharma — Independent client (no coach)' },
+    { id: 'usr_demo_client', label: 'Demo Client' },
   ];
 
   return (
@@ -379,7 +376,7 @@ export const SettingsPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    switchDemoPersona('usr_trainer_arjun');
+                    switchDemoPersona('usr_demo_trainer');
                     navigate('/studio/overview');
                   }}
                   className={`min-h-[48px] px-4 py-2.5 rounded-[14px] border text-left text-[14px] font-medium cursor-pointer transition-colors ${
@@ -388,7 +385,7 @@ export const SettingsPage: React.FC = () => {
                       : 'bg-[#101218] border-white/[0.08] text-[#F5F5F7] hover:border-[#FF803E]'
                   }`}
                 >
-                  Switch to Trainer Studio — Arjun Kulkarni (7 linked clients)
+                  Switch to Trainer Studio
                 </button>
               </div>
             </section>

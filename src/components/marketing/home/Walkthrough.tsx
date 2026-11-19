@@ -9,8 +9,8 @@ const STEPS = [
     label: 'Find or connect',
     title: 'Find a coach, or connect with yours.',
     body:
-      'Filter the directory by goal, city, language and online or in-person coaching, then compare INR packages. Already working with a trainer? Join from their invite link.',
-    state: 'Directory filtered to strength coaches who speak Hindi.',
+      'Search the directory by goal, city or name, then compare languages, coaching mode and INR packages on each profile. Already working with a trainer? Join from their invite link.',
+    state: 'Directory searched for strength coaches.',
   },
   {
     key: 'follow',

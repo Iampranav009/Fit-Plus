@@ -143,8 +143,8 @@ export const AudiencePaths: React.FC = () => {
                   </div>
                   <p className="mt-4 mkt-small max-w-[30rem]">
                     {t.id === 'clients'
-                      ? 'The directory is public, no account needed. The client demo opens Aarav’s sample workspace.'
-                      : 'The coach demo opens Coach Arjun’s sample Trainer Studio. No account is created.'}
+                      ? 'The directory is public, no account needed. The client demo opens a sample workspace.'
+                      : 'The coach demo opens a sample Trainer Studio. No account is created.'}
                   </p>
                 </div>
                 <div className="lg:col-span-7 relative">
