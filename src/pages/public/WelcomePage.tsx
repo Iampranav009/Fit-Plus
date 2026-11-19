@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 import {
   AssignPlanPreview,
   CheckInReviewPreview,
@@ -11,6 +12,7 @@ import {
 } from '../../components/marketing/ProductPreviews';
 import { Reveal, stagger } from '../../components/marketing/Reveal';
 import { CTA } from '../../components/marketing/links';
+import { Breadcrumb } from '../../components/marketing/Breadcrumb';
 
 const CLIENT_STEPS = [
   {
@@ -81,17 +83,25 @@ const StepList: React.FC<{ steps: typeof CLIENT_STEPS }> = ({ steps }) => (
 );
 
 export const WelcomePage: React.FC = () => {
-  useEffect(() => {
-    const prev = document.title;
-    document.title = 'How FitPlus works — for clients and trainers';
-    return () => {
-      document.title = prev;
-    };
-  }, []);
-
   return (
     <MarketingLayout>
-      <section aria-labelledby="hiw-title" className="mkt-container pt-12 pb-12 lg:pt-20 lg:pb-16">
+      <SEOHelmet
+        title="How FitPlus works — for clients and trainers"
+        description="See how FitPlus connects clients with independent fitness coaches in India. Browse coaches, book consultations, follow daily plans and check in weekly."
+        path="/welcome"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fitplus-kappa.vercel.app/' },
+            { '@type': 'ListItem', position: 2, name: 'How it works' },
+          ],
+        }}
+      />
+      <div className="mkt-container pt-6">
+        <Breadcrumb items={[{ label: 'How It Works' }]} />
+      </div>
+      <section aria-labelledby="hiw-title" className="mkt-container pt-6 pb-12 lg:pt-10 lg:pb-16">
         <p className="mkt-eyebrow">How it works</p>
         <h1 id="hiw-title" className="mkt-h1 mt-4 max-w-[16ch]">
           One plan, shared by you and your coach.

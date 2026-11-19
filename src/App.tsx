@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { MotionConfig } from 'motion/react';
 import { AppProvider, useApp } from './context/AppContext';
 import type { UserRole } from './types/domain';
@@ -8,6 +9,11 @@ import { GlassButton } from './components/ui/GlassButton';
 import { BrandMark } from './components/ui/BrandMark';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { OfflineIndicator } from './components/ui/OfflineIndicator';
+import { useDocumentTitle } from './hooks/useDocumentTitle';
+
+const MarketingLayout = React.lazy(() =>
+  import('./components/marketing/MarketingLayout').then((m) => ({ default: m.MarketingLayout })),
+);
 
 // Public pages
 const LandingPage = React.lazy(() => import('./pages/public/LandingPage').then((m) => ({ default: m.LandingPage })));
@@ -259,6 +265,7 @@ const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) 
  * Both reuse the same sandbox entry points as the demo buttons on /auth.
  */
 const DemoEntryPage: React.FC = () => {
+  useDocumentTitle('FitPlus | Demo');
   const { startDemoAsRole } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
@@ -278,40 +285,46 @@ const DemoEntryPage: React.FC = () => {
   return <AuthLoadingSplash />;
 };
 
-const NotFoundPage: React.FC = () => (
-  <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6 text-center gap-4">
-    <BrandMark />
-    <p className="text-[13px] font-semibold tracking-wider uppercase text-[#FF803E]">404</p>
-    <h1 className="text-[30px] font-semibold tracking-[-0.02em]">Page not found</h1>
-    <p className="text-[14px] text-[#A2A8B5] max-w-md">
-      The FitPlus page you requested does not exist or may have moved.
-    </p>
-    <div className="flex flex-wrap justify-center gap-3 pt-1">
-      <Link
-        to="/"
-        className="min-h-[44px] px-5 py-2 rounded-[14px] bg-[#FF803E] text-[#101218] text-[14px] font-semibold inline-flex items-center hover:bg-[#FF9259] transition-colors"
-      >
-        Go to FitPlus home
-      </Link>
-      <Link
-        to="/discover"
-        className="min-h-[44px] px-5 py-2 rounded-[14px] glass-control text-[#F5F5F7] text-[14px] font-medium inline-flex items-center hover:border-white/20 transition-colors"
-      >
-        Browse coaches
-      </Link>
-      <Link
-        to="/auth"
-        className="min-h-[44px] px-5 py-2 rounded-[14px] glass-control text-[#F5F5F7] text-[14px] font-medium inline-flex items-center hover:border-white/20 transition-colors"
-      >
-        Sign in
-      </Link>
-    </div>
-  </div>
-);
+const NotFoundPage: React.FC = () => {
+  useDocumentTitle('FitPlus | Page Not Found');
+  return (
+    <MarketingLayout>
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-20 text-center gap-4">
+        <BrandMark />
+        <p className="text-[13px] font-semibold tracking-wider uppercase text-[#FF803E]">404</p>
+        <h1 className="text-[30px] font-semibold tracking-[-0.02em]">Page not found</h1>
+        <p className="text-[14px] text-[#A2A8B5] max-w-md">
+          The FitPlus page you requested does not exist or may have moved.
+        </p>
+        <div className="flex flex-wrap justify-center gap-3 pt-1">
+          <Link
+            to="/"
+            className="min-h-[44px] px-5 py-2 rounded-[14px] bg-[#FF803E] text-[#101218] text-[14px] font-semibold inline-flex items-center hover:bg-[#FF9259] transition-colors"
+          >
+            Go to FitPlus home
+          </Link>
+          <Link
+            to="/discover"
+            className="min-h-[44px] px-5 py-2 rounded-[14px] glass-control text-[#F5F5F7] text-[14px] font-medium inline-flex items-center hover:border-white/20 transition-colors"
+          >
+            Browse coaches
+          </Link>
+          <Link
+            to="/auth"
+            className="min-h-[44px] px-5 py-2 rounded-[14px] glass-control text-[#F5F5F7] text-[14px] font-medium inline-flex items-center hover:border-white/20 transition-colors"
+          >
+            Sign in
+          </Link>
+        </div>
+      </div>
+    </MarketingLayout>
+  );
+};
 
 export default function App() {
   return (
     <ErrorBoundary>
+      <HelmetProvider>
       <MotionConfig reducedMotion="user">
         <AppProvider>
           <BrowserRouter>
@@ -664,6 +677,7 @@ export default function App() {
         </BrowserRouter>
       </AppProvider>
     </MotionConfig>
+      </HelmetProvider>
     </ErrorBoundary>
   );
 }

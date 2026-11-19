@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 import {
-  ArrowLeft,
   BadgeCheck,
   Calendar,
   Check,
@@ -22,6 +22,7 @@ import {
 import { formatIndiaDate, formatINR } from '../../lib/date';
 import { launchCashfreeCheckout } from '../../lib/cashfree';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
+import { Breadcrumb } from '../../components/marketing/Breadcrumb';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
 import { GlassSheet } from '../../components/ui/GlassSheet';
@@ -125,33 +126,38 @@ export const TrainerPublicProfilePage: React.FC = () => {
     }
   }, [existingClientReview]);
 
-  useEffect(() => {
-    if (!trainer) return;
-    const prevTitle = document.title;
-    document.title = `${trainer.displayName} — FitPlus Coach (${trainer.city})`;
-    return () => {
-      document.title = prevTitle;
-    };
-  }, [trainer]);
-
-  const jsonLd = useMemo(() => {
-    if (!trainer) return null;
-    const base: Record<string, unknown> = {
-      '@context': 'https://schema.org',
-      '@type': 'ProfessionalService',
-      name: trainer.displayName,
-      description: trainer.headline || trainer.bio,
-      areaServed: trainer.city,
-      url: typeof window !== 'undefined' ? window.location.href : `https://fitplus-kappa.vercel.app/trainers/${trainer.slug}`,
-    };
+  const profileJsonLd = useMemo(() => {
+    if (!trainer) return undefined;
+    const ld: Record<string, unknown>[] = [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'ProfilePage',
+        mainEntity: {
+          '@type': 'Person',
+          name: trainer.displayName,
+          description: trainer.headline || trainer.bio,
+          address: { '@type': 'PostalAddress', addressLocality: trainer.city },
+          url: `https://fitplus-kappa.vercel.app/trainers/${trainer.slug}`,
+        },
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fitplus-kappa.vercel.app/' },
+          { '@type': 'ListItem', position: 2, name: 'Trainer Directory', item: 'https://fitplus-kappa.vercel.app/discover' },
+          { '@type': 'ListItem', position: 3, name: trainer.displayName },
+        ],
+      },
+    ];
     if (reviewStats.count > 0) {
-      base.aggregateRating = {
+      (ld[0].mainEntity as Record<string, unknown>).aggregateRating = {
         '@type': 'AggregateRating',
         ratingValue: reviewStats.averageRating,
         reviewCount: reviewStats.count,
       };
     }
-    return JSON.stringify(base);
+    return ld;
   }, [trainer, reviewStats]);
 
   if (!trainer) {
@@ -328,18 +334,23 @@ export const TrainerPublicProfilePage: React.FC = () => {
 
   return (
     <MarketingLayout>
-      {jsonLd ? (
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
-      ) : null}
+      {trainer && (
+        <SEOHelmet
+          title={`${trainer.displayName} — FitPlus Coach (${trainer.city})`}
+          description={trainer.headline || trainer.bio || `Personal fitness coach on FitPlus in ${trainer.city}.`}
+          path={`/trainers/${trainer.slug}`}
+          ogType="profile"
+          jsonLd={profileJsonLd}
+        />
+      )}
 
       <div className="mkt-container max-w-[1120px] pt-4 pb-20">
-        <Link
-          to="/discover"
-          className="inline-flex items-center gap-1.5 text-[0.9375rem] text-[#ABA59D] hover:text-[#F3EEE7] min-h-[44px] transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          All coaches
-        </Link>
+        <Breadcrumb
+          items={[
+            { label: 'Find a Trainer', to: '/discover' },
+            { label: trainer.displayName },
+          ]}
+        />
 
         {isDemoSandbox ? (
           <p className="mt-2 rounded-[14px] border border-[#FF803E]/30 bg-[#FF803E]/[0.07] px-4 py-3 text-[0.875rem] text-[#F3EEE7]">

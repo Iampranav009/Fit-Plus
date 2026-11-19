@@ -16,11 +16,6 @@
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://fitplus-kappa.vercel.app/auth</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://fitplus-kappa.vercel.app/privacy</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
@@ -40,4 +35,5 @@
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
+  <!-- TODO: Add /trainers/:slug entries once real trainer slugs are available from the public directory API -->
 </urlset>
