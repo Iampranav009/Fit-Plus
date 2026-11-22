@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Dumbbell, Users } from 'lucide-react';
+import React from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Dumbbell } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
-import type { UserRole } from '../../types/domain';
 import { BrandMark } from '../../components/ui/BrandMark';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { MediaImage } from '../../components/ui/MediaImage';
@@ -11,15 +10,22 @@ import { MediaImage } from '../../components/ui/MediaImage';
 export const RoleSelectPage: React.FC = () => {
   const { store } = useApp();
   const navigate = useNavigate();
-  const [role, setRole] = useState<UserRole>('client');
+  const [searchParams] = useSearchParams();
+  const isTrainerInviteFlow = searchParams.get('role') === 'trainer';
 
   const handleContinue = () => {
-    if (role === 'client') {
-      navigate('/onboarding/client/basics');
-    } else {
+    if (isTrainerInviteFlow) {
       navigate('/onboarding/trainer/profile');
+    } else {
+      navigate('/onboarding/client/basics');
     }
   };
+
+  // Trainer invite flow skips role selection entirely
+  if (isTrainerInviteFlow) {
+    handleContinue();
+    return null;
+  }
 
   return (
     <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col">
@@ -42,73 +48,31 @@ export const RoleSelectPage: React.FC = () => {
         <div className="lg:col-span-7 flex flex-col gap-6">
           {store.session.pendingInviteToken ? (
             <p className="text-[13px] text-[#FFB06B]">
-              Invite token {store.session.pendingInviteToken} attached — choose "I'm here to get fitter" to continue.
+              Invite token {store.session.pendingInviteToken} attached — complete your profile to continue.
             </p>
           ) : null}
 
           <div>
             <h1 className="text-[30px] sm:text-[36px] font-semibold tracking-[-0.025em] text-[#F5F5F7]">
-              {COPY.public.roleHeadline}
+              Set up your FitPlus profile
             </h1>
             <p className="mt-2 text-[15px] text-[#A2A8B5]">
               {COPY.public.demoAuthBody}
             </p>
           </div>
 
-          <div className="grid gap-3">
-            <button
-              type="button"
-              onClick={() => setRole('client')}
-              aria-pressed={role === 'client'}
-              className={`text-left rounded-[20px] p-5 flex items-start gap-4 cursor-pointer transition-all ${
-                role === 'client'
-                  ? 'glass-nav border border-[#FF803E]/60 [box-shadow:inset_0_1px_0_rgba(255,128,62,0.18),0_0_20px_-6px_rgba(255,128,62,0.22)]'
-                  : 'surface-card border border-transparent hover:border-white/[0.14]'
-              }`}
-            >
-              <div className={`w-11 h-11 rounded-[12px] border flex items-center justify-center shrink-0 transition-colors ${
-                role === 'client'
-                  ? 'bg-[#FF803E]/16 border-[#FF803E]/36 text-[#FF803E]'
-                  : 'surface-elevated border-white/[0.08] text-[#A2A8B5]'
-              }`}>
-                <Dumbbell className="w-5 h-5" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="text-[17px] font-semibold text-[#F5F5F7]">
-                  {COPY.public.roleClient}
-                </p>
-                <p className="mt-1 text-[14px] text-[#A2A8B5]">
-                  Follow daily workout, meal and habit commitments, track streaks, or connect with an independent coach.
-                </p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRole('trainer')}
-              aria-pressed={role === 'trainer'}
-              className={`text-left rounded-[20px] p-5 flex items-start gap-4 cursor-pointer transition-all ${
-                role === 'trainer'
-                  ? 'glass-nav border border-[#FF803E]/60 [box-shadow:inset_0_1px_0_rgba(255,128,62,0.18),0_0_20px_-6px_rgba(255,128,62,0.22)]'
-                  : 'surface-card border border-transparent hover:border-white/[0.14]'
-              }`}
-            >
-              <div className={`w-11 h-11 rounded-[12px] border flex items-center justify-center shrink-0 transition-colors ${
-                role === 'trainer'
-                  ? 'bg-[#FF803E]/16 border-[#FF803E]/36 text-[#FF803E]'
-                  : 'surface-elevated border-white/[0.08] text-[#A2A8B5]'
-              }`}>
-                <Users className="w-5 h-5" aria-hidden="true" />
-              </div>
-              <div>
-                <p className="text-[17px] font-semibold text-[#F5F5F7]">
-                  {COPY.public.roleTrainer}
-                </p>
-                <p className="mt-1 text-[14px] text-[#A2A8B5]">
-                  Set up your coaching storefront, INR packages, client assignments, and consultation schedule.
-                </p>
-              </div>
-            </button>
+          <div className="rounded-[20px] p-5 glass-nav border border-[#FF803E]/60 [box-shadow:inset_0_1px_0_rgba(255,128,62,0.18),0_0_20px_-6px_rgba(255,128,62,0.22)] flex items-start gap-4">
+            <div className="w-11 h-11 rounded-[12px] border bg-[#FF803E]/16 border-[#FF803E]/36 text-[#FF803E] flex items-center justify-center shrink-0">
+              <Dumbbell className="w-5 h-5" aria-hidden="true" />
+            </div>
+            <div>
+              <p className="text-[17px] font-semibold text-[#F5F5F7]">
+                {COPY.public.roleClient}
+              </p>
+              <p className="mt-1 text-[14px] text-[#A2A8B5]">
+                Follow daily workout, meal and habit commitments, track streaks, or connect with an independent coach.
+              </p>
+            </div>
           </div>
 
           <GlassButton fullWidth onClick={handleContinue}>

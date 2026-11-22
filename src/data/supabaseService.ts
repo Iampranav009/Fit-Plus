@@ -771,6 +771,7 @@ export async function ensureUserDocument(
   }
 
   // Attempt backend claims and role coordination via /api/auth/provision-claims
+  let resolvedRole: UserRole = isPlatformAdmin ? 'admin' : 'client';
   try {
     const idToken = await fbUser.getIdToken();
     const provRes = await fetch('/api/auth/provision-claims', {
@@ -783,38 +784,34 @@ export async function ensureUserDocument(
     if (provRes.ok) {
       const provData = await provRes.json();
       if (provData.claims?.is_admin) isPlatformAdmin = true;
-      const resolvedRole = (provData.claims?.user_role || (isPlatformAdmin ? 'admin' : (overrides?.role || 'client'))) as UserRole;
-      return {
-        user: {
-          id: uid,
-          firstName: fallbackFirstName,
-          lastName: fallbackLastName,
-          email: fallbackEmail,
-          role: resolvedRole,
-          timezone: 'Asia/Kolkata',
-          locale: 'en-IN',
-          isAdultConfirmed: false,
-          privacyConsentAccepted: false,
-          createdAt: new Date().toISOString(),
-        },
-        onboardingCompleted: false,
-        celebratedDateKeys: [],
-        emailVerified: true,
-        isPlatformAdmin,
-      };
+      resolvedRole = (provData.claims?.user_role || (isPlatformAdmin ? 'admin' : 'client')) as UserRole;
     }
   } catch {
     // fallback below
   }
 
-  // Fallback user object
+  // Create the app_users row so onboarding state persists across sessions
+  try {
+    await supabase.from('app_users').upsert({
+      firebase_uid: uid,
+      first_name: fallbackFirstName,
+      last_name: fallbackLastName,
+      email: fallbackEmail,
+      role: resolvedRole,
+      timezone: 'Asia/Kolkata',
+      onboarding_completed: false,
+    }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
+  } catch {
+    // best-effort — the row will be created during onboarding if this fails
+  }
+
   return {
     user: {
       id: uid,
       firstName: fallbackFirstName,
       lastName: fallbackLastName,
       email: fallbackEmail,
-      role: isPlatformAdmin ? 'admin' : (overrides?.role || 'client'),
+      role: resolvedRole,
       timezone: 'Asia/Kolkata',
       locale: 'en-IN',
       isAdultConfirmed: false,
@@ -1261,8 +1258,9 @@ export async function saveTrainerOnboardingToFirestore(params: {
     is_adult_confirmed: true,
     onboarding_completed: true,
   };
-  // Role changes are restricted to platform admins / verification flows
-  if (params.user.role === 'admin') {
+  if (params.user.role === 'trainer') {
+    userUpdate.role = 'trainer';
+  } else if (params.user.role === 'admin') {
     userUpdate.role = 'admin';
   }
 

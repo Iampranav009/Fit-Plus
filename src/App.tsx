@@ -18,6 +18,7 @@ const DiscoverPage = React.lazy(() => import('./pages/public/DiscoverPage').then
 const TrainerPublicProfilePage = React.lazy(() => import('./pages/public/TrainerPublicProfilePage').then((m) => ({ default: m.TrainerPublicProfilePage })));
 const PaymentResultPage = React.lazy(() => import('./pages/public/PaymentResultPage').then((m) => ({ default: m.PaymentResultPage })));
 const LegalPage = React.lazy(() => import('./pages/public/LegalPage').then((m) => ({ default: m.LegalPage })));
+const TrainerAuthPage = React.lazy(() => import('./pages/public/TrainerAuthPage').then((m) => ({ default: m.TrainerAuthPage })));
 
 // Onboarding pages
 const RoleSelectPage = React.lazy(() => import('./pages/onboarding/RoleSelectPage').then((m) => ({ default: m.RoleSelectPage })));
@@ -102,13 +103,15 @@ const ProtectedRoute: React.FC<{
   }
 
   const redirectPath = `${location.pathname}${location.search}`;
+  const isTrainerRoute = allowedRoles.length === 1 && allowedRoles[0] === 'trainer';
+  const authTarget = isTrainerRoute ? '/trainer/login' : '/auth';
 
   if (!firebaseUser && !isDemoSandbox) {
-    return <Navigate to={`/auth?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+    return <Navigate to={`${authTarget}?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   if (firebaseUser && !isEmailVerified && !isDemoSandbox) {
-    return <Navigate to={`/auth?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+    return <Navigate to={`${authTarget}?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
   if (requireAdmin) {
@@ -331,6 +334,7 @@ export default function App() {
             <Route path="/terms" element={<LegalPage />} />
             <Route path="/refund-policy" element={<LegalPage />} />
             <Route path="/disclaimer" element={<LegalPage />} />
+            <Route path="/trainer/login" element={<TrainerAuthPage />} />
 
             {/* Onboarding Routes */}
             <Route

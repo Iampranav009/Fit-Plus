@@ -3,10 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   BadgeCheck,
   CheckCircle2,
+  Copy,
   Eye,
   EyeOff,
   LogOut,
   RefreshCw,
+  Send,
   ShieldCheck,
   Star,
   Trash2,
@@ -39,6 +41,8 @@ export const AdminDashboardPage: React.FC = () => {
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
   const [modBusyId, setModBusyId] = useState<string | null>(null);
+  const [trainerInviteEmail, setTrainerInviteEmail] = useState('');
+  const [trainerInviteLink, setTrainerInviteLink] = useState('');
 
   const loadOverview = useCallback(async () => {
     setOverviewLoading(true);
@@ -227,6 +231,58 @@ export const AdminDashboardPage: React.FC = () => {
             />
           </section>
         ) : null}
+
+        {/* Invite Trainer */}
+        <section className="surface-card rounded-[24px] p-5 sm:p-6 flex flex-col gap-4">
+          <div>
+            <h2 className="text-[18px] font-semibold flex items-center gap-2">
+              <Send className="w-4.5 h-4.5 text-[#FFB06B]" aria-hidden="true" />
+              Invite a new trainer
+            </h2>
+            <p className="mt-1 text-[13px] text-[#A2A8B5]">
+              Generate a private sign-up link for a new coach. Only people with this link can register as trainers.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 items-end">
+            <div className="flex-1 w-full">
+              <InputField
+                label="Trainer email"
+                optionalTag="For your reference"
+                type="email"
+                value={trainerInviteEmail}
+                onChange={(e) => setTrainerInviteEmail(e.target.value)}
+                placeholder="coach@example.com"
+              />
+            </div>
+            <GlassButton
+              size="sm"
+              onClick={() => {
+                const base = window.location.origin;
+                const link = `${base}/trainer/login?invite=admin${trainerInviteEmail ? `&email=${encodeURIComponent(trainerInviteEmail)}` : ''}`;
+                setTrainerInviteLink(link);
+              }}
+            >
+              Generate link
+            </GlassButton>
+          </div>
+
+          {trainerInviteLink ? (
+            <div className="rounded-[14px] surface-elevated p-3.5 flex items-center gap-3">
+              <code className="flex-1 text-[12px] text-[#A2A8B5] break-all select-all">
+                {trainerInviteLink}
+              </code>
+              <GlassButton
+                size="sm"
+                variant="secondary"
+                onClick={() => void navigator.clipboard.writeText(trainerInviteLink)}
+              >
+                <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                Copy
+              </GlassButton>
+            </div>
+          ) : null}
+        </section>
 
         {/* Pending Verification Queue */}
         <section className="surface-card rounded-[24px] p-5 sm:p-6 flex flex-col gap-4">
