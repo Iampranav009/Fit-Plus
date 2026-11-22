@@ -9,11 +9,7 @@
  *   GET  /api/account/export
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import {
-  AuthHttpError,
-  getFirebaseAdminContext,
-  verifyAuthenticatedRequest,
-} from './_lib/firebaseAdmin.js';
+import { AuthHttpError, verifyAuthenticatedRequest } from './_lib/requestAuth.js';
 import { getSupabaseAdminClient, isSupabaseAdminConfigured } from './_lib/supabaseAdmin.js';
 import { applySecurityHeaders, sanitizeErrorMessage } from './_lib/security.js';
 
@@ -24,7 +20,6 @@ async function handleDelete(req: VercelRequest, res: VercelResponse): Promise<vo
 
   try {
     const authCtx = await verifyAuthenticatedRequest(req.headers);
-    const { app, db } = getFirebaseAdminContext();
     const uid = authCtx.uid;
 
     if (isSupabaseAdminConfigured()) {
@@ -65,25 +60,8 @@ async function handleDelete(req: VercelRequest, res: VercelResponse): Promise<vo
       } catch (dbErr) { console.error('Supabase PostgreSQL record purge error:', dbErr); }
     }
 
-    if (db) {
-      try {
-        const batch = db.batch();
-        batch.delete(db.collection('users').doc(uid).collection('private').doc('contact'));
-        batch.delete(db.collection('users').doc(uid));
-        const [clientsSnap, trainersSnap, notificationsSnap] = await Promise.all([
-          db.collection('clients').where('userId', '==', uid).get(),
-          db.collection('trainers').where('userId', '==', uid).get(),
-          db.collection('notifications').where('recipientUserId', '==', uid).get(),
-        ]);
-        for (const d of clientsSnap.docs) batch.delete(d.ref);
-        for (const d of trainersSnap.docs) batch.delete(d.ref);
-        for (const d of notificationsSnap.docs) batch.delete(d.ref);
-        await batch.commit();
-      } catch (fsErr) { console.warn('Firestore fallback cleanup skipped:', fsErr); }
-    }
-
-    const { getAuth } = await import('firebase-admin/auth');
-    await getAuth(app).deleteUser(uid);
+    const { error: authDeleteError } = await getSupabaseAdminClient().auth.admin.deleteUser(uid);
+    if (authDeleteError) throw new Error(`Auth user delete failed: ${authDeleteError.message}`);
     res.status(200).json({ ok: true, deletedUid: uid });
   } catch (error) {
     if (error instanceof AuthHttpError) { res.status(error.status).json({ ok: false, code: error.code, error: error.message }); return; }

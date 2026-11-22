@@ -79,6 +79,29 @@ const AuthLoadingSplash: React.FC = () => (
   </div>
 );
 
+const AccountLoadErrorScreen: React.FC<{ message: string }> = ({ message }) => {
+  const { signOutGoogle } = useApp();
+  return (
+    <div className="min-h-screen fp-ambient-canvas text-[#F5F5F7] flex flex-col items-center justify-center p-6">
+      <div className="max-w-md w-full rounded-[24px] surface-card p-6 sm:p-7 text-center space-y-4">
+        <div className="flex justify-center">
+          <BrandMark />
+        </div>
+        <h1 className="text-[22px] font-semibold">We could not load your account</h1>
+        <p role="alert" className="text-[14px] text-[#FF6B70]">{message}</p>
+        <div className="flex flex-col gap-2.5 pt-2">
+          <GlassButton fullWidth onClick={() => window.location.reload()}>
+            Try again
+          </GlassButton>
+          <GlassButton variant="secondary" fullWidth onClick={() => void signOutGoogle()}>
+            Sign out
+          </GlassButton>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ProtectedRoute: React.FC<{
   allowedRoles: UserRole[];
   requireAdmin?: boolean;
@@ -89,7 +112,7 @@ const ProtectedRoute: React.FC<{
     activeUser,
     isAuthReady,
     firebaseUser,
-    isEmailVerified,
+    accountLoadError,
     isPlatformAdmin,
     isCloudSynced,
     isDemoSandbox,
@@ -110,8 +133,8 @@ const ProtectedRoute: React.FC<{
     return <Navigate to={`${authTarget}?redirect=${encodeURIComponent(redirectPath)}`} replace />;
   }
 
-  if (firebaseUser && !isEmailVerified && !isDemoSandbox) {
-    return <Navigate to={`${authTarget}?redirect=${encodeURIComponent(redirectPath)}`} replace />;
+  if (firebaseUser && !isCloudSynced && !isDemoSandbox) {
+    return <AccountLoadErrorScreen message={accountLoadError || 'Your workspace did not load.'} />;
   }
 
   if (requireAdmin) {
@@ -219,7 +242,7 @@ const ProtectedRoute: React.FC<{
 };
 
 const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { store, isAuthReady, firebaseUser, isEmailVerified, isCloudSynced, isDemoSandbox } = useApp();
+  const { store, isAuthReady, firebaseUser, accountLoadError, isCloudSynced, isDemoSandbox } = useApp();
   const location = useLocation();
 
   if (!isAuthReady) {
@@ -235,13 +258,8 @@ const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) 
     );
   }
 
-  if (firebaseUser && !isEmailVerified && !isDemoSandbox) {
-    return (
-      <Navigate
-        to={`/auth?redirect=${encodeURIComponent(`${location.pathname}${location.search}`)}`}
-        replace
-      />
-    );
+  if (firebaseUser && !isCloudSynced && !isDemoSandbox) {
+    return <AccountLoadErrorScreen message={accountLoadError || 'Your workspace did not load.'} />;
   }
 
   if (isCloudSynced && store.session.onboardingCompleted) {

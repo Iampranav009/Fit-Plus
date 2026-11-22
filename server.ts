@@ -64,6 +64,8 @@ async function startServer() {
   app.all('/api/invites/*',       adaptVercelHandler(studioHandler));
   app.all('/api/relationships/*', adaptVercelHandler(studioHandler));
   app.all('/api/streaks/*',       adaptVercelHandler(studioHandler));
+  app.all('/api/trainers/*',      adaptVercelHandler(studioHandler));
+  app.all('/api/data/*',          adaptVercelHandler(studioHandler));
 
   // Auth, Admin, AI, Monitoring
   app.all('/api/auth/*',       adaptVercelHandler(authHandler));

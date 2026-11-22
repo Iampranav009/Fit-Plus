@@ -1,22 +1,79 @@
-import { supabase, markThirdPartyAuthFailed } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { uploadToStorage, getStorageSignedUrl, STORAGE_BUCKETS, type StorageBucketName } from '../lib/supabaseStorage';
 import type { Database, Json } from '../types/database.types';
-import type { User as FirebaseAuthUser } from 'firebase/auth';
 import {
-  signInWithGooglePopup,
+  signInWithGoogleRedirect,
   registerWithEmailPassword,
   signInWithEmailPassword,
-  resendEmailVerification,
   sendPasswordReset,
-  reloadCurrentUser,
-  signOutFirebaseAuth,
+  signOutAuth,
   deleteAccountAndData,
-  checkIsPlatformAdmin,
-  CURRENT_POLICY_VERSION,
-  type FirebaseUserBootstrapResult,
-  type LiveFirestoreSlice,
-  type PublicInviteResolveResult,
-} from './firestoreService';
+  getApiSecurityHeaders,
+  type AuthUser as FirebaseAuthUser,
+} from '../lib/auth';
+import type { NotificationPrefs } from '../types/domain';
+
+export const CURRENT_POLICY_VERSION = '2026.1';
+
+export interface FirebaseUserBootstrapResult {
+  user: User;
+  onboardingCompleted: boolean;
+  celebratedDateKeys: string[];
+  pendingInviteToken?: string;
+  emailVerified: boolean;
+  isPlatformAdmin: boolean;
+}
+
+export interface LiveFirestoreSlice {
+  users: User[];
+  trainers: TrainerProfile[];
+  packages: Package[];
+  clients: ClientProfile[];
+  relationships: CoachingRelationship[];
+  invites: Invite[];
+  enrollments: Enrollment[];
+  subscriptions: Subscription[];
+  payments: PaymentRecord[];
+  reviews: TrainerReview[];
+  templates: TaskTemplate[];
+  assignments: Assignment[];
+  completions: CompletionEvent[];
+  dailyActivities: DailyActivity[];
+  progressEvents: ProgressEvent[];
+  workoutPlans: WorkoutPlan[];
+  mealPlans: MealPlan[];
+  consultationSlots: ConsultationSlot[];
+  bookings: Booking[];
+  notifications: Notification[];
+  aiDrafts: AIPlanDraft[];
+  clientGroups: ClientGroup[];
+  clientGroupMembers: ClientGroupMember[];
+  streaks: StreakRecord[];
+  consents: ConsentRecord[];
+  verificationRequests: TrainerVerificationRequest[];
+  auditLogs: AuditLogEntry[];
+  customExercises: ExerciseDefinition[];
+  workoutSessions: WorkoutSession[];
+  achievements: AchievementUnlock[];
+  nutritionLogs: NutritionDiaryEntry[];
+  weeklyCheckIns: WeeklyCheckIn[];
+  conversations: ChatConversation[];
+  workoutTemplates: WorkoutProgramTemplate[];
+  nutritionTemplates: NutritionProgramTemplate[];
+  scheduledReminders: ScheduledReminder[];
+  onboardingCompleted: boolean;
+  celebratedDateKeys: string[];
+  pendingInviteToken?: string;
+  notificationPrefs?: NotificationPrefs;
+}
+
+export interface PublicInviteResolveResult {
+  source: 'supabase_admin' | 'client_fallback';
+  state: 'active' | 'expired' | 'redeemed' | 'revoked' | 'not_found' | 'unverified_server';
+  invite?: Invite;
+  trainer?: TrainerProfile;
+  packages?: Package[];
+}
 import type {
   User,
   UserRole,
@@ -62,21 +119,14 @@ import type {
   BookingStatus,
 } from '../types/domain';
 
-// Export Auth functions directly (Firebase Auth remains sole identity provider)
+// Supabase Auth is the identity provider.
 export {
-  signInWithGooglePopup,
+  signInWithGoogleRedirect,
   registerWithEmailPassword,
   signInWithEmailPassword,
-  resendEmailVerification,
   sendPasswordReset,
-  reloadCurrentUser,
-  signOutFirebaseAuth,
+  signOutAuth,
   deleteAccountAndData,
-  checkIsPlatformAdmin,
-  CURRENT_POLICY_VERSION,
-  type FirebaseUserBootstrapResult,
-  type LiveFirestoreSlice,
-  type PublicInviteResolveResult,
 };
 
 // -----------------------------------------------------------------------------
@@ -338,6 +388,7 @@ export function mapDailyActivity(row: Database['public']['Tables']['daily_activi
     hydrationGlasses: row.water_glasses,
     steps: row.step_count,
     sleepHours: row.sleep_hours ? Number(row.sleep_hours) : undefined,
+    recoveryApproved: Boolean(row.recovery_approved),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -700,86 +751,41 @@ export function mapScheduledReminder(row: Database['public']['Tables']['schedule
 // Core Bootstrap & Directory
 // -----------------------------------------------------------------------------
 
-export async function ensureUserDocument(
-  fbUser: FirebaseAuthUser,
-  overrides?: { role?: UserRole },
-): Promise<FirebaseUserBootstrapResult> {
+export async function ensureUserDocument(fbUser: FirebaseAuthUser): Promise<FirebaseUserBootstrapResult> {
   const uid = fbUser.uid;
-  const displayParts = (fbUser.displayName || 'FitPlus Member').trim().split(/\s+/);
-  const fallbackFirstName = displayParts[0] || 'Member';
-  const fallbackLastName = displayParts.slice(1).join(' ') || '';
-  const fallbackEmail = fbUser.email || `${uid}@fitplus.local`;
-
-  // Primary path: server-side bootstrap via admin client (bypasses RLS)
-  try {
-    const idToken = await fbUser.getIdToken();
-    const provRes = await fetch('/api/auth/provision-claims', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`,
-      },
-    });
-    if (provRes.ok) {
-      const provData = await provRes.json();
-      const isPlatformAdmin = Boolean(provData.claims?.is_admin) || fbUser.email?.toLowerCase() === 'pranavshindeji5001@gmail.com';
-      const row = provData.bootstrap;
-      if (row) {
-        return {
-          user: mapUser(row),
-          onboardingCompleted: row.onboarding_completed,
-          celebratedDateKeys: row.celebrated_date_keys || [],
-          emailVerified: true,
-          isPlatformAdmin,
-          pendingInviteToken: row.pending_invite_token || undefined,
-        };
-      }
-      // Server returned no bootstrap row but claims resolved
-      const resolvedRole = (provData.claims?.user_role || 'client') as UserRole;
-      return {
-        user: { id: uid, firstName: fallbackFirstName, lastName: fallbackLastName, email: fallbackEmail, role: resolvedRole, timezone: 'Asia/Kolkata', locale: 'en-IN', isAdultConfirmed: false, privacyConsentAccepted: false, createdAt: new Date().toISOString() },
-        onboardingCompleted: false,
-        celebratedDateKeys: [],
-        emailVerified: true,
-        isPlatformAdmin,
-      };
-    }
-  } catch {
-    // Server unreachable — fall through to client-side Supabase
-  }
-
-  // Fallback: client-side Supabase (may fail due to RLS)
-  let isPlatformAdmin = fbUser.email?.toLowerCase() === 'pranavshindeji5001@gmail.com';
-  let userRow: Database['public']['Tables']['app_users']['Row'] | null = null;
-
-  try {
-    const adminRes = await supabase.from('platform_admins').select('firebase_uid').eq('firebase_uid', uid).maybeSingle();
-    if (adminRes.data) isPlatformAdmin = true;
-  } catch { /* proceed */ }
-
-  try {
-    const userRes = await supabase.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle();
-    if (userRes.data) userRow = userRes.data;
-  } catch { /* proceed */ }
-
-  if (userRow) {
-    return {
-      user: mapUser(userRow),
-      onboardingCompleted: userRow.onboarding_completed,
-      celebratedDateKeys: userRow.celebrated_date_keys || [],
-      emailVerified: true,
-      isPlatformAdmin,
-      pendingInviteToken: userRow.pending_invite_token || undefined,
-    };
-  }
-
-  return {
-    user: { id: uid, firstName: fallbackFirstName, lastName: fallbackLastName, email: fallbackEmail, role: isPlatformAdmin ? 'admin' : 'client', timezone: 'Asia/Kolkata', locale: 'en-IN', isAdultConfirmed: false, privacyConsentAccepted: false, createdAt: new Date().toISOString() },
-    onboardingCompleted: false,
-    celebratedDateKeys: [],
+  const isBootstrapAdmin = fbUser.email?.toLowerCase() === 'pranavshindeji5001@gmail.com';
+  const toResult = (row: Database['public']['Tables']['app_users']['Row'], isAdmin: boolean): FirebaseUserBootstrapResult => ({
+    user: mapUser(row),
+    onboardingCompleted: row.onboarding_completed,
+    celebratedDateKeys: row.celebrated_date_keys || [],
     emailVerified: true,
-    isPlatformAdmin,
-  };
+    isPlatformAdmin: isAdmin || isBootstrapAdmin,
+    pendingInviteToken: row.pending_invite_token || undefined,
+  });
+
+  // Primary: the server reads (and if needed creates) the row with the service role.
+  let serverError = '';
+  try {
+    const res = await fetch('/api/auth/provision-claims', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await fbUser.getIdToken()}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.bootstrap) return toResult(data.bootstrap, Boolean(data.claims?.is_admin));
+    serverError = data.error || `HTTP ${res.status}`;
+  } catch (err) {
+    serverError = err instanceof Error ? err.message : 'network error';
+  }
+
+  // Fallback (e.g. local dev without the API): read our own row directly; RLS allows it.
+  const [userRes, adminRes] = await Promise.all([
+    supabase.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle(),
+    supabase.from('platform_admins').select('firebase_uid').eq('firebase_uid', uid).maybeSingle(),
+  ]);
+  if (userRes.data) return toResult(userRes.data, Boolean(adminRes.data));
+
+  // Never pretend the account is new: that is what produced the onboarding loop.
+  throw new Error(`Could not load your FitPlus account (${serverError || userRes.error?.message || 'no account row'}).`);
 }
 
 export async function fetchPublicTrainersAndPackages(): Promise<{
@@ -862,10 +868,6 @@ export function subscribeAuthenticatedWorkspace(
   onUpdate: (patch: Partial<LiveFirestoreSlice>) => void,
   options?: { isPlatformAdmin?: boolean; role?: UserRole },
 ): () => void {
-  if (!fbUser.emailVerified) {
-    return () => {};
-  }
-
   const uid = fbUser.uid;
   const isPlatformAdmin = Boolean(options?.isPlatformAdmin);
 
@@ -950,9 +952,6 @@ export function subscribeAuthenticatedWorkspace(
     scheduledRemindersRes,
   ]) => {
     const userRow = userRes.data;
-    if (userRes.error && (userRes.error.code === 'PGRST301' || userRes.error.message?.includes('JWT'))) {
-      markThirdPartyAuthFailed();
-    }
     onUpdate({
       users: userRow ? [mapUser(userRow)] : undefined,
       trainers: (trainersRes.data || []).map(mapTrainer),
@@ -1168,34 +1167,26 @@ export async function saveClientOnboardingToFirestore(params: {
     numeric_value: params.initialProgress.value, share_with_trainer: params.initialProgress.shareWithTrainer || false,
   } : undefined;
 
-  // Primary path: server endpoint (bypasses RLS)
-  try {
-    const { auth } = await import('../lib/firebase');
-    const idToken = await auth.currentUser?.getIdToken();
-    if (idToken) {
-      const res = await fetch('/api/data/save-onboarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({
-          type: 'client',
-          userUpdate: { first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone, is_adult_confirmed: Boolean(params.user.isAdultConfirmed) },
-          clientProfile, starterAssignment, workoutPlan, mealPlan, initialProgress,
-        }),
-      });
-      if (res.ok) return;
-    }
-  } catch { /* fall through */ }
+  await postServerData('/api/data/save-onboarding', {
+    type: 'client',
+    userUpdate: { first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone, is_adult_confirmed: Boolean(params.user.isAdultConfirmed) },
+    clientProfile, starterAssignment, workoutPlan, mealPlan, initialProgress,
+  });
+}
 
-  // Fallback: client-side Supabase
-  await supabase.from('app_users').update({
-    first_name: params.user.firstName, last_name: params.user.lastName || '', role: 'client',
-    timezone: params.user.timezone, is_adult_confirmed: Boolean(params.user.isAdultConfirmed), onboarding_completed: true,
-  }).eq('firebase_uid', params.uid);
-  await supabase.from('client_profiles').upsert(clientProfile);
-  await supabase.from('task_assignments').upsert(starterAssignment);
-  await supabase.from('workout_plans').upsert(workoutPlan);
-  await supabase.from('meal_plans').upsert(mealPlan);
-  if (initialProgress) await supabase.from('progress_events').upsert(initialProgress);
+/** POSTs to a server data route and throws with the server's message on failure, so writes never fail silently. */
+async function postServerData(path: string, body: unknown): Promise<void> {
+  const headers = await getApiSecurityHeaders();
+  if (!headers.Authorization) throw new Error('Your session has expired. Please sign in again.');
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `Request failed (${res.status}).`);
+  }
 }
 
 export async function saveTrainerOnboardingToFirestore(params: {
@@ -1240,32 +1231,12 @@ export async function saveTrainerOnboardingToFirestore(params: {
     status: params.starterPackage.status,
   };
 
-  // Primary path: server endpoint (bypasses RLS)
-  try {
-    const { auth } = await import('../lib/firebase');
-    const idToken = await auth.currentUser?.getIdToken();
-    if (idToken) {
-      const res = await fetch('/api/data/save-onboarding', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({
-          type: 'trainer',
-          userUpdate: { first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone, role: params.user.role || 'trainer' },
-          trainerProfile,
-          starterPackage,
-        }),
-      });
-      if (res.ok) return;
-    }
-  } catch { /* fall through */ }
-
-  // Fallback: client-side Supabase
-  await supabase.from('app_users').update({
-    first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone,
-    is_adult_confirmed: true, onboarding_completed: true, role: params.user.role === 'trainer' ? 'trainer' : params.user.role === 'admin' ? 'admin' : undefined,
-  }).eq('firebase_uid', params.uid);
-  await supabase.from('trainer_profiles').upsert(trainerProfile);
-  await supabase.from('coaching_packages').upsert(starterPackage);
+  await postServerData('/api/data/save-onboarding', {
+    type: 'trainer',
+    userUpdate: { first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone },
+    trainerProfile,
+    starterPackage,
+  });
 }
 
 export async function upsertDailyActivityHydration(params: {
@@ -1589,30 +1560,14 @@ export async function updateClientProfileDoc(
   await supabase.from('client_profiles').update(rowUpdates).eq('id', clientId);
 }
 
-export async function createInviteDoc(invite: Invite, trainerUserId: string): Promise<void> {
-  // Primary path: server endpoint (bypasses RLS)
-  try {
-    const { auth } = await import('../lib/firebase');
-    const idToken = await auth.currentUser?.getIdToken();
-    if (idToken) {
-      const res = await fetch('/api/data/create-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({
-          id: invite.id, token: invite.token, trainer_id: invite.trainerId,
-          trainer_user_id: trainerUserId, client_email_or_label: invite.clientEmailOrLabel,
-          suggested_package_id: invite.suggestedPackageId || null, expires_at: invite.expiresAt,
-        }),
-      });
-      if (res.ok) return;
-    }
-  } catch { /* fall through */ }
-
-  // Fallback: client-side Supabase
-  await supabase.from('trainer_invites').insert({
-    id: invite.id, token: invite.token, trainer_id: invite.trainerId,
-    trainer_user_id: trainerUserId, client_email_or_label: invite.clientEmailOrLabel,
-    suggested_package_id: invite.suggestedPackageId || null, status: 'active', expires_at: invite.expiresAt,
+export async function createInviteDoc(invite: Invite, _trainerUserId: string): Promise<void> {
+  await postServerData('/api/data/create-invite', {
+    id: invite.id,
+    token: invite.token,
+    trainer_id: invite.trainerId,
+    client_email_or_label: invite.clientEmailOrLabel,
+    suggested_package_id: invite.suggestedPackageId || null,
+    expires_at: invite.expiresAt,
   });
 }
 

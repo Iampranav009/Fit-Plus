@@ -1,13 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  CheckCircle2,
-  KeyRound,
-  LogOut,
-  Mail,
-  RefreshCw,
-  ShieldCheck,
-} from 'lucide-react';
+import { KeyRound, LogOut, ShieldCheck } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
@@ -29,15 +22,13 @@ export const AuthPage: React.FC = () => {
     store,
     firebaseUser,
     isAuthReady,
-    isEmailVerified,
     isPlatformAdmin,
     isCloudSynced,
+    accountLoadError,
     authBusy,
     signInWithGoogle,
     signUpWithEmail,
     signInWithEmail,
-    resendVerificationEmail,
-    refreshVerificationState,
     sendPasswordReset,
     signOutGoogle,
     startDemoAsRole,
@@ -45,15 +36,6 @@ export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTarget = useMemo(() => getSafeRedirect(searchParams.get('redirect')), [searchParams]);
-
-  // Auto-redirect if already authenticated and onboarded
-  useEffect(() => {
-    if (!isAuthReady || !isCloudSynced || !store.session.onboardingCompleted) return;
-    const dest =
-      redirectTarget ??
-      (isPlatformAdmin ? '/admin' : store.session.activeRole === 'trainer' ? '/studio/overview' : '/app/home');
-    navigate(dest, { replace: true });
-  }, [isAuthReady, isCloudSynced, store.session.onboardingCompleted]);
 
   // `?mode=signup` / `?mode=reset` deep-link straight to account creation or recovery.
   const [emailMode, setEmailMode] = useState<EmailAuthMode>(() => {
@@ -82,29 +64,35 @@ export const AuthPage: React.FC = () => {
       navigate(`/join/${store.session.pendingInviteToken}`, { replace: true });
       return;
     }
-    if (!params.onboardingCompleted) {
-      navigate('/onboarding/role', { replace: true });
-      return;
-    }
+    // Admins never need member onboarding; the admin console has no onboarding gate.
     if (params.isAdmin || params.role === 'admin') {
       navigate('/admin', { replace: true });
+      return;
+    }
+    if (!params.onboardingCompleted) {
+      navigate('/onboarding/role', { replace: true });
       return;
     }
     navigate(params.role === 'trainer' ? '/studio/overview' : '/app/home', { replace: true });
   };
 
+  // Any signed-in user whose account has loaded goes straight to the right place,
+  // including on return from the Google sign-in redirect.
+  useEffect(() => {
+    if (!isAuthReady || !firebaseUser || !isCloudSynced) return;
+    navigateAfterAuth({
+      onboardingCompleted: store.session.onboardingCompleted,
+      role: store.session.activeRole,
+      isAdmin: isPlatformAdmin,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthReady, firebaseUser, isCloudSynced, store.session.onboardingCompleted, store.session.activeRole, isPlatformAdmin]);
+
   const handleGoogleSignIn = async () => {
     setFormError('');
     const res = await signInWithGoogle();
-    if (!res.ok) {
-      if (res.error) setFormError(res.error);
-      return;
-    }
-    navigateAfterAuth({
-      onboardingCompleted: res.onboardingCompleted,
-      role: res.role,
-      isAdmin: res.isPlatformAdmin,
-    });
+    if (!res.ok && res.error) setFormError(res.error);
+    // On success the browser is redirecting to Google; the effect above routes on return.
   };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -142,9 +130,11 @@ export const AuthPage: React.FC = () => {
         return;
       }
       const res = await signUpWithEmail({ email, password, fullName });
-      if (!res.ok && res.error) {
-        setFormError(res.error);
+      if (!res.ok) {
+        setFormError(res.error || 'Could not create your account.');
+        return;
       }
+      navigateAfterAuth({ onboardingCompleted: res.onboardingCompleted, role: res.role, isAdmin: res.isPlatformAdmin });
       return;
     }
 
@@ -160,17 +150,6 @@ export const AuthPage: React.FC = () => {
     });
   };
 
-  const handleCheckVerification = async () => {
-    const res = await refreshVerificationState();
-    if (res.ok) {
-      navigateAfterAuth({
-        onboardingCompleted: res.onboardingCompleted,
-        role: res.role,
-        isAdmin: res.isPlatformAdmin,
-      });
-    }
-  };
-
   return (
     <MarketingLayout compactFooter>
       <div className="relative flex-1 flex items-center justify-center px-4 py-10 sm:py-14">
@@ -179,95 +158,35 @@ export const AuthPage: React.FC = () => {
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_40%_at_50%_20%,rgba(255,128,62,0.10),transparent_70%)]"
         />
         <div className="relative w-full max-w-md rounded-[28px] mkt-glass p-6 sm:p-8 flex flex-col gap-6">
-          {firebaseUser && !isEmailVerified ? (
-            <>
-              <div>
-                <p className="text-[12px] font-medium text-[#FFB06B] inline-flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5" aria-hidden="true" />
-                  Email verification required
-                </p>
-                <h1 className="mt-2 text-[26px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-                  Verify your inbox to continue
-                </h1>
-                <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                  We sent a verification link to{' '}
-                  <span className="text-[#F5F5F7] font-medium">{firebaseUser.email}</span>. Click
-                  the link in that email, then tap below to unlock your FitPlus workspace.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <GlassButton
-                  fullWidth
-                  disabled={authBusy}
-                  onClick={() => void handleCheckVerification()}
-                >
-                  <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                  {authBusy ? 'Checking status…' : "I've verified — continue"}
-                </GlassButton>
-                <GlassButton
-                  variant="glass"
-                  fullWidth
-                  disabled={authBusy}
-                  onClick={() => void resendVerificationEmail()}
-                >
-                  <RefreshCw className="w-4 h-4" aria-hidden="true" />
-                  Resend verification email
-                </GlassButton>
-                <GlassButton
-                  variant="tertiary"
-                  fullWidth
-                  disabled={authBusy}
-                  onClick={() => void signOutGoogle()}
-                >
-                  <LogOut className="w-4 h-4" aria-hidden="true" />
-                  Sign out
-                </GlassButton>
-              </div>
-            </>
-          ) : firebaseUser && isEmailVerified ? (
+          {firebaseUser ? (
             <>
               <div>
                 <p className="text-[12px] font-medium text-[#B8E66C] inline-flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4" aria-hidden="true" />
-                  Verified FitPlus account
+                  Signed in
                 </p>
                 <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-                  Welcome back
+                  {accountLoadError ? 'We could not load your account' : 'Opening your workspace…'}
                 </h1>
                 <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                  Signed in as{' '}
-                  <span className="text-[#F5F5F7] font-medium">
-                    {firebaseUser.email || firebaseUser.displayName}
-                  </span>
-                  . Your workouts, plans, and coaching records sync securely to Firestore.
+                  {accountLoadError ? (
+                    <span role="alert" className="text-[#FF6B70]">{accountLoadError}</span>
+                  ) : (
+                    <>
+                      Signed in as{' '}
+                      <span className="text-[#F5F5F7] font-medium">
+                        {firebaseUser.email || firebaseUser.displayName}
+                      </span>
+                      .
+                    </>
+                  )}
                 </p>
               </div>
 
               <div className="flex flex-col gap-3">
-                <GlassButton
-                  fullWidth
-                  onClick={() =>
-                    navigateAfterAuth({
-                      onboardingCompleted: store.session.onboardingCompleted,
-                      role: store.session.activeRole,
-                      isAdmin: isPlatformAdmin,
-                    })
-                  }
-                >
-                  {store.session.onboardingCompleted && isCloudSynced
-                    ? `Continue to ${
-                        isPlatformAdmin
-                          ? 'Admin Console'
-                          : store.session.activeRole === 'trainer'
-                            ? 'Trainer Studio'
-                            : 'FitPlus'
-                      }`
-                    : 'Complete onboarding'}
-                </GlassButton>
-                {isPlatformAdmin ? (
-                  <GlassButton variant="secondary" fullWidth onClick={() => navigate('/admin')}>
-                    Open Admin Moderation Console
+                {accountLoadError ? (
+                  <GlassButton fullWidth onClick={() => window.location.reload()}>
+                    Try again
                   </GlassButton>
                 ) : null}
                 <GlassButton
@@ -304,7 +223,7 @@ export const AuthPage: React.FC = () => {
                 </h1>
                 <p className="mt-3 text-[0.9375rem] text-[#ABA59D] leading-relaxed">
                   {emailMode === 'signup'
-                    ? 'Use Google or email. After you verify your email, choose whether you’re here to get fitter or to coach.'
+                    ? 'Use Google or email, then set up your FitPlus profile.'
                     : 'Sign in with Google or email & password to sync your coaching workspace across devices.'}
                 </p>
               </div>
@@ -447,7 +366,7 @@ export const AuthPage: React.FC = () => {
                       {authBusy ? 'Sending…' : 'Send password reset link'}
                     </>
                   ) : emailMode === 'signup' ? (
-                    authBusy ? 'Creating account…' : 'Create verified account'
+                    authBusy ? 'Creating account…' : 'Create account'
                   ) : authBusy ? (
                     'Signing in…'
                   ) : (

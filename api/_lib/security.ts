@@ -5,7 +5,7 @@ import type { VercelResponse } from '@vercel/node';
  */
 export const SECURITY_HEADERS: Record<string, string> = {
   'Content-Security-Policy':
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.cashfree.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://sandbox.cashfree.com https://api.cashfree.com; frame-src 'self' https://sdk.cashfree.com https://sandbox.cashfree.com;",
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://sdk.cashfree.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://sandbox.cashfree.com https://api.cashfree.com; frame-src 'self' https://sdk.cashfree.com https://sandbox.cashfree.com;",
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',

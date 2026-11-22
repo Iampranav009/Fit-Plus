@@ -250,7 +250,7 @@ async function handleCreateOrder(req: VercelRequest, res: VercelResponse): Promi
 
     const customerName =
       `${String(clientData?.firstName || '')} ${String(clientData?.lastName || '')}`.trim() ||
-      String(authCtx.decoded.name || 'FitPlus Member');
+      String(authCtx.name || 'FitPlus Member');
     const customerPhone = sanitizeIndianPhone(
       typeof contactSnap.data()?.whatsappE164 === 'string'
         ? contactSnap.data()?.whatsappE164

@@ -669,6 +669,7 @@ export interface Database {
           sleep_hours: number | null;
           mood: string | null;
           notes: string | null;
+          recovery_approved: boolean;
           created_at: string;
           updated_at: string;
         };

@@ -228,6 +228,34 @@ export async function setupAuthMock() {
       });
   const auth = getAuth(app);
 
+  // Request auth is Supabase Auth: map the synthetic bearer tokens onto auth.getUser.
+  const { getSupabaseAdminClient, isSupabaseAdminConfigured } = await import('../../../api/_lib/supabaseAdmin');
+  if (isSupabaseAdminConfigured()) {
+    const pick = (token: string) => {
+      if (token.includes('expired')) return null;
+      if (token.includes('unverified') || token.includes('client_b')) return SYNTHETIC_IDENTITIES.CLIENT_B;
+      if (token.includes('trainer_b')) return SYNTHETIC_IDENTITIES.TRAINER_B;
+      if (token.includes('trainer_a')) return SYNTHETIC_IDENTITIES.TRAINER_A;
+      if (token.includes('admin')) return SYNTHETIC_IDENTITIES.ADMIN;
+      return SYNTHETIC_IDENTITIES.CLIENT_A;
+    };
+    getSupabaseAdminClient().auth.getUser = (async (token?: string) => {
+      const id = pick(token || '');
+      if (!id) return { data: { user: null }, error: { name: 'AuthApiError', message: 'JWT expired', status: 401 } };
+      return {
+        data: {
+          user: {
+            id: id.uid,
+            email: id.email,
+            user_metadata: { full_name: id.displayName },
+            app_metadata: { provider: 'email' },
+          },
+        },
+        error: null,
+      };
+    }) as any;
+  }
+
   auth.verifyIdToken = async (idToken: string) => {
     if (idToken === 'expired' || idToken.includes('expired')) {
       throw new Error('Firebase ID token has expired.');

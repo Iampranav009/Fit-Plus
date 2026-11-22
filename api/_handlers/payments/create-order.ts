@@ -218,7 +218,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const customerName =
       `${String(clientData?.firstName || '')} ${String(clientData?.lastName || '')}`.trim() ||
-      String(authCtx.decoded.name || 'FitPlus Member');
+      String(authCtx.name || 'FitPlus Member');
     const customerPhone = sanitizeIndianPhone(
       typeof contactSnap.data()?.whatsappE164 === 'string'
         ? contactSnap.data()?.whatsappE164

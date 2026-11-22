@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { supabase } from '../../lib/supabase';
 import type { AdminOverviewStats } from '../../types/domain';
 import { formatIndiaDate, formatINR } from '../../lib/date';
 import { BrandMark } from '../../components/ui/BrandMark';
@@ -61,6 +62,24 @@ export const AdminDashboardPage: React.FC = () => {
 
   useEffect(() => {
     void loadOverview();
+  }, [loadOverview]);
+
+  // Live updates: new sign-ups and trainer profiles appear without a reload.
+  useEffect(() => {
+    let timer: number | undefined;
+    const refresh = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void loadOverview(), 400);
+    };
+    const channel = supabase
+      .channel('admin-overview')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_users' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trainer_profiles' }, refresh)
+      .subscribe();
+    return () => {
+      window.clearTimeout(timer);
+      void supabase.removeChannel(channel);
+    };
   }, [loadOverview]);
 
   const pendingRequests = verificationRequests.filter((r) => r.status === 'pending');

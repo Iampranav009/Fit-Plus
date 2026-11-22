@@ -147,7 +147,7 @@ after(async () => {
 // 1.1 Auth & RBAC (5 tests)
 // -----------------------------------------------------------------------------
 
-test('T1-AUTH-01: Valid Firebase Bearer Token Authentication resolves Client A', async () => {
+test('T1-AUTH-01: Valid Supabase Bearer Token Authentication resolves Client A', async () => {
   const authCtx = await verifyAuthenticatedRequest({
     authorization: `Bearer ${SYNTHETIC_IDENTITIES.CLIENT_A.token}`,
   });
@@ -157,20 +157,10 @@ test('T1-AUTH-01: Valid Firebase Bearer Token Authentication resolves Client A',
   assert.equal(authCtx.isAdmin, false);
 });
 
-test('T1-AUTH-02: Email Verification Gate blocks unverified users with HTTP 403', async () => {
-  await assert.rejects(
-    async () => {
-      await verifyAuthenticatedRequest({
-        authorization: 'Bearer token_unverified',
-      });
-    },
-    (err: any) => {
-      assert.ok(err instanceof AuthHttpError);
-      assert.equal(err.status, 403);
-      assert.equal(err.code, 'auth/email-unverified');
-      return true;
-    },
-  );
+test('T1-AUTH-02: Supabase sessions need no email confirmation and resolve the account', async () => {
+  const authCtx = await verifyAuthenticatedRequest({ authorization: 'Bearer token_unverified' });
+  assert.equal(authCtx.uid, SYNTHETIC_IDENTITIES.CLIENT_B.uid);
+  assert.equal(authCtx.emailVerified, true);
 });
 
 test('T1-AUTH-03: Database Claim Provisioning sets role authenticated claim without body params', async () => {
@@ -869,14 +859,15 @@ test('T2-AUTH-04: Forged Firebase Claims Injection Defense', async () => {
   );
 });
 
-test('T2-AUTH-05: Anonymous / Missing Email Token Rejection throws 403', async () => {
+test('T2-AUTH-05: Expired or revoked session tokens are rejected with 401', async () => {
   await assert.rejects(
     async () => {
-      await verifyAuthenticatedRequest({ authorization: 'Bearer token_unverified' });
+      await verifyAuthenticatedRequest({ authorization: 'Bearer token_expired' });
     },
     (err: any) => {
-      assert.equal(err.status, 403);
-      assert.equal(err.code, 'auth/email-unverified');
+      assert.ok(err instanceof AuthHttpError);
+      assert.equal(err.status, 401);
+      assert.equal(err.code, 'auth/invalid-token');
       return true;
     },
   );

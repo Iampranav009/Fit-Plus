@@ -6,7 +6,7 @@ import { BrandMark } from '../../components/ui/BrandMark';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField } from '../../components/ui/InputField';
 
-type EmailAuthMode = 'signin' | 'reset';
+type EmailAuthMode = 'signin' | 'signup' | 'reset';
 
 export const TrainerAuthPage: React.FC = () => {
   const {
@@ -15,8 +15,10 @@ export const TrainerAuthPage: React.FC = () => {
     isAuthReady,
     isPlatformAdmin,
     isCloudSynced,
+    accountLoadError,
     authBusy,
     signInWithGoogle,
+    signUpWithEmail,
     signInWithEmail,
     sendPasswordReset,
     signOutGoogle,
@@ -26,15 +28,9 @@ export const TrainerAuthPage: React.FC = () => {
   const redirectTarget = searchParams.get('redirect');
   const isAdminInvite = searchParams.get('invite') === 'admin';
 
-  useEffect(() => {
-    if (!isAuthReady || !isCloudSynced || !store.session.onboardingCompleted) return;
-    if (store.session.activeRole === 'trainer') {
-      navigate(redirectTarget || '/studio/overview', { replace: true });
-    }
-  }, [isAuthReady, isCloudSynced, store.session.onboardingCompleted, store.session.activeRole]);
-
-  const [emailMode, setEmailMode] = useState<EmailAuthMode>('signin');
-  const [email, setEmail] = useState('');
+  const [emailMode, setEmailMode] = useState<EmailAuthMode>(isAdminInvite ? 'signup' : 'signin');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState(searchParams.get('email') || '');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [resetSent, setResetSent] = useState(false);
@@ -53,14 +49,21 @@ export const TrainerAuthPage: React.FC = () => {
     }
   };
 
+  // Route as soon as the account is loaded, including on return from Google.
+  useEffect(() => {
+    if (!isAuthReady || !firebaseUser || !isCloudSynced) return;
+    navigateAfterAuth({
+      onboardingCompleted: store.session.onboardingCompleted,
+      role: store.session.activeRole,
+      isAdmin: isPlatformAdmin,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthReady, firebaseUser, isCloudSynced, store.session.onboardingCompleted, store.session.activeRole, isPlatformAdmin]);
+
   const handleGoogleSignIn = async () => {
     setFormError('');
     const res = await signInWithGoogle();
-    if (!res.ok) {
-      if (res.error) setFormError(res.error);
-      return;
-    }
-    navigateAfterAuth({ onboardingCompleted: res.onboardingCompleted, role: res.role, isAdmin: res.isPlatformAdmin });
+    if (!res.ok && res.error) setFormError(res.error);
   };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
@@ -85,7 +88,15 @@ export const TrainerAuthPage: React.FC = () => {
       return;
     }
 
-    const res = await signInWithEmail(email, password);
+    if (emailMode === 'signup' && !fullName.trim()) {
+      setFormError('Enter your full name.');
+      return;
+    }
+
+    const res =
+      emailMode === 'signup'
+        ? await signUpWithEmail({ email, password, fullName })
+        : await signInWithEmail(email, password);
     if (!res.ok) {
       setFormError(res.error || 'Invalid email or password.');
       return;
@@ -120,11 +131,18 @@ export const TrainerAuthPage: React.FC = () => {
                   Trainer Studio
                 </p>
                 <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-                  Welcome back, Coach
+                  {accountLoadError ? 'We could not load your account' : 'Welcome, Coach'}
                 </h1>
                 <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                  Signed in as <span className="text-[#F5F5F7] font-medium">{firebaseUser.email}</span>.
+                  {accountLoadError ? (
+                    <span role="alert" className="text-[#FF6B70]">{accountLoadError}</span>
+                  ) : (
+                    <>Signed in as <span className="text-[#F5F5F7] font-medium">{firebaseUser.email}</span>.</>
+                  )}
                 </p>
+                {formError ? (
+                  <p role="alert" className="mt-2 text-[13px] text-[#FF6B70]">{formError}</p>
+                ) : null}
               </div>
               <div className="flex flex-col gap-3">
                 <GlassButton
@@ -152,10 +170,12 @@ export const TrainerAuthPage: React.FC = () => {
               <div>
                 <p className="text-[12px] font-medium text-[#FFB06B]">Trainer Studio</p>
                 <h1 className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-                  Coach sign in
+                  {emailMode === 'signup' ? 'Create your coach account' : 'Coach sign in'}
                 </h1>
                 <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                  Sign in to access your Trainer Studio. New coaches need an admin invitation to register.
+                  {isAdminInvite
+                    ? 'You were invited to FitPlus as a coach. Continue with Google or create an account with email.'
+                    : 'Sign in to access your Trainer Studio. New coaches need an admin invitation to register.'}
                 </p>
               </div>
 
@@ -176,6 +196,15 @@ export const TrainerAuthPage: React.FC = () => {
               </div>
 
               <form onSubmit={(e) => void handleEmailSubmit(e)} className="flex flex-col gap-3.5">
+                {emailMode === 'signup' ? (
+                  <InputField
+                    label="Full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g., Arjun Mehta"
+                    autoComplete="name"
+                  />
+                ) : null}
                 <InputField
                   label="Email address"
                   type="email"
@@ -191,8 +220,8 @@ export const TrainerAuthPage: React.FC = () => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
-                    autoComplete="current-password"
+                    placeholder={emailMode === 'signup' ? 'Minimum 8 characters' : 'Enter your password'}
+                    autoComplete={emailMode === 'signup' ? 'new-password' : 'current-password'}
                   />
                 ) : null}
 
@@ -212,19 +241,40 @@ export const TrainerAuthPage: React.FC = () => {
                       <KeyRound className="w-4 h-4" aria-hidden="true" />
                       {authBusy ? 'Sending…' : 'Send password reset link'}
                     </>
+                  ) : emailMode === 'signup' ? (
+                    authBusy ? 'Creating account…' : 'Create coach account'
                   ) : (
                     authBusy ? 'Signing in…' : 'Sign in with email'
                   )}
                 </GlassButton>
 
-                {emailMode === 'signin' ? (
+                {emailMode === 'signup' ? (
                   <button
                     type="button"
-                    onClick={() => { setEmailMode('reset'); setFormError(''); }}
-                    className="self-end text-[12px] text-[#FFB06B] hover:text-[#FF803E] cursor-pointer py-1"
+                    onClick={() => { setEmailMode('signin'); setFormError(''); }}
+                    className="self-end text-[12px] text-[#A2A8B5] hover:text-[#F5F5F7] cursor-pointer py-1"
                   >
-                    Forgot password?
+                    Already have an account? Sign in
                   </button>
+                ) : emailMode === 'signin' ? (
+                  <div className="flex justify-between">
+                    {isAdminInvite ? (
+                      <button
+                        type="button"
+                        onClick={() => { setEmailMode('signup'); setFormError(''); }}
+                        className="text-[12px] text-[#A2A8B5] hover:text-[#F5F5F7] cursor-pointer py-1"
+                      >
+                        Create an account
+                      </button>
+                    ) : <span />}
+                    <button
+                      type="button"
+                      onClick={() => { setEmailMode('reset'); setFormError(''); }}
+                      className="text-[12px] text-[#FFB06B] hover:text-[#FF803E] cursor-pointer py-1"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"

@@ -1,5 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { onAuthStateChanged, type User as FirebaseAuthUser } from 'firebase/auth';
+import {
+  getApiSecurityHeaders,
+  onAuthUserChanged,
+  type AuthUser as FirebaseAuthUser,
+} from '../lib/auth';
 import type {
   AIPlanDraft,
   AdminOverviewStats,
@@ -60,7 +64,6 @@ import { evaluateAchievementsState, ACHIEVEMENT_CATALOG } from '../lib/achieveme
 import { findEligibleReviewRelationship } from '../lib/commerce';
 import { demoRepository } from '../data/repository';
 import { STORE_SCHEMA_VERSION } from '../data/repository';
-import { auth, getApiSecurityHeaders } from '../lib/firebase';
 import * as fsService from '../data/supabaseService';
 import { getTodayKey } from '../lib/date';
 import {
@@ -132,6 +135,8 @@ export interface AuthActionResult {
   role?: UserRole;
   emailVerified?: boolean;
   isPlatformAdmin?: boolean;
+  /** Google sign-in is a full-page redirect; the session arrives when the user returns. */
+  redirecting?: boolean;
   error?: string;
 }
 
@@ -150,10 +155,13 @@ interface AppContextValue {
   pushToast: (text: string, tone?: ToastMessage['tone']) => void;
   dismissToast: (id: string) => void;
 
-  // Firebase Auth, RBAC & Cloud Sync State
+  // Supabase Auth, RBAC & Cloud Sync State
   isAuthReady: boolean;
   firebaseUser: FirebaseAuthUser | null;
+  /** True whenever someone is signed in; email confirmation is not required. */
   isEmailVerified: boolean;
+  /** Set when a signed-in user's account row could not be loaded. */
+  accountLoadError: string | null;
   isPlatformAdmin: boolean;
   isCloudSynced: boolean;
   isDemoSandbox: boolean;
@@ -161,8 +169,6 @@ interface AppContextValue {
   signInWithGoogle: () => Promise<AuthActionResult>;
   signUpWithEmail: (params: { email: string; password: string; fullName: string }) => Promise<AuthActionResult>;
   signInWithEmail: (email: string, password: string) => Promise<AuthActionResult>;
-  resendVerificationEmail: () => Promise<{ ok: boolean; error?: string }>;
-  refreshVerificationState: () => Promise<AuthActionResult>;
   sendPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }>;
   deleteMyAccount: () => Promise<{ ok: boolean; error?: string }>;
   signOutGoogle: () => Promise<void>;
@@ -459,7 +465,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [localStore, setLocalStore] = useState<StoreSnapshot>(() => demoRepository.loadSnapshot());
   const [cloudStore, setCloudStore] = useState<StoreSnapshot | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseAuthUser | null>(null);
-  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const isEmailVerified = Boolean(firebaseUser);
+  const [accountLoadError, setAccountLoadError] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
@@ -545,7 +552,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const boot = await fsService.ensureUserDocument(fbUser);
-    setIsEmailVerified(boot.emailVerified);
     setIsPlatformAdmin(boot.isPlatformAdmin);
 
     const storedInvite = readStoredPendingInvite();
@@ -648,7 +654,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Attach Firebase auth listener & authenticated Firestore workspace listeners
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (fbUser) => {
+    const unsubAuth = onAuthUserChanged((fbUser) => {
       if (workspaceUnsubRef.current) {
         workspaceUnsubRef.current();
         workspaceUnsubRef.current = null;
@@ -658,7 +664,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (!fbUser) {
         setCloudStore(null);
-        setIsEmailVerified(false);
         setIsPlatformAdmin(false);
         setDailyActivities([]);
         setStreaks([]);
@@ -671,16 +676,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSubscriptions([]);
         setPayments([]);
         setCloudReviews([]);
+        setAccountLoadError(null);
         setIsAuthReady(true);
         return;
       }
 
+      // Hold route guards on the splash until the account row is loaded, so a
+      // half-loaded session is never mistaken for "onboarding not completed".
+      setIsAuthReady(false);
+      setAccountLoadError(null);
       setDemoPreviewOverride(false);
       void attachVerifiedWorkspace(fbUser)
-        .then(() => {
-          setIsAuthReady(true);
+        .catch((err: unknown) => {
+          setAccountLoadError(err instanceof Error ? err.message : 'Could not load your account.');
         })
-        .catch(() => {
+        .finally(() => {
           setIsAuthReady(true);
         });
     });
@@ -730,39 +740,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const signInWithGoogle = useCallback(async (): Promise<AuthActionResult> => {
     setAuthBusy(true);
     try {
-      const fbUser = await fsService.signInWithGooglePopup();
-      const boot = await attachVerifiedWorkspace(fbUser);
-      setDemoPreviewOverride(false);
-      pushToast(`Signed in as ${boot.user.firstName}`);
-      return {
-        ok: true,
-        onboardingCompleted: boot.onboardingCompleted,
-        role: boot.user.role,
-        emailVerified: boot.emailVerified,
-        isPlatformAdmin: boot.isPlatformAdmin,
-      };
+      await fsService.signInWithGoogleRedirect();
+      // Keep authBusy on: the browser is leaving for Google.
+      return { ok: true, redirecting: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Google sign-in failed.';
-      pushToast('Google sign-in canceled or blocked.', 'error');
-      return { ok: false, error: message };
-    } finally {
+      pushToast('Google sign-in could not start.', 'error');
       setAuthBusy(false);
+      return { ok: false, error: message };
     }
-  }, [attachVerifiedWorkspace, pushToast]);
+  }, [pushToast]);
 
   const signUpWithEmail = useCallback(
     async (params: { email: string; password: string; fullName: string }): Promise<AuthActionResult> => {
       setAuthBusy(true);
       try {
         const fbUser = await fsService.registerWithEmailPassword(params);
+        if (!fbUser) {
+          const msg = 'Account created, but Supabase is still requiring email confirmation. Turn off "Confirm email" in Supabase Auth settings.';
+          pushToast(msg, 'error');
+          return { ok: false, error: msg };
+        }
         const boot = await attachVerifiedWorkspace(fbUser);
         setDemoPreviewOverride(false);
-        pushToast('Verification email sent. Please verify your inbox to continue.', 'info');
+        pushToast(`Welcome, ${boot.user.firstName}`);
         return {
           ok: true,
-          onboardingCompleted: false,
+          onboardingCompleted: boot.onboardingCompleted,
           role: boot.user.role,
-          emailVerified: fbUser.emailVerified,
+          emailVerified: true,
           isPlatformAdmin: boot.isPlatformAdmin,
         };
       } catch (error) {
@@ -801,43 +807,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     [attachVerifiedWorkspace, pushToast],
   );
-
-  const resendVerificationEmail = useCallback(async () => {
-    setAuthBusy(true);
-    try {
-      await fsService.resendEmailVerification();
-      pushToast('Verification link sent to your email.');
-      return { ok: true };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Could not send verification email.';
-      pushToast(msg, 'error');
-      return { ok: false, error: msg };
-    } finally {
-      setAuthBusy(false);
-    }
-  }, [pushToast]);
-
-  const refreshVerificationState = useCallback(async (): Promise<AuthActionResult> => {
-    setAuthBusy(true);
-    try {
-      const fbUser = await fsService.reloadCurrentUser();
-      if (!fbUser) return { ok: false, error: 'Not signed in.' };
-      const boot = await attachVerifiedWorkspace(fbUser);
-      pushToast('Workspace unlocked.');
-      return {
-        ok: true,
-        onboardingCompleted: boot.onboardingCompleted,
-        role: boot.user.role,
-        emailVerified: boot.emailVerified,
-        isPlatformAdmin: boot.isPlatformAdmin,
-      };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Could not refresh status.';
-      return { ok: false, error: msg };
-    } finally {
-      setAuthBusy(false);
-    }
-  }, [attachVerifiedWorkspace, pushToast]);
 
   const sendPasswordReset = useCallback(
     async (email: string) => {
@@ -889,7 +858,6 @@ function purgeSensitiveLocalStorage(): void {
       const res = await fsService.deleteAccountAndData();
       if (res.ok) {
         setCloudStore(null);
-        setIsEmailVerified(false);
         setIsPlatformAdmin(false);
         setDemoPreviewOverride(false);
         writeStoredPendingInvite(undefined);
@@ -907,9 +875,8 @@ function purgeSensitiveLocalStorage(): void {
   const signOutGoogle = useCallback(async () => {
     setAuthBusy(true);
     try {
-      await fsService.signOutFirebaseAuth();
+      await fsService.signOutAuth();
       setCloudStore(null);
-      setIsEmailVerified(false);
       setIsPlatformAdmin(false);
       setDemoPreviewOverride(false);
       writeStoredPendingInvite(undefined);
@@ -4015,6 +3982,7 @@ function purgeSensitiveLocalStorage(): void {
     isAuthReady,
     firebaseUser,
     isEmailVerified,
+    accountLoadError,
     isPlatformAdmin,
     isCloudSynced,
     isDemoSandbox,
@@ -4022,8 +3990,6 @@ function purgeSensitiveLocalStorage(): void {
     signInWithGoogle,
     signUpWithEmail,
     signInWithEmail,
-    resendVerificationEmail,
-    refreshVerificationState,
     sendPasswordReset,
     deleteMyAccount,
     signOutGoogle,
