@@ -100,7 +100,6 @@ export const AuthPage: React.FC = () => {
       if (res.error) setFormError(res.error);
       return;
     }
-    if (res.emailVerified === false) return;
     navigateAfterAuth({
       onboardingCompleted: res.onboardingCompleted,
       role: res.role,
@@ -154,18 +153,16 @@ export const AuthPage: React.FC = () => {
       setFormError(res.error || 'Invalid email or password.');
       return;
     }
-    if (res.emailVerified) {
-      navigateAfterAuth({
-        onboardingCompleted: res.onboardingCompleted,
-        role: res.role,
-        isAdmin: res.isPlatformAdmin,
-      });
-    }
+    navigateAfterAuth({
+      onboardingCompleted: res.onboardingCompleted,
+      role: res.role,
+      isAdmin: res.isPlatformAdmin,
+    });
   };
 
   const handleCheckVerification = async () => {
     const res = await refreshVerificationState();
-    if (res.ok && res.emailVerified) {
+    if (res.ok) {
       navigateAfterAuth({
         onboardingCompleted: res.onboardingCompleted,
         role: res.role,

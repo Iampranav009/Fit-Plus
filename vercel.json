@@ -46,6 +46,8 @@
     { "source": "/api/invites/:path*",       "destination": "/api/studio" },
     { "source": "/api/relationships/:path*", "destination": "/api/studio" },
     { "source": "/api/streaks/:path*",       "destination": "/api/studio" },
+    { "source": "/api/trainers/:path*",      "destination": "/api/studio" },
+    { "source": "/api/data/:path*",          "destination": "/api/studio" },
     { "source": "/api/auth/:path*",          "destination": "/api/auth" },
     { "source": "/api/admin/:path*",         "destination": "/api/admin" },
     { "source": "/api/ai/:path*",            "destination": "/api/ai" },

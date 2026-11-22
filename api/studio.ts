@@ -18,6 +18,8 @@ import {
   verifyAuthenticatedRequest,
 } from './_lib/firebaseAdmin.js';
 import { getFirestoreAdminContext, isFirebaseAdminConfigured } from './_lib/firestoreAdmin.js';
+import { getSupabaseAdminClient, isSupabaseAdminConfigured } from './_lib/supabaseAdmin.js';
+import { verifyFirebaseIdToken } from './_lib/firebaseAuth.js';
 import { DEFAULT_TIMEZONE, getTodayKey } from '../src/lib/date.js';
 import { computeStreakSummary } from '../src/lib/streak.js';
 import type { Assignment, CompletionEvent } from '../src/types/domain.js';
@@ -31,29 +33,138 @@ async function handleInviteResolve(req: VercelRequest, res: VercelResponse): Pro
     res.status(400).json({ ok: false, state: 'not_found', error: 'Invalid invite token format.' }); return;
   }
 
-  if (!isFirebaseAdminConfigured()) { res.status(200).json({ ok: true, source: 'client_fallback', state: 'unverified_server' }); return; }
+  if (!isSupabaseAdminConfigured()) { res.status(200).json({ ok: true, source: 'client_fallback', state: 'unverified_server' }); return; }
 
   try {
-    const { db } = getFirestoreAdminContext();
-    const inviteSnap = await db.collection('invites').doc(rawToken).get();
-    if (!inviteSnap.exists) { res.status(200).json({ ok: true, state: 'not_found' }); return; }
+    const db = getSupabaseAdminClient();
+    const { data: inv } = await db.from('trainer_invites').select('*').eq('token', rawToken).maybeSingle();
+    if (!inv) { res.status(200).json({ ok: true, state: 'not_found' }); return; }
 
-    const inv = inviteSnap.data()!;
-    const trainerSnap = inv.trainerId ? await db.collection('trainers').doc(String(inv.trainerId)).get() : null;
-    const pkgQuery = inv.trainerId ? await db.collection('packages').where('trainerId', '==', String(inv.trainerId)).where('status', '==', 'active').get() : null;
+    if (inv.status === 'revoked') { res.status(200).json({ ok: true, source: 'supabase_admin', state: 'revoked' }); return; }
+    if (inv.status === 'redeemed') { res.status(200).json({ ok: true, source: 'supabase_admin', state: 'redeemed' }); return; }
 
-    const trainer = trainerSnap?.exists ? { id: trainerSnap.id, slug: trainerSnap.data()!.slug, displayName: trainerSnap.data()!.displayName, headline: trainerSnap.data()!.headline, city: trainerSnap.data()!.city, languages: trainerSnap.data()!.languages || [], experienceYears: trainerSnap.data()!.experienceYears || 1, avatarKey: trainerSnap.data()!.avatarKey || 'coachArjun', coverKey: trainerSnap.data()!.coverKey || 'coachCover', isVerified: Boolean(trainerSnap.data()!.verificationStatus === 'verified') } : null;
-    const packages = (pkgQuery?.docs || []).map((docSnap) => { const p = docSnap.data(); return { id: docSnap.id, trainerId: p.trainerId, name: p.name, summary: p.summary, priceInr: p.priceInr, cadence: p.cadence, features: p.features || [], status: p.status }; });
-
-    const expiresAt = String(inv.expiresAt || '');
     const todayKey = new Date().toISOString().slice(0, 10);
-    let state: 'active' | 'expired' | 'redeemed' | 'revoked' = inv.status || 'active';
-    if (state === 'active' && expiresAt && expiresAt.slice(0, 10) < todayKey) state = 'expired';
+    const isExpired = inv.expires_at && inv.expires_at.slice(0, 10) < todayKey;
+    const state = isExpired ? 'expired' : 'active';
 
-    res.status(200).json({ ok: true, source: 'firestore_admin', state, invite: { id: inviteSnap.id, token: inv.token || inviteSnap.id, trainerId: inv.trainerId, suggestedPackageId: inv.suggestedPackageId || undefined, status: state, expiresAt }, trainer, packages });
+    const [trRes, pkgRes] = await Promise.all([
+      db.from('trainer_profiles').select('*').eq('user_id', inv.trainer_user_id).maybeSingle(),
+      db.from('coaching_packages').select('*').eq('trainer_user_id', inv.trainer_user_id).eq('status', 'active'),
+    ]);
+
+    const tr = trRes.data;
+    const trainer = tr ? { id: tr.id, slug: tr.slug, displayName: tr.display_name, headline: tr.headline, bio: tr.bio, city: tr.city, coachingMode: tr.coaching_mode, specialties: tr.specialties || [], languages: tr.languages || [], certifications: tr.certifications || [], experienceYears: tr.experience_years || 1, avatarKey: tr.avatar_key || '', coverKey: tr.cover_key || '', photoUrl: tr.photo_url || undefined, verificationStatus: tr.verification_status || 'unverified', isPublished: tr.is_published, acceptingClients: tr.accepting_clients } : null;
+    const packages = (pkgRes.data || []).map((p) => ({ id: p.id, trainerId: p.trainer_id, name: p.name, summary: p.summary || '', priceInr: p.price_inr, cadence: p.cadence, features: p.features || [], status: p.status }));
+
+    res.status(200).json({ ok: true, source: 'supabase_admin', state, invite: { id: inv.id, token: inv.token, trainerId: inv.trainer_id, clientEmailOrLabel: inv.client_email_or_label, suggestedPackageId: inv.suggested_package_id || undefined, status: state, expiresAt: inv.expires_at, createdAt: inv.created_at }, trainer, packages });
   } catch (error) {
     console.error('Invite resolve error:', error);
     res.status(500).json({ ok: false, error: 'Unable to resolve invitation.' });
+  }
+}
+
+// ─── route: GET /api/trainers/public ─────────────────────────────────────────
+async function handlePublicTrainers(_req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (!isSupabaseAdminConfigured()) { res.status(200).json({ ok: true, trainers: [], packages: [], reviews: [] }); return; }
+
+  try {
+    const db = getSupabaseAdminClient();
+    const [trRes, pkgRes, revRes] = await Promise.all([
+      db.from('trainer_profiles').select('*').eq('accepting_clients', true).eq('is_published', true),
+      db.from('coaching_packages').select('*').eq('status', 'active'),
+      db.from('trainer_reviews').select('*'),
+    ]);
+    res.status(200).json({ ok: true, trainers: trRes.data || [], packages: pkgRes.data || [], reviews: revRes.data || [] });
+  } catch (error) {
+    console.error('Public trainers error:', error);
+    res.status(500).json({ ok: false, error: 'Unable to load trainers.' });
+  }
+}
+
+// ─── route: POST /api/data/save-onboarding ──────────────────────────────────
+async function handleSaveOnboarding(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); res.status(405).json({ ok: false, error: 'Method not allowed' }); return; }
+  if (!isSupabaseAdminConfigured()) { res.status(503).json({ ok: false, error: 'Database not configured.' }); return; }
+
+  const rawAuth = req.headers.authorization;
+  if (!rawAuth?.startsWith('Bearer ')) { res.status(401).json({ ok: false, error: 'Missing token.' }); return; }
+  const idToken = rawAuth.slice(7).trim();
+
+  try {
+    const decoded = await verifyFirebaseIdToken(idToken);
+    const uid = decoded.uid;
+    const body = req.body || {};
+    const db = getSupabaseAdminClient();
+
+    if (body.type === 'trainer') {
+      const { userUpdate, trainerProfile, starterPackage } = body;
+      await db.from('app_users').update({
+        first_name: userUpdate.first_name,
+        last_name: userUpdate.last_name || '',
+        timezone: userUpdate.timezone || 'Asia/Kolkata',
+        is_adult_confirmed: true,
+        onboarding_completed: true,
+        role: userUpdate.role || 'trainer',
+      }).eq('firebase_uid', uid);
+
+      if (trainerProfile) {
+        await db.from('trainer_profiles').upsert(trainerProfile);
+      }
+      if (starterPackage) {
+        await db.from('coaching_packages').upsert(starterPackage);
+      }
+    } else {
+      const { userUpdate, clientProfile, starterAssignment, workoutPlan, mealPlan, initialProgress } = body;
+      await db.from('app_users').update({
+        first_name: userUpdate.first_name,
+        last_name: userUpdate.last_name || '',
+        role: 'client',
+        timezone: userUpdate.timezone || 'Asia/Kolkata',
+        is_adult_confirmed: Boolean(userUpdate.is_adult_confirmed),
+        onboarding_completed: true,
+      }).eq('firebase_uid', uid);
+
+      if (clientProfile) await db.from('client_profiles').upsert(clientProfile);
+      if (starterAssignment) await db.from('task_assignments').upsert(starterAssignment);
+      if (workoutPlan) await db.from('workout_plans').upsert(workoutPlan);
+      if (mealPlan) await db.from('meal_plans').upsert(mealPlan);
+      if (initialProgress) await db.from('progress_events').upsert(initialProgress);
+    }
+
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Save onboarding error:', error);
+    res.status(500).json({ ok: false, error: 'Unable to save onboarding data.' });
+  }
+}
+
+// ─── route: POST /api/data/create-invite ────────────────────────────────────
+async function handleCreateInvite(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== 'POST') { res.setHeader('Allow', 'POST'); res.status(405).json({ ok: false, error: 'Method not allowed' }); return; }
+  if (!isSupabaseAdminConfigured()) { res.status(503).json({ ok: false, error: 'Database not configured.' }); return; }
+
+  const rawAuth = req.headers.authorization;
+  if (!rawAuth?.startsWith('Bearer ')) { res.status(401).json({ ok: false, error: 'Missing token.' }); return; }
+  const idToken = rawAuth.slice(7).trim();
+
+  try {
+    await verifyFirebaseIdToken(idToken);
+    const db = getSupabaseAdminClient();
+    const invite = req.body;
+    await db.from('trainer_invites').insert({
+      id: invite.id,
+      token: invite.token,
+      trainer_id: invite.trainer_id,
+      trainer_user_id: invite.trainer_user_id,
+      client_email_or_label: invite.client_email_or_label,
+      suggested_package_id: invite.suggested_package_id || null,
+      status: 'active',
+      expires_at: invite.expires_at,
+    });
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('Create invite error:', error);
+    res.status(500).json({ ok: false, error: 'Unable to create invite.' });
   }
 }
 
@@ -182,5 +293,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (path.includes('/invites/') || path.endsWith('/resolve')) return handleInviteResolve(req, res);
   if (path.includes('/relationships/') || path.endsWith('/respond')) return handleRelationshipRespond(req, res);
   if (path.includes('/streaks/') || path.endsWith('/recalculate')) return handleStreakRecalculate(req, res);
+  if (path.includes('/trainers/public') || path.endsWith('/trainers-public')) return handlePublicTrainers(req, res);
+  if (path.includes('/data/save-onboarding') || path.endsWith('/save-onboarding')) return handleSaveOnboarding(req, res);
+  if (path.includes('/data/create-invite') || path.endsWith('/create-invite')) return handleCreateInvite(req, res);
   res.status(404).json({ ok: false, error: 'Studio endpoint not found.' });
 }

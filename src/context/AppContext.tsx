@@ -522,7 +522,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const workspaceUnsubRef = useRef<(() => void) | null>(null);
 
-  const isCloudSynced = Boolean(firebaseUser && firebaseUser.emailVerified && cloudStore && !demoPreviewOverride);
+  const isCloudSynced = Boolean(firebaseUser && cloudStore && !demoPreviewOverride);
   const isDemoSandbox = Boolean(!firebaseUser && localStore.session.isAuthenticated) || demoPreviewOverride;
   const store = isCloudSynced && cloudStore ? cloudStore : localStore;
 
@@ -559,20 +559,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resolvedInvite,
       ),
     );
-
-    if (!boot.emailVerified) {
-      setDailyActivities([]);
-      setStreaks([]);
-      setClientGroups([]);
-      setClientGroupMembers([]);
-      setConsents([]);
-      setVerificationRequests([]);
-      setAuditLogs([]);
-      setSubscriptions([]);
-      setPayments([]);
-      setCloudReviews([]);
-      return boot;
-    }
 
     if (storedInvite && !boot.pendingInviteToken) {
       void fsService
@@ -797,11 +783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const fbUser = await fsService.signInWithEmailPassword(email, password);
         const boot = await attachVerifiedWorkspace(fbUser);
         setDemoPreviewOverride(false);
-        if (boot.emailVerified) {
-          pushToast(`Signed in as ${boot.user.firstName}`);
-        } else {
-          pushToast('Please verify your email address before continuing.', 'info');
-        }
+        pushToast(`Signed in as ${boot.user.firstName}`);
         return {
           ok: true,
           onboardingCompleted: boot.onboardingCompleted,
@@ -841,11 +823,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const fbUser = await fsService.reloadCurrentUser();
       if (!fbUser) return { ok: false, error: 'Not signed in.' };
       const boot = await attachVerifiedWorkspace(fbUser);
-      if (boot.emailVerified) {
-        pushToast('Email verified! Workspace unlocked.');
-      } else {
-        pushToast('Email is not verified yet. Check your inbox and spam folder.', 'info');
-      }
+      pushToast('Workspace unlocked.');
       return {
         ok: true,
         onboardingCompleted: boot.onboardingCompleted,
@@ -1358,7 +1336,7 @@ function purgeSensitiveLocalStorage(): void {
 
   const completeClientOnboarding = useCallback(
     (draft: OnboardingClientDraft) => {
-      const useCloud = Boolean(firebaseUser && firebaseUser.emailVerified && !demoPreviewOverride);
+      const useCloud = Boolean(firebaseUser && !demoPreviewOverride);
       const targetUserId = useCloud && firebaseUser ? firebaseUser.uid : uid('usr');
       const newClientId = uid('cl');
       const now = new Date().toISOString();
@@ -1501,7 +1479,7 @@ function purgeSensitiveLocalStorage(): void {
 
   const completeTrainerOnboarding = useCallback(
     (draft: OnboardingTrainerDraft) => {
-      const useCloud = Boolean(firebaseUser && firebaseUser.emailVerified && !demoPreviewOverride);
+      const useCloud = Boolean(firebaseUser && !demoPreviewOverride);
       const targetUserId = useCloud && firebaseUser ? firebaseUser.uid : uid('usr');
       const newTrainerId = uid('trn');
       const now = new Date().toISOString();

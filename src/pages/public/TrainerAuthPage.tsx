@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, KeyRound, LogOut, Mail, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, KeyRound, LogOut, ShieldCheck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { BrandMark } from '../../components/ui/BrandMark';
 import { GlassButton } from '../../components/ui/GlassButton';
@@ -13,14 +13,11 @@ export const TrainerAuthPage: React.FC = () => {
     store,
     firebaseUser,
     isAuthReady,
-    isEmailVerified,
     isPlatformAdmin,
     isCloudSynced,
     authBusy,
     signInWithGoogle,
     signInWithEmail,
-    resendVerificationEmail,
-    refreshVerificationState,
     sendPasswordReset,
     signOutGoogle,
   } = useApp();
@@ -63,7 +60,6 @@ export const TrainerAuthPage: React.FC = () => {
       if (res.error) setFormError(res.error);
       return;
     }
-    if (res.emailVerified === false) return;
     navigateAfterAuth({ onboardingCompleted: res.onboardingCompleted, role: res.role, isAdmin: res.isPlatformAdmin });
   };
 
@@ -94,16 +90,7 @@ export const TrainerAuthPage: React.FC = () => {
       setFormError(res.error || 'Invalid email or password.');
       return;
     }
-    if (res.emailVerified) {
-      navigateAfterAuth({ onboardingCompleted: res.onboardingCompleted, role: res.role, isAdmin: res.isPlatformAdmin });
-    }
-  };
-
-  const handleCheckVerification = async () => {
-    const res = await refreshVerificationState();
-    if (res.ok && res.emailVerified) {
-      navigateAfterAuth({ onboardingCompleted: res.onboardingCompleted, role: res.role, isAdmin: res.isPlatformAdmin });
-    }
+    navigateAfterAuth({ onboardingCompleted: res.onboardingCompleted, role: res.role, isAdmin: res.isPlatformAdmin });
   };
 
   return (
@@ -125,37 +112,7 @@ export const TrainerAuthPage: React.FC = () => {
 
       <main className="flex-1 flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-md rounded-[28px] glass-overlay p-6 sm:p-8 flex flex-col gap-6">
-          {firebaseUser && !isEmailVerified ? (
-            <>
-              <div>
-                <p className="text-[12px] font-medium text-[#FFB06B] inline-flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5" aria-hidden="true" />
-                  Email verification required
-                </p>
-                <h1 className="mt-2 text-[26px] font-semibold tracking-[-0.02em] text-[#F5F5F7]">
-                  Verify your inbox to continue
-                </h1>
-                <p className="mt-2 text-[14px] text-[#A2A8B5] leading-relaxed">
-                  We sent a verification link to{' '}
-                  <span className="text-[#F5F5F7] font-medium">{firebaseUser.email}</span>.
-                </p>
-              </div>
-              <div className="flex flex-col gap-3">
-                <GlassButton fullWidth disabled={authBusy} onClick={() => void handleCheckVerification()}>
-                  <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                  {authBusy ? 'Checking status…' : "I've verified — continue"}
-                </GlassButton>
-                <GlassButton variant="glass" fullWidth disabled={authBusy} onClick={() => void resendVerificationEmail()}>
-                  <RefreshCw className="w-4 h-4" aria-hidden="true" />
-                  Resend verification email
-                </GlassButton>
-                <GlassButton variant="tertiary" fullWidth disabled={authBusy} onClick={() => void signOutGoogle()}>
-                  <LogOut className="w-4 h-4" aria-hidden="true" />
-                  Sign out
-                </GlassButton>
-              </div>
-            </>
-          ) : firebaseUser && isEmailVerified ? (
+          {firebaseUser ? (
             <>
               <div>
                 <p className="text-[12px] font-medium text-[#B8E66C] inline-flex items-center gap-1.5">

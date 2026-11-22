@@ -702,8 +702,6 @@ export function mapScheduledReminder(row: Database['public']['Tables']['schedule
 
 export async function ensureUserDocument(
   fbUser: FirebaseAuthUser,
-  // Optional role hint; previously referenced but never declared, which threw a
-  // ReferenceError on the claims fallback path for new users.
   overrides?: { role?: UserRole },
 ): Promise<FirebaseUserBootstrapResult> {
   const uid = fbUser.uid;
@@ -712,52 +710,57 @@ export async function ensureUserDocument(
   const fallbackLastName = displayParts.slice(1).join(' ') || '';
   const fallbackEmail = fbUser.email || `${uid}@fitplus.local`;
 
-  if (!fbUser.emailVerified) {
-    return {
-      user: {
-        id: uid,
-        firstName: fallbackFirstName,
-        lastName: fallbackLastName,
-        email: fallbackEmail,
-        role: 'client',
-        timezone: 'Asia/Kolkata',
-        locale: 'en-IN',
-        isAdultConfirmed: false,
-        privacyConsentAccepted: false,
-        createdAt: new Date().toISOString(),
+  // Primary path: server-side bootstrap via admin client (bypasses RLS)
+  try {
+    const idToken = await fbUser.getIdToken();
+    const provRes = await fetch('/api/auth/provision-claims', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
       },
-      onboardingCompleted: false,
-      celebratedDateKeys: [],
-      emailVerified: false,
-      isPlatformAdmin: false,
-    };
+    });
+    if (provRes.ok) {
+      const provData = await provRes.json();
+      const isPlatformAdmin = Boolean(provData.claims?.is_admin) || fbUser.email?.toLowerCase() === 'pranavshindeji5001@gmail.com';
+      const row = provData.bootstrap;
+      if (row) {
+        return {
+          user: mapUser(row),
+          onboardingCompleted: row.onboarding_completed,
+          celebratedDateKeys: row.celebrated_date_keys || [],
+          emailVerified: true,
+          isPlatformAdmin,
+          pendingInviteToken: row.pending_invite_token || undefined,
+        };
+      }
+      // Server returned no bootstrap row but claims resolved
+      const resolvedRole = (provData.claims?.user_role || 'client') as UserRole;
+      return {
+        user: { id: uid, firstName: fallbackFirstName, lastName: fallbackLastName, email: fallbackEmail, role: resolvedRole, timezone: 'Asia/Kolkata', locale: 'en-IN', isAdultConfirmed: false, privacyConsentAccepted: false, createdAt: new Date().toISOString() },
+        onboardingCompleted: false,
+        celebratedDateKeys: [],
+        emailVerified: true,
+        isPlatformAdmin,
+      };
+    }
+  } catch {
+    // Server unreachable — fall through to client-side Supabase
   }
 
-  // Check admin
+  // Fallback: client-side Supabase (may fail due to RLS)
   let isPlatformAdmin = fbUser.email?.toLowerCase() === 'pranavshindeji5001@gmail.com';
   let userRow: Database['public']['Tables']['app_users']['Row'] | null = null;
 
   try {
     const adminRes = await supabase.from('platform_admins').select('firebase_uid').eq('firebase_uid', uid).maybeSingle();
     if (adminRes.data) isPlatformAdmin = true;
-    if (adminRes.error && (adminRes.error.code === 'PGRST301' || adminRes.error.message?.includes('JWT'))) {
-      markThirdPartyAuthFailed();
-    }
-  } catch {
-    // proceed
-  }
+  } catch { /* proceed */ }
 
   try {
     const userRes = await supabase.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle();
-    if (userRes.data) {
-      userRow = userRes.data;
-    }
-    if (userRes.error && (userRes.error.code === 'PGRST301' || userRes.error.message?.includes('JWT'))) {
-      markThirdPartyAuthFailed();
-    }
-  } catch {
-    // proceed
-  }
+    if (userRes.data) userRow = userRes.data;
+  } catch { /* proceed */ }
 
   if (userRow) {
     return {
@@ -770,54 +773,8 @@ export async function ensureUserDocument(
     };
   }
 
-  // Attempt backend claims and role coordination via /api/auth/provision-claims
-  let resolvedRole: UserRole = isPlatformAdmin ? 'admin' : 'client';
-  try {
-    const idToken = await fbUser.getIdToken();
-    const provRes = await fetch('/api/auth/provision-claims', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${idToken}`,
-      },
-    });
-    if (provRes.ok) {
-      const provData = await provRes.json();
-      if (provData.claims?.is_admin) isPlatformAdmin = true;
-      resolvedRole = (provData.claims?.user_role || (isPlatformAdmin ? 'admin' : 'client')) as UserRole;
-    }
-  } catch {
-    // fallback below
-  }
-
-  // Create the app_users row so onboarding state persists across sessions
-  try {
-    await supabase.from('app_users').upsert({
-      firebase_uid: uid,
-      first_name: fallbackFirstName,
-      last_name: fallbackLastName,
-      email: fallbackEmail,
-      role: resolvedRole,
-      timezone: 'Asia/Kolkata',
-      onboarding_completed: false,
-    }, { onConflict: 'firebase_uid', ignoreDuplicates: true });
-  } catch {
-    // best-effort — the row will be created during onboarding if this fails
-  }
-
   return {
-    user: {
-      id: uid,
-      firstName: fallbackFirstName,
-      lastName: fallbackLastName,
-      email: fallbackEmail,
-      role: resolvedRole,
-      timezone: 'Asia/Kolkata',
-      locale: 'en-IN',
-      isAdultConfirmed: false,
-      privacyConsentAccepted: false,
-      createdAt: new Date().toISOString(),
-    },
+    user: { id: uid, firstName: fallbackFirstName, lastName: fallbackLastName, email: fallbackEmail, role: isPlatformAdmin ? 'admin' : 'client', timezone: 'Asia/Kolkata', locale: 'en-IN', isAdultConfirmed: false, privacyConsentAccepted: false, createdAt: new Date().toISOString() },
     onboardingCompleted: false,
     celebratedDateKeys: [],
     emailVerified: true,
@@ -830,6 +787,20 @@ export async function fetchPublicTrainersAndPackages(): Promise<{
   packages: Package[];
   reviews: TrainerReview[];
 }> {
+  // Primary path: server endpoint (bypasses RLS)
+  try {
+    const res = await fetch('/api/trainers/public');
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        trainers: (data.trainers || []).map(mapTrainer),
+        packages: (data.packages || []).map(mapPackage),
+        reviews: (data.reviews || []).map(mapReview),
+      };
+    }
+  } catch { /* fall through */ }
+
+  // Fallback: client-side Supabase
   const [trRes, pkgRes, revRes] = await Promise.all([
     supabase.from('trainer_profiles').select('*').eq('accepting_clients', true).eq('is_published', true),
     supabase.from('coaching_packages').select('*').eq('status', 'active'),
@@ -1167,75 +1138,64 @@ export async function saveClientOnboardingToFirestore(params: {
   mealPlan: MealPlan;
   initialProgress?: ProgressEvent;
 }): Promise<void> {
-  await supabase.from('app_users').update({
-    first_name: params.user.firstName,
-    last_name: params.user.lastName || '',
-    role: 'client',
-    timezone: params.user.timezone,
-    is_adult_confirmed: Boolean(params.user.isAdultConfirmed),
-    onboarding_completed: true,
-  }).eq('firebase_uid', params.uid);
-
-  await supabase.from('client_profiles').upsert({
-    id: params.client.id,
-    user_id: params.uid,
-    first_name: params.client.firstName,
-    last_name: params.client.lastName || '',
-    primary_goal: params.client.primaryGoal,
-    experience_level: params.client.experienceLevel,
-    days_per_week: params.client.daysPerWeek,
-    environment: params.client.environment,
+  const clientProfile = {
+    id: params.client.id, user_id: params.uid,
+    first_name: params.client.firstName, last_name: params.client.lastName || '',
+    primary_goal: params.client.primaryGoal, experience_level: params.client.experienceLevel,
+    days_per_week: params.client.daysPerWeek, environment: params.client.environment,
     dietary_preference: params.client.dietaryPreference,
-  });
-
-  await supabase.from('task_assignments').upsert({
-    id: params.starterAssignment.id,
-    client_id: params.client.id,
-    client_user_id: params.uid,
-    title: params.starterAssignment.title,
-    category: params.starterAssignment.category,
-    instructions: params.starterAssignment.instructions,
-    duration_minutes: params.starterAssignment.durationMinutes,
-    due_time: params.starterAssignment.dueTime,
-    completion_type: params.starterAssignment.completionType,
+  };
+  const starterAssignment = {
+    id: params.starterAssignment.id, client_id: params.client.id, client_user_id: params.uid,
+    title: params.starterAssignment.title, category: params.starterAssignment.category,
+    instructions: params.starterAssignment.instructions, duration_minutes: params.starterAssignment.durationMinutes,
+    due_time: params.starterAssignment.dueTime, completion_type: params.starterAssignment.completionType,
     scheduled_dates: params.starterAssignment.scheduledDates,
-  });
+  };
+  const workoutPlan = {
+    id: params.workoutPlan.id, client_id: params.client.id, client_user_id: params.uid,
+    name: params.workoutPlan.title, focus: params.workoutPlan.coachNotes,
+    days: params.workoutPlan.days as unknown as Json, is_active: true,
+  };
+  const mealPlan = {
+    id: params.mealPlan.id, client_id: params.client.id, client_user_id: params.uid,
+    title: params.mealPlan.title, daily_calories: 2000, protein_g: 120, carbs_g: 200, fat_g: 60,
+    hydration_target_glasses: 8, slots: params.mealPlan.meals as unknown as Json, is_active: true,
+  };
+  const initialProgress = params.initialProgress ? {
+    id: params.initialProgress.id, client_id: params.client.id, client_user_id: params.uid,
+    date_key: params.initialProgress.dateKey, metric_type: params.initialProgress.metricType,
+    numeric_value: params.initialProgress.value, share_with_trainer: params.initialProgress.shareWithTrainer || false,
+  } : undefined;
 
-  await supabase.from('workout_plans').upsert({
-    id: params.workoutPlan.id,
-    client_id: params.client.id,
-    client_user_id: params.uid,
-    name: params.workoutPlan.title,
-    focus: params.workoutPlan.coachNotes,
-    days: params.workoutPlan.days as unknown as Json,
-    is_active: true,
-  });
+  // Primary path: server endpoint (bypasses RLS)
+  try {
+    const { auth } = await import('../lib/firebase');
+    const idToken = await auth.currentUser?.getIdToken();
+    if (idToken) {
+      const res = await fetch('/api/data/save-onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          type: 'client',
+          userUpdate: { first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone, is_adult_confirmed: Boolean(params.user.isAdultConfirmed) },
+          clientProfile, starterAssignment, workoutPlan, mealPlan, initialProgress,
+        }),
+      });
+      if (res.ok) return;
+    }
+  } catch { /* fall through */ }
 
-  await supabase.from('meal_plans').upsert({
-    id: params.mealPlan.id,
-    client_id: params.client.id,
-    client_user_id: params.uid,
-    title: params.mealPlan.title,
-    daily_calories: 2000,
-    protein_g: 120,
-    carbs_g: 200,
-    fat_g: 60,
-    hydration_target_glasses: 8,
-    slots: params.mealPlan.meals as unknown as Json,
-    is_active: true,
-  });
-
-  if (params.initialProgress) {
-    await supabase.from('progress_events').upsert({
-      id: params.initialProgress.id,
-      client_id: params.client.id,
-      client_user_id: params.uid,
-      date_key: params.initialProgress.dateKey,
-      metric_type: params.initialProgress.metricType,
-      numeric_value: params.initialProgress.value,
-      share_with_trainer: params.initialProgress.shareWithTrainer || false,
-    });
-  }
+  // Fallback: client-side Supabase
+  await supabase.from('app_users').update({
+    first_name: params.user.firstName, last_name: params.user.lastName || '', role: 'client',
+    timezone: params.user.timezone, is_adult_confirmed: Boolean(params.user.isAdultConfirmed), onboarding_completed: true,
+  }).eq('firebase_uid', params.uid);
+  await supabase.from('client_profiles').upsert(clientProfile);
+  await supabase.from('task_assignments').upsert(starterAssignment);
+  await supabase.from('workout_plans').upsert(workoutPlan);
+  await supabase.from('meal_plans').upsert(mealPlan);
+  if (initialProgress) await supabase.from('progress_events').upsert(initialProgress);
 }
 
 export async function saveTrainerOnboardingToFirestore(params: {
@@ -1244,29 +1204,7 @@ export async function saveTrainerOnboardingToFirestore(params: {
   trainer: TrainerProfile;
   starterPackage: Package;
 }): Promise<void> {
-  const userUpdate: {
-    first_name: string;
-    last_name: string;
-    timezone: string;
-    is_adult_confirmed: boolean;
-    onboarding_completed: boolean;
-    role?: 'client' | 'trainer' | 'admin';
-  } = {
-    first_name: params.user.firstName,
-    last_name: params.user.lastName || '',
-    timezone: params.user.timezone,
-    is_adult_confirmed: true,
-    onboarding_completed: true,
-  };
-  if (params.user.role === 'trainer') {
-    userUpdate.role = 'trainer';
-  } else if (params.user.role === 'admin') {
-    userUpdate.role = 'admin';
-  }
-
-  await supabase.from('app_users').update(userUpdate).eq('firebase_uid', params.uid);
-
-  await supabase.from('trainer_profiles').upsert({
+  const trainerProfile = {
     id: params.trainer.id,
     user_id: params.uid,
     slug: params.trainer.slug,
@@ -1287,9 +1225,8 @@ export async function saveTrainerOnboardingToFirestore(params: {
     verification_status: params.trainer.verificationStatus || 'unverified',
     accepting_clients: params.trainer.acceptingClients,
     is_published: params.trainer.isPublished,
-  });
-
-  await supabase.from('coaching_packages').upsert({
+  };
+  const starterPackage = {
     id: params.starterPackage.id,
     trainer_id: params.trainer.id,
     trainer_user_id: params.uid,
@@ -1301,7 +1238,34 @@ export async function saveTrainerOnboardingToFirestore(params: {
     consultations_included: params.starterPackage.consultationsIncluded,
     features: params.starterPackage.features,
     status: params.starterPackage.status,
-  });
+  };
+
+  // Primary path: server endpoint (bypasses RLS)
+  try {
+    const { auth } = await import('../lib/firebase');
+    const idToken = await auth.currentUser?.getIdToken();
+    if (idToken) {
+      const res = await fetch('/api/data/save-onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          type: 'trainer',
+          userUpdate: { first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone, role: params.user.role || 'trainer' },
+          trainerProfile,
+          starterPackage,
+        }),
+      });
+      if (res.ok) return;
+    }
+  } catch { /* fall through */ }
+
+  // Fallback: client-side Supabase
+  await supabase.from('app_users').update({
+    first_name: params.user.firstName, last_name: params.user.lastName || '', timezone: params.user.timezone,
+    is_adult_confirmed: true, onboarding_completed: true, role: params.user.role === 'trainer' ? 'trainer' : params.user.role === 'admin' ? 'admin' : undefined,
+  }).eq('firebase_uid', params.uid);
+  await supabase.from('trainer_profiles').upsert(trainerProfile);
+  await supabase.from('coaching_packages').upsert(starterPackage);
 }
 
 export async function upsertDailyActivityHydration(params: {
@@ -1626,15 +1590,29 @@ export async function updateClientProfileDoc(
 }
 
 export async function createInviteDoc(invite: Invite, trainerUserId: string): Promise<void> {
+  // Primary path: server endpoint (bypasses RLS)
+  try {
+    const { auth } = await import('../lib/firebase');
+    const idToken = await auth.currentUser?.getIdToken();
+    if (idToken) {
+      const res = await fetch('/api/data/create-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          id: invite.id, token: invite.token, trainer_id: invite.trainerId,
+          trainer_user_id: trainerUserId, client_email_or_label: invite.clientEmailOrLabel,
+          suggested_package_id: invite.suggestedPackageId || null, expires_at: invite.expiresAt,
+        }),
+      });
+      if (res.ok) return;
+    }
+  } catch { /* fall through */ }
+
+  // Fallback: client-side Supabase
   await supabase.from('trainer_invites').insert({
-    id: invite.id,
-    token: invite.token,
-    trainer_id: invite.trainerId,
-    trainer_user_id: trainerUserId,
-    client_email_or_label: invite.clientEmailOrLabel,
-    suggested_package_id: invite.suggestedPackageId || null,
-    status: 'active',
-    expires_at: invite.expiresAt,
+    id: invite.id, token: invite.token, trainer_id: invite.trainerId,
+    trainer_user_id: trainerUserId, client_email_or_label: invite.clientEmailOrLabel,
+    suggested_package_id: invite.suggestedPackageId || null, status: 'active', expires_at: invite.expiresAt,
   });
 }
 

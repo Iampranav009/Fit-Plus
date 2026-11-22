@@ -64,16 +64,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let isAdmin = Boolean(email) && email === bootstrapAdminEmail;
     let storedRole: string | undefined;
+    let bootstrapRow: Record<string, unknown> | null = null;
 
     if (isSupabaseAdminConfigured()) {
       try {
         const sb = getSupabaseAdminClient();
         const [userRes, adminRes] = await Promise.all([
-          sb.from('app_users').select('role').eq('firebase_uid', uid).maybeSingle(),
+          sb.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle(),
           sb.from('platform_admins').select('firebase_uid').eq('firebase_uid', uid).maybeSingle(),
         ]);
-        if (userRes.data?.role) {
+        if (userRes.data) {
           storedRole = userRes.data.role;
+          bootstrapRow = userRes.data as Record<string, unknown>;
         }
         if (adminRes.data?.firebase_uid) {
           isAdmin = true;
@@ -107,6 +109,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ? 'trainer'
         : 'client';
 
+    // Create app_users row if it doesn't exist (server-side, bypasses RLS)
+    if (!bootstrapRow && isSupabaseAdminConfigured()) {
+      try {
+        const sb = getSupabaseAdminClient();
+        const displayName = decoded.name || decoded.email || 'FitPlus Member';
+        const parts = String(displayName).trim().split(/\s+/);
+        const { data: newRow } = await sb.from('app_users').upsert({
+          firebase_uid: uid,
+          first_name: parts[0] || 'Member',
+          last_name: parts.slice(1).join(' ') || '',
+          email: email || `${uid}@fitplus.local`,
+          role: userRole,
+          timezone: 'Asia/Kolkata',
+          onboarding_completed: false,
+        }, { onConflict: 'firebase_uid' }).select('*').single();
+        if (newRow) bootstrapRow = newRow as Record<string, unknown>;
+      } catch {
+        // best-effort
+      }
+    }
+
     // If Firebase Admin is available to set custom claims on the user account
     if (authAdmin) {
       const alreadyCurrent =
@@ -136,6 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             is_admin: isAdmin,
             user_role: userRole,
           },
+          bootstrap: bootstrapRow,
           message: 'Successfully provisioned custom claims.',
         });
       }
@@ -150,6 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           is_admin: isAdmin,
           user_role: userRole,
         },
+        bootstrap: bootstrapRow,
         message: 'Claims already up to date.',
       });
     }
@@ -165,6 +190,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         is_admin: isAdmin,
         user_role: userRole,
       },
+      bootstrap: bootstrapRow,
       message: 'Authoritative role resolved from Supabase.',
     });
   } catch (err: unknown) {
