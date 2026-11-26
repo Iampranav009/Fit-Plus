@@ -657,6 +657,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .catch(() => {
         setPublicDirectory((prev) => ({ ...prev, loaded: true }));
       });
+
+    const unsub = fsService.subscribePublicDirectory((patch) => {
+      setPublicDirectory((prev) => ({ ...prev, ...patch }));
+    });
+    return unsub;
   }, []);
 
   // Attach Firebase auth listener & authenticated Firestore workspace listeners

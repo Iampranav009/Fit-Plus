@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Copy, FolderPlus, Plus, Trash2, UserCheck, UserPlus, X, MessageSquare } from 'lucide-react';
+import { Check, Copy, FolderPlus, Plus, Share2, Trash2, UserCheck, UserPlus, X, MessageSquare } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import type { GoalFocus } from '../../types/domain';
@@ -141,6 +141,19 @@ export const StudioClientsPage: React.FC = () => {
     }
     setCopiedToken(token);
     window.setTimeout(() => setCopiedToken(null), 1800);
+  };
+
+  const shareInviteLink = async (token: string, label: string) => {
+    const url = `${window.location.origin}/join/${token}`;
+    const text = `You're invited to train with ${activeTrainer?.displayName ?? 'your coach'} on FitPlus! Join here:`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'FitPlus Invitation', text, url });
+        return;
+      } catch { /* user cancelled or share failed — fall through to WhatsApp */ }
+    }
+    const waText = encodeURIComponent(`${text} ${url}`);
+    window.open(`https://wa.me/?text=${waText}`, '_blank', 'noopener');
   };
 
   return (
@@ -597,7 +610,7 @@ export const StudioClientsPage: React.FC = () => {
                   {inv.clientEmailOrLabel} · Expires {formatIndiaDate(inv.expiresAt.slice(0, 10), 'short')}
                 </p>
                 {inv.status === 'active' ? (
-                  <div className="flex gap-2 pt-1">
+                  <div className="flex flex-wrap gap-2 pt-1">
                     <GlassButton
                       size="sm"
                       variant="secondary"
@@ -611,9 +624,17 @@ export const StudioClientsPage: React.FC = () => {
                       ) : (
                         <>
                           <Copy className="w-3.5 h-3.5" aria-hidden="true" />
-                          {isCloudSynced ? 'Copy invite link' : 'Copy demo invitation'}
+                          Copy client link
                         </>
                       )}
+                    </GlassButton>
+                    <GlassButton
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => shareInviteLink(inv.token, inv.clientEmailOrLabel)}
+                    >
+                      <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
+                      Share
                     </GlassButton>
                     <GlassButton
                       size="sm"

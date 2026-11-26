@@ -720,13 +720,6 @@ export const TodayPage: React.FC = () => {
           )}
         </section>
 
-        {/* 9. Stage 4C Growth: Referral Program */}
-        <section>
-          <ReferralCard
-            displayName={activeUser.firstName}
-            userId={activeUser.id}
-          />
-        </section>
       </div>
 
       {/* Floating Quick-Log Action Button */}

@@ -1024,6 +1024,38 @@ export function subscribeAuthenticatedWorkspace(
       const { data } = await supabase.from('weekly_check_ins').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`);
       if (data) onUpdate({ weeklyCheckIns: data.map(mapWeeklyCheckIn) });
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'coaching_packages' }, async () => {
+      const { data } = await supabase.from('coaching_packages').select('*');
+      if (data) onUpdate({ packages: data.map(mapPackage) });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'trainer_profiles' }, async () => {
+      const { data } = await supabase.from('trainer_profiles').select('*');
+      if (data) onUpdate({ trainers: data.map(mapTrainer) });
+    })
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Public Directory Realtime (unauthenticated visitors see package/trainer updates)
+// -----------------------------------------------------------------------------
+
+export function subscribePublicDirectory(
+  onUpdate: (patch: { trainers?: TrainerProfile[]; packages?: Package[]; reviews?: TrainerReview[] }) => void,
+): () => void {
+  const channel = supabase
+    .channel('public-directory')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'coaching_packages' }, async () => {
+      const { data } = await supabase.from('coaching_packages').select('*').eq('status', 'active');
+      if (data) onUpdate({ packages: data.map(mapPackage) });
+    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'trainer_profiles' }, async () => {
+      const { data } = await supabase.from('trainer_profiles').select('*').eq('accepting_clients', true).eq('is_published', true);
+      if (data) onUpdate({ trainers: data.map(mapTrainer) });
+    })
     .subscribe();
 
   return () => {
