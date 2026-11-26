@@ -877,161 +877,100 @@ export function subscribeAuthenticatedWorkspace(
   const uid = fbUser.uid;
   const isPlatformAdmin = Boolean(options?.isPlatformAdmin);
 
-  // Initial comprehensive hydration from Supabase PostgreSQL tables
-  void Promise.all([
-    supabase.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle(),
-    supabase.from('trainer_profiles').select('*'),
-    supabase.from('coaching_packages').select('*'),
-    supabase.from('client_profiles').select('*'),
-    supabase.from('coaching_relationships').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('trainer_invites').select('*').or(`trainer_user_id.eq.${uid},redeemed_by_user_id.eq.${uid}`),
-    supabase.from('enrollments').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('subscriptions').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('payment_records').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('trainer_reviews').select('*'),
-    supabase.from('task_templates').select('*').eq('trainer_user_id', uid),
-    supabase.from('task_assignments').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('task_completions').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('daily_activity').select('*').eq('client_user_id', uid),
-    supabase.from('progress_events').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('workout_plans').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('meal_plans').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('consultation_slots').select('*').or(`trainer_user_id.eq.${uid},booked_by_user_id.eq.${uid}`),
-    supabase.from('consultation_bookings').select('*').or(`trainer_user_id.eq.${uid},client_user_id.eq.${uid}`),
-    supabase.from('notifications').select('*').eq('recipient_user_id', uid),
-    supabase.from('ai_plan_drafts').select('*').eq('trainer_user_id', uid),
-    supabase.from('client_groups').select('*').eq('trainer_user_id', uid),
-    supabase.from('client_group_members').select('*').or(`trainer_user_id.eq.${uid},client_user_id.eq.${uid}`),
-    supabase.from('streak_records').select('*').eq('client_user_id', uid),
-    supabase.from('consent_records').select('*').eq('user_id', uid),
-    isPlatformAdmin
-      ? supabase.from('trainer_verification_requests').select('*')
-      : supabase.from('trainer_verification_requests').select('*').eq('trainer_user_id', uid),
-    isPlatformAdmin
-      ? supabase.from('audit_logs').select('*')
-      : supabase.from('audit_logs').select('*').eq('actor_user_id', uid),
-    supabase.from('exercise_definitions').select('*'),
-    supabase.from('workout_sessions').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('achievement_unlocks').select('*').eq('client_user_id', uid),
-    supabase.from('nutrition_diary_entries').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('weekly_check_ins').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('chat_conversations').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
-    supabase.from('workout_program_templates').select('*').eq('trainer_user_id', uid),
-    supabase.from('nutrition_program_templates').select('*').eq('trainer_user_id', uid),
-    supabase.from('scheduled_reminders').select('*').eq('recipient_user_id', uid),
-  ]).then(([
-    userRes,
-    trainersRes,
-    packagesRes,
-    clientsRes,
-    relationshipsRes,
-    invitesRes,
-    enrollmentsRes,
-    subscriptionsRes,
-    paymentsRes,
-    reviewsRes,
-    templatesRes,
-    assignmentsRes,
-    completionsRes,
-    activitiesRes,
-    progressRes,
-    workoutPlansRes,
-    mealPlansRes,
-    slotsRes,
-    bookingsRes,
-    notificationsRes,
-    aiDraftsRes,
-    groupsRes,
-    groupMembersRes,
-    streaksRes,
-    consentsRes,
-    verificationRes,
-    auditRes,
-    exercisesRes,
-    sessionsRes,
-    achievementsRes,
-    nutritionLogsRes,
-    checkInsRes,
-    conversationsRes,
-    workoutTemplatesRes,
-    nutritionTemplatesRes,
-    scheduledRemindersRes,
-  ]) => {
-    const userRow = userRes.data;
-    onUpdate({
-      users: userRow ? [mapUser(userRow)] : undefined,
-      trainers: (trainersRes.data || []).map(mapTrainer),
-      packages: (packagesRes.data || []).map(mapPackage),
-      clients: (clientsRes.data || []).map(mapClient),
-      relationships: (relationshipsRes.data || []).map(mapRelationship),
-      invites: (invitesRes.data || []).map(mapInvite),
-      enrollments: (enrollmentsRes.data || []).map(mapEnrollment),
-      subscriptions: (subscriptionsRes.data || []).map(mapSubscription),
-      payments: (paymentsRes.data || []).map(mapPayment),
-      reviews: (reviewsRes.data || []).map(mapReview),
-      templates: (templatesRes.data || []).map(mapTaskTemplate),
-      assignments: (assignmentsRes.data || []).map(mapAssignment),
-      completions: (completionsRes.data || []).map(mapCompletion),
-      dailyActivities: (activitiesRes.data || []).map(mapDailyActivity),
-      progressEvents: (progressRes.data || []).map(mapProgressEvent),
-      workoutPlans: (workoutPlansRes.data || []).map(mapWorkoutPlan),
-      mealPlans: (mealPlansRes.data || []).map(mapMealPlan),
-      consultationSlots: (slotsRes.data || []).map(mapConsultationSlot),
-      bookings: (bookingsRes.data || []).map(mapBooking),
-      notifications: (notificationsRes.data || []).map(mapNotification),
-      aiDrafts: (aiDraftsRes.data || []).map(mapAIDraft),
-      clientGroups: (groupsRes.data || []).map(mapClientGroup),
-      clientGroupMembers: (groupMembersRes.data || []).map(mapClientGroupMember),
-      streaks: (streaksRes.data || []).map(mapStreak),
-      consents: (consentsRes.data || []).map(mapConsent),
-      verificationRequests: (verificationRes.data || []).map(mapVerification),
-      auditLogs: (auditRes.data || []).map(mapAuditLog),
-      customExercises: (exercisesRes.data || []).map(mapExercise),
-      workoutSessions: (sessionsRes.data || []).map(mapWorkoutSession),
-      achievements: (achievementsRes.data || []).map(mapAchievement),
-      nutritionLogs: (nutritionLogsRes.data || []).map(mapNutritionLog),
-      weeklyCheckIns: (checkInsRes.data || []).map(mapWeeklyCheckIn),
-      conversations: (conversationsRes.data || []).map(mapConversation),
-      workoutTemplates: (workoutTemplatesRes.data || []).map(mapWorkoutTemplate),
-      nutritionTemplates: (nutritionTemplatesRes.data || []).map(mapNutritionTemplate),
-      scheduledReminders: (scheduledRemindersRes.data || []).map(mapScheduledReminder),
-      onboardingCompleted: userRow ? userRow.onboarding_completed : undefined,
-      celebratedDateKeys: userRow?.celebrated_date_keys || [],
-      pendingInviteToken: userRow?.pending_invite_token || undefined,
-    });
-  });
+  // Initial comprehensive hydration via server endpoint (admin client bypasses RLS)
+  void (async () => {
+    try {
+      const token = await fbUser.getIdToken();
+      const res = await fetch('/api/data/workspace', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body.error || `HTTP ${res.status}`);
 
-  // Attach Realtime channels for live updates
+      const userRow = body.user;
+      onUpdate({
+        users: userRow ? [mapUser(userRow)] : undefined,
+        trainers: (body.trainers || []).map(mapTrainer),
+        packages: (body.packages || []).map(mapPackage),
+        clients: (body.clients || []).map(mapClient),
+        relationships: (body.relationships || []).map(mapRelationship),
+        invites: (body.invites || []).map(mapInvite),
+        enrollments: (body.enrollments || []).map(mapEnrollment),
+        subscriptions: (body.subscriptions || []).map(mapSubscription),
+        payments: (body.payments || []).map(mapPayment),
+        reviews: (body.reviews || []).map(mapReview),
+        templates: (body.templates || []).map(mapTaskTemplate),
+        assignments: (body.assignments || []).map(mapAssignment),
+        completions: (body.completions || []).map(mapCompletion),
+        dailyActivities: (body.activities || []).map(mapDailyActivity),
+        progressEvents: (body.progress || []).map(mapProgressEvent),
+        workoutPlans: (body.workoutPlans || []).map(mapWorkoutPlan),
+        mealPlans: (body.mealPlans || []).map(mapMealPlan),
+        consultationSlots: (body.slots || []).map(mapConsultationSlot),
+        bookings: (body.bookings || []).map(mapBooking),
+        notifications: (body.notifications || []).map(mapNotification),
+        aiDrafts: (body.aiDrafts || []).map(mapAIDraft),
+        clientGroups: (body.groups || []).map(mapClientGroup),
+        clientGroupMembers: (body.groupMembers || []).map(mapClientGroupMember),
+        streaks: (body.streaks || []).map(mapStreak),
+        consents: (body.consents || []).map(mapConsent),
+        verificationRequests: (body.verifications || []).map(mapVerification),
+        auditLogs: (body.auditLogs || []).map(mapAuditLog),
+        customExercises: (body.exercises || []).map(mapExercise),
+        workoutSessions: (body.sessions || []).map(mapWorkoutSession),
+        achievements: (body.achievements || []).map(mapAchievement),
+        nutritionLogs: (body.nutritionLogs || []).map(mapNutritionLog),
+        weeklyCheckIns: (body.checkIns || []).map(mapWeeklyCheckIn),
+        conversations: (body.conversations || []).map(mapConversation),
+        workoutTemplates: (body.workoutTemplates || []).map(mapWorkoutTemplate),
+        nutritionTemplates: (body.nutritionTemplates || []).map(mapNutritionTemplate),
+        scheduledReminders: (body.scheduledReminders || []).map(mapScheduledReminder),
+        onboardingCompleted: userRow ? userRow.onboarding_completed : undefined,
+        celebratedDateKeys: userRow?.celebrated_date_keys || [],
+        pendingInviteToken: userRow?.pending_invite_token || undefined,
+      });
+    } catch (err) {
+      console.error('[FitPlus] workspace hydration failed:', err);
+    }
+  })();
+
+  // Realtime re-hydrate helper: re-fetch full workspace via server on any change
+  const rehydrate = async () => {
+    try {
+      const token = await fbUser.getIdToken();
+      const res = await fetch('/api/data/workspace', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) return;
+
+      const userRow = body.user;
+      onUpdate({
+        users: userRow ? [mapUser(userRow)] : undefined,
+        trainers: (body.trainers || []).map(mapTrainer),
+        packages: (body.packages || []).map(mapPackage),
+        clients: (body.clients || []).map(mapClient),
+        relationships: (body.relationships || []).map(mapRelationship),
+        invites: (body.invites || []).map(mapInvite),
+        assignments: (body.assignments || []).map(mapAssignment),
+        completions: (body.completions || []).map(mapCompletion),
+        notifications: (body.notifications || []).map(mapNotification),
+        conversations: (body.conversations || []).map(mapConversation),
+        weeklyCheckIns: (body.checkIns || []).map(mapWeeklyCheckIn),
+      });
+    } catch { /* silent — initial hydration already loaded data */ }
+  };
+
+  // Attach Realtime channels for live updates (re-fetch via server to bypass RLS)
   const channel = supabase
     .channel(`workspace:${uid}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' }, async () => {
-      const { data } = await supabase.from('chat_conversations').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`);
-      if (data) onUpdate({ conversations: data.map(mapConversation) });
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, async () => {
-      const { data } = await supabase.from('notifications').select('*').eq('recipient_user_id', uid);
-      if (data) onUpdate({ notifications: data.map(mapNotification) });
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'task_assignments' }, async () => {
-      const { data } = await supabase.from('task_assignments').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`);
-      if (data) onUpdate({ assignments: data.map(mapAssignment) });
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'task_completions' }, async () => {
-      const { data } = await supabase.from('task_completions').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`);
-      if (data) onUpdate({ completions: data.map(mapCompletion) });
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_check_ins' }, async () => {
-      const { data } = await supabase.from('weekly_check_ins').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`);
-      if (data) onUpdate({ weeklyCheckIns: data.map(mapWeeklyCheckIn) });
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'coaching_packages' }, async () => {
-      const { data } = await supabase.from('coaching_packages').select('*');
-      if (data) onUpdate({ packages: data.map(mapPackage) });
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'trainer_profiles' }, async () => {
-      const { data } = await supabase.from('trainer_profiles').select('*');
-      if (data) onUpdate({ trainers: data.map(mapTrainer) });
-    })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_conversations' }, rehydrate)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, rehydrate)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'task_assignments' }, rehydrate)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'task_completions' }, rehydrate)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_check_ins' }, rehydrate)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'coaching_packages' }, rehydrate)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'trainer_profiles' }, rehydrate)
     .subscribe();
 
   return () => {

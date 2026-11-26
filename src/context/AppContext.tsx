@@ -767,11 +767,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     async (params: { email: string; password: string; fullName: string }): Promise<AuthActionResult> => {
       setAuthBusy(true);
       try {
-        const fbUser = await fsService.registerWithEmailPassword(params);
+        let fbUser = await fsService.registerWithEmailPassword(params);
         if (!fbUser) {
-          const msg = 'Account created, but Supabase is still requiring email confirmation. Turn off "Confirm email" in Supabase Auth settings.';
-          pushToast(msg, 'error');
-          return { ok: false, error: msg };
+          // No session: either email confirmation is on, or account already exists.
+          // Try signing in with the same credentials — covers both cases.
+          try {
+            fbUser = await fsService.signInWithEmailPassword(params.email, params.password);
+          } catch {
+            const msg = 'Account may already exist with a different password, or email confirmation is pending. Try signing in instead.';
+            pushToast(msg, 'error');
+            return { ok: false, error: msg };
+          }
         }
         const boot = await attachVerifiedWorkspace(fbUser);
         setDemoPreviewOverride(false);

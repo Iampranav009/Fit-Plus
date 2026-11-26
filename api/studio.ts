@@ -355,6 +355,113 @@ async function handleStreakRecalculate(req: VercelRequest, res: VercelResponse):
   }
 }
 
+// ─── route: GET /api/data/workspace ─────────────────────────────────────────
+async function handleWorkspaceHydrate(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); res.status(405).json({ ok: false, error: 'Method not allowed' }); return; }
+  if (!requireDb(res)) return;
+
+  try {
+    const authCtx = await verifyAuthenticatedRequest(req.headers);
+    const uid = authCtx.uid;
+    const db = getSupabaseAdminClient();
+    const isAdmin = authCtx.isAdmin;
+
+    const [
+      userRes, trainersRes, packagesRes, clientsRes, relationshipsRes,
+      invitesRes, enrollmentsRes, subscriptionsRes, paymentsRes, reviewsRes,
+      templatesRes, assignmentsRes, completionsRes, activitiesRes, progressRes,
+      workoutPlansRes, mealPlansRes, slotsRes, bookingsRes, notificationsRes,
+      aiDraftsRes, groupsRes, groupMembersRes, streaksRes, consentsRes,
+      verificationRes, auditRes, exercisesRes, sessionsRes, achievementsRes,
+      nutritionLogsRes, checkInsRes, conversationsRes, workoutTemplatesRes,
+      nutritionTemplatesRes, scheduledRemindersRes,
+    ] = await Promise.all([
+      db.from('app_users').select('*').eq('firebase_uid', uid).maybeSingle(),
+      db.from('trainer_profiles').select('*'),
+      db.from('coaching_packages').select('*'),
+      db.from('client_profiles').select('*'),
+      db.from('coaching_relationships').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('trainer_invites').select('*').or(`trainer_user_id.eq.${uid},redeemed_by_user_id.eq.${uid}`),
+      db.from('enrollments').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('subscriptions').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('payment_records').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('trainer_reviews').select('*'),
+      db.from('task_templates').select('*').eq('trainer_user_id', uid),
+      db.from('task_assignments').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('task_completions').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('daily_activity').select('*').eq('client_user_id', uid),
+      db.from('progress_events').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('workout_plans').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('meal_plans').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('consultation_slots').select('*').or(`trainer_user_id.eq.${uid},booked_by_user_id.eq.${uid}`),
+      db.from('consultation_bookings').select('*').or(`trainer_user_id.eq.${uid},client_user_id.eq.${uid}`),
+      db.from('notifications').select('*').eq('recipient_user_id', uid),
+      db.from('ai_plan_drafts').select('*').eq('trainer_user_id', uid),
+      db.from('client_groups').select('*').eq('trainer_user_id', uid),
+      db.from('client_group_members').select('*').or(`trainer_user_id.eq.${uid},client_user_id.eq.${uid}`),
+      db.from('streak_records').select('*').eq('client_user_id', uid),
+      db.from('consent_records').select('*').eq('user_id', uid),
+      isAdmin
+        ? db.from('trainer_verification_requests').select('*')
+        : db.from('trainer_verification_requests').select('*').eq('trainer_user_id', uid),
+      isAdmin
+        ? db.from('audit_logs').select('*')
+        : db.from('audit_logs').select('*').eq('actor_user_id', uid),
+      db.from('exercise_definitions').select('*'),
+      db.from('workout_sessions').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('achievement_unlocks').select('*').eq('client_user_id', uid),
+      db.from('nutrition_diary_entries').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('weekly_check_ins').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('chat_conversations').select('*').or(`client_user_id.eq.${uid},trainer_user_id.eq.${uid}`),
+      db.from('workout_program_templates').select('*').eq('trainer_user_id', uid),
+      db.from('nutrition_program_templates').select('*').eq('trainer_user_id', uid),
+      db.from('scheduled_reminders').select('*').eq('recipient_user_id', uid),
+    ]);
+
+    res.status(200).json({
+      ok: true,
+      user: userRes.data,
+      trainers: trainersRes.data || [],
+      packages: packagesRes.data || [],
+      clients: clientsRes.data || [],
+      relationships: relationshipsRes.data || [],
+      invites: invitesRes.data || [],
+      enrollments: enrollmentsRes.data || [],
+      subscriptions: subscriptionsRes.data || [],
+      payments: paymentsRes.data || [],
+      reviews: reviewsRes.data || [],
+      templates: templatesRes.data || [],
+      assignments: assignmentsRes.data || [],
+      completions: completionsRes.data || [],
+      activities: activitiesRes.data || [],
+      progress: progressRes.data || [],
+      workoutPlans: workoutPlansRes.data || [],
+      mealPlans: mealPlansRes.data || [],
+      slots: slotsRes.data || [],
+      bookings: bookingsRes.data || [],
+      notifications: notificationsRes.data || [],
+      aiDrafts: aiDraftsRes.data || [],
+      groups: groupsRes.data || [],
+      groupMembers: groupMembersRes.data || [],
+      streaks: streaksRes.data || [],
+      consents: consentsRes.data || [],
+      verifications: verificationRes.data || [],
+      auditLogs: auditRes.data || [],
+      exercises: exercisesRes.data || [],
+      sessions: sessionsRes.data || [],
+      achievements: achievementsRes.data || [],
+      nutritionLogs: nutritionLogsRes.data || [],
+      checkIns: checkInsRes.data || [],
+      conversations: conversationsRes.data || [],
+      workoutTemplates: workoutTemplatesRes.data || [],
+      nutritionTemplates: nutritionTemplatesRes.data || [],
+      scheduledReminders: scheduledRemindersRes.data || [],
+    });
+  } catch (error) {
+    sendError(res, error, 'Unable to load workspace data.');
+  }
+}
+
 // ─── main router ─────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const path = (req.url || '').split('?')[0].replace(/\/+$/, '');
@@ -364,5 +471,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   if (path.includes('/trainers/public')) return handlePublicTrainers(req, res);
   if (path.includes('/data/save-onboarding')) return handleSaveOnboarding(req, res);
   if (path.includes('/data/create-invite')) return handleCreateInvite(req, res);
+  if (path.includes('/data/workspace')) return handleWorkspaceHydrate(req, res);
   res.status(404).json({ ok: false, error: 'Studio endpoint not found.' });
 }
