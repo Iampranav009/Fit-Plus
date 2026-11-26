@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, Copy, FolderPlus, Plus, Share2, Trash2, UserCheck, UserPlus, X, MessageSquare } from 'lucide-react';
+import { Check, Copy, ExternalLink, FolderPlus, Plus, Share2, Trash2, UserCheck, UserPlus, X, MessageSquare } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import type { GoalFocus } from '../../types/domain';
@@ -58,6 +58,7 @@ export const StudioClientsPage: React.FC = () => {
   const [inviteLabel, setInviteLabel] = useState('');
   const [suggestedPkgId, setSuggestedPkgId] = useState('');
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [lastCreatedToken, setLastCreatedToken] = useState<string | null>(null);
   const [respondingRelId, setRespondingRelId] = useState<string | null>(null);
 
   const resolvedPkgId = suggestedPkgId || trainerPackages[0]?.id || '';
@@ -111,8 +112,9 @@ export const StudioClientsPage: React.FC = () => {
 
   const handleCreateInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    createInvite(inviteLabel, resolvedPkgId || undefined);
+    const inv = createInvite(inviteLabel, resolvedPkgId || undefined);
     setInviteLabel('');
+    setLastCreatedToken(inv.token);
   };
 
   const handleCreateGroup = (e: React.FormEvent) => {
@@ -143,16 +145,20 @@ export const StudioClientsPage: React.FC = () => {
     window.setTimeout(() => setCopiedToken(null), 1800);
   };
 
-  const shareInviteLink = async (token: string, label: string) => {
+  const shareInviteLink = async (token: string) => {
     const url = `${window.location.origin}/join/${token}`;
-    const text = `You're invited to train with ${activeTrainer?.displayName ?? 'your coach'} on FitPlus! Join here:`;
+    const trainerName = activeTrainer?.displayName ?? 'your coach';
+    const text = [
+      `Hey! Trainer ${trainerName} is sending you an invite to join their fitness coaching on FitPlus.`,
+      `Be a part of this fitness journey — tap the link below to get started:`,
+    ].join('\n\n');
     if (navigator.share) {
       try {
-        await navigator.share({ title: 'FitPlus Invitation', text, url });
+        await navigator.share({ title: `${trainerName} invited you to FitPlus`, text, url });
         return;
       } catch { /* user cancelled or share failed — fall through to WhatsApp */ }
     }
-    const waText = encodeURIComponent(`${text} ${url}`);
+    const waText = encodeURIComponent(`${text}\n\n${url}`);
     window.open(`https://wa.me/?text=${waText}`, '_blank', 'noopener');
   };
 
@@ -593,6 +599,30 @@ export const StudioClientsPage: React.FC = () => {
             </GlassButton>
           </form>
 
+          {lastCreatedToken && (
+            <div className="rounded-[14px] bg-[#1a1f2e] border border-orange-500/30 p-4 flex flex-col gap-3">
+              <p className="text-[13px] font-semibold text-orange-400">Client invite link created</p>
+              <div className="flex items-center gap-2 rounded-[10px] bg-[#101218] border border-white/[0.08] px-3 py-2.5">
+                <ExternalLink className="w-3.5 h-3.5 text-[#7C8393] shrink-0" aria-hidden="true" />
+                <span className="text-[13px] text-[#A2A8B5] truncate select-all">
+                  {`${window.location.origin}/join/${lastCreatedToken}`}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <GlassButton size="sm" variant="secondary" onClick={() => copyInviteLink(lastCreatedToken)}>
+                  {copiedToken === lastCreatedToken ? (
+                    <><Check className="w-3.5 h-3.5" aria-hidden="true" /> Copied</>
+                  ) : (
+                    <><Copy className="w-3.5 h-3.5" aria-hidden="true" /> Copy link</>
+                  )}
+                </GlassButton>
+                <GlassButton size="sm" variant="secondary" onClick={() => shareInviteLink(lastCreatedToken)}>
+                  <Share2 className="w-3.5 h-3.5" aria-hidden="true" /> Share
+                </GlassButton>
+              </div>
+            </div>
+          )}
+
           <div className="pt-4 border-t border-white/[0.08] space-y-2.5">
             <p className="text-[13px] font-semibold text-[#F5F5F7]">Recent invitations</p>
             {trainerInvites.map((inv) => (
@@ -631,7 +661,7 @@ export const StudioClientsPage: React.FC = () => {
                     <GlassButton
                       size="sm"
                       variant="secondary"
-                      onClick={() => shareInviteLink(inv.token, inv.clientEmailOrLabel)}
+                      onClick={() => shareInviteLink(inv.token)}
                     >
                       <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
                       Share
