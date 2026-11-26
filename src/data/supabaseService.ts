@@ -989,7 +989,7 @@ export function subscribeAuthenticatedWorkspace(
       workoutTemplates: (workoutTemplatesRes.data || []).map(mapWorkoutTemplate),
       nutritionTemplates: (nutritionTemplatesRes.data || []).map(mapNutritionTemplate),
       scheduledReminders: (scheduledRemindersRes.data || []).map(mapScheduledReminder),
-      onboardingCompleted: userRow?.onboarding_completed ?? false,
+      onboardingCompleted: userRow ? userRow.onboarding_completed : undefined,
       celebratedDateKeys: userRow?.celebrated_date_keys || [],
       pendingInviteToken: userRow?.pending_invite_token || undefined,
     });

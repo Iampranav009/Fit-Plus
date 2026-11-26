@@ -62,8 +62,14 @@ const StudioStorefrontPage = React.lazy(() => import('./pages/trainer/StudioStor
 const StudioSettingsPage = React.lazy(() => import('./pages/trainer/StudioSettingsPage').then((m) => ({ default: m.StudioSettingsPage })));
 const StudioNotificationsPage = React.lazy(() => import('./pages/trainer/StudioNotificationsPage').then((m) => ({ default: m.StudioNotificationsPage })));
 
-// Admin page
-const AdminDashboardPage = React.lazy(() => import('./pages/admin/AdminDashboardPage').then((m) => ({ default: m.AdminDashboardPage })));
+// Admin pages
+const AdminLayout = React.lazy(() => import('./pages/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })));
+const AdminOverviewPage = React.lazy(() => import('./pages/admin/AdminOverviewPage').then((m) => ({ default: m.AdminOverviewPage })));
+const AdminTrainersPage = React.lazy(() => import('./pages/admin/AdminTrainersPage').then((m) => ({ default: m.AdminTrainersPage })));
+const AdminClientsPage = React.lazy(() => import('./pages/admin/AdminClientsPage').then((m) => ({ default: m.AdminClientsPage })));
+const AdminVerificationsPage = React.lazy(() => import('./pages/admin/AdminVerificationsPage').then((m) => ({ default: m.AdminVerificationsPage })));
+const AdminReviewsPage = React.lazy(() => import('./pages/admin/AdminReviewsPage').then((m) => ({ default: m.AdminReviewsPage })));
+const AdminAuditPage = React.lazy(() => import('./pages/admin/AdminAuditPage').then((m) => ({ default: m.AdminAuditPage })));
 
 const RouteLoadingFallback: React.FC = () => (
   <div className="min-h-[50vh] flex flex-col items-center justify-center p-6 gap-3">
@@ -669,15 +675,22 @@ export default function App() {
               }
             />
 
-            {/* Admin Route */}
+            {/* Admin Routes */}
             <Route
               path="/admin"
               element={
                 <ProtectedRoute allowedRoles={['admin', 'client', 'trainer']} requireAdmin>
-                  <AdminDashboardPage />
+                  <AdminLayout />
                 </ProtectedRoute>
               }
-            />
+            >
+              <Route index element={<AdminOverviewPage />} />
+              <Route path="trainers" element={<AdminTrainersPage />} />
+              <Route path="clients" element={<AdminClientsPage />} />
+              <Route path="verifications" element={<AdminVerificationsPage />} />
+              <Route path="reviews" element={<AdminReviewsPage />} />
+              <Route path="audit" element={<AdminAuditPage />} />
+            </Route>
 
             <Route path="*" element={<NotFoundPage />} />
           </Routes>

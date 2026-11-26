@@ -608,10 +608,27 @@ export interface AdminOverviewStats {
     id: string;
     userId: string;
     displayName: string;
+    email: string;
     city: string;
     verificationStatus: 'unverified' | 'pending' | 'verified';
     isPublished: boolean;
+    acceptingClients: boolean;
+    createdAt: string;
     activeClientsCount: number;
+  }>;
+  clientsSummary: Array<{
+    id: string;
+    userId: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    primaryGoal: string;
+    experienceLevel: 'beginner' | 'intermediate' | 'experienced';
+    createdAt: string;
+    trainerName: string | null;
+    trainerEmail: string | null;
+    trainerProfileId: string | null;
+    relationshipStatus: string;
   }>;
   recentReviews: TrainerReview[];
 }

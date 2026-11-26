@@ -343,7 +343,9 @@ interface AppContextValue {
   moderateAdminContent: (
     input:
       | { action: 'toggle_trainer_publish'; trainerId: string; isPublished: boolean }
-      | { action: 'delete_review'; reviewId: string },
+      | { action: 'delete_review'; reviewId: string }
+      | { action: 'suspend_trainer'; trainerId: string; suspended: boolean }
+      | { action: 'delete_trainer'; trainerId: string },
   ) => Promise<{ ok: boolean; error?: string }>;
 
   // Stage 4A — Live Workout, Exercise Library, Nutrition Diary, Check-ins, Wrapped & Achievements
@@ -3353,7 +3355,9 @@ function purgeSensitiveLocalStorage(): void {
     async (
       input:
         | { action: 'toggle_trainer_publish'; trainerId: string; isPublished: boolean }
-        | { action: 'delete_review'; reviewId: string },
+        | { action: 'delete_review'; reviewId: string }
+        | { action: 'suspend_trainer'; trainerId: string; suspended: boolean }
+        | { action: 'delete_trainer'; trainerId: string },
     ) => {
       if (!isCloudSynced || !firebaseUser) {
         return { ok: false, error: 'Verified admin authentication required.' };
@@ -3377,6 +3381,10 @@ function purgeSensitiveLocalStorage(): void {
             reviews: prev.reviews.filter((r) => r.id !== input.reviewId),
           }));
           pushToast('Review removed.', 'info');
+        } else if (input.action === 'suspend_trainer') {
+          pushToast(input.suspended ? 'Trainer suspended.' : 'Trainer reactivated.', 'info');
+        } else if (input.action === 'delete_trainer') {
+          pushToast('Trainer removed from platform.', 'info');
         } else {
           pushToast(input.isPublished ? 'Coach storefront published.' : 'Coach storefront hidden.', 'info');
         }
