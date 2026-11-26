@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Copy, Eye, EyeOff, ExternalLink, MapPin, Star } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import * as supabaseService from '../../data/supabaseService';
@@ -9,7 +9,7 @@ import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField, TextAreaField } from '../../components/ui/InputField';
 
 export const StudioStorefrontPage: React.FC = () => {
-  const { activeTrainer, isCloudSynced, firebaseUser, pushToast, updateTrainerProfile } = useApp();
+  const { activeTrainer, isCloudSynced, firebaseUser, pushToast, updateTrainerProfile, store } = useApp();
 
   const [headline, setHeadline] = useState(activeTrainer?.headline || '');
   const [city, setCity] = useState(activeTrainer?.city || '');
@@ -19,8 +19,23 @@ export const StudioStorefrontPage: React.FC = () => {
   const [whatsappE164, setWhatsappE164] = useState(activeTrainer?.whatsappBusinessE164 || '');
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(true);
 
-  if (!activeTrainer) return null;
+  const trainerPackages = useMemo(
+    () => store.packages.filter((p) => p.trainerId === activeTrainer?.id && p.status === 'active'),
+    [store.packages, activeTrainer?.id],
+  );
+
+  if (!activeTrainer) {
+    return (
+      <AppShell pageTitle="Storefront">
+        <div className="max-w-2xl mx-auto flex flex-col items-center justify-center gap-4 py-20">
+          <div className="w-8 h-8 rounded-full border-2 border-[#FF803E]/30 border-t-[#FF803E] animate-spin" />
+          <p className="text-[14px] text-[#A2A8B5]">Loading your storefront…</p>
+        </div>
+      </AppShell>
+    );
+  }
 
   const handlePhotoUpload = async (file?: File | null) => {
     if (!file || !isCloudSynced || !firebaseUser) return;
@@ -133,6 +148,100 @@ export const StudioStorefrontPage: React.FC = () => {
           >
             {activeTrainer.isPublished ? 'Hide' : 'Publish'}
           </button>
+        </div>
+
+        {/* Inline storefront preview */}
+        <div className="surface-card rounded-[22px] overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-5 py-4 cursor-pointer hover:bg-white/[0.03] transition-colors"
+          >
+            <span className="text-[14px] font-semibold text-[#F5F5F7]">Storefront preview</span>
+            {previewOpen ? (
+              <ChevronUp className="w-4 h-4 text-[#7C8393]" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-[#7C8393]" />
+            )}
+          </button>
+          {previewOpen && (
+            <div className="border-t border-white/[0.08] p-5 sm:p-6 space-y-5">
+              {/* Profile card preview */}
+              <div className="flex items-start gap-4">
+                {activeTrainer.photoUrl ? (
+                  <img
+                    src={activeTrainer.photoUrl}
+                    alt={activeTrainer.displayName}
+                    className="w-20 h-20 rounded-[16px] object-cover border border-white/15 shrink-0"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-[16px] bg-white/[0.06] border border-white/10 flex items-center justify-center shrink-0">
+                    <span className="text-2xl font-bold text-[#7C8393]">{activeTrainer.displayName.charAt(0)}</span>
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-[18px] font-semibold text-[#F5F5F7] truncate">{activeTrainer.displayName}</h3>
+                  <p className="text-[13px] text-[#A2A8B5] mt-0.5">{activeTrainer.headline || 'No headline set'}</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[12px] text-[#7C8393]">
+                    {activeTrainer.city && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" aria-hidden="true" />
+                        {activeTrainer.city}
+                      </span>
+                    )}
+                    <span>{activeTrainer.coachingMode || 'Online'}</span>
+                    <span>{activeTrainer.experienceYears ?? 0} years exp.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Specialties */}
+              {activeTrainer.specialties.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {activeTrainer.specialties.map((s) => (
+                    <span key={s} className="px-2.5 py-1 rounded-full bg-white/[0.06] text-[11px] font-medium text-[#A2A8B5]">{s}</span>
+                  ))}
+                </div>
+              )}
+
+              {/* Packages preview */}
+              {trainerPackages.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-[13px] font-medium text-[#7C8393]">Your packages</p>
+                  <div className="grid gap-2">
+                    {trainerPackages.map((pkg) => (
+                      <div key={pkg.id} className="rounded-[14px] bg-white/[0.04] border border-white/[0.08] p-3.5 flex items-center justify-between">
+                        <div className="min-w-0">
+                          <p className="text-[13px] font-semibold text-[#F5F5F7] truncate">{pkg.name}</p>
+                          {pkg.description && (
+                            <p className="text-[12px] text-[#7C8393] mt-0.5 line-clamp-1">{pkg.description}</p>
+                          )}
+                        </div>
+                        <span className="shrink-0 ml-3 text-[14px] font-semibold text-[#FF803E]">
+                          ₹{pkg.monthlyRate?.toLocaleString('en-IN') ?? '—'}/mo
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-[14px] bg-white/[0.03] border border-dashed border-white/[0.1] p-4 text-center">
+                  <p className="text-[13px] text-[#7C8393]">No packages yet</p>
+                  <Link to="/studio/packages" className="text-[12px] text-[#FF803E] hover:underline mt-1 inline-block">
+                    Create a package →
+                  </Link>
+                </div>
+              )}
+
+              {/* Bio preview */}
+              {activeTrainer.bio && (
+                <div>
+                  <p className="text-[13px] font-medium text-[#7C8393] mb-1">About</p>
+                  <p className="text-[13px] text-[#A2A8B5] leading-relaxed whitespace-pre-line">{activeTrainer.bio}</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <form
