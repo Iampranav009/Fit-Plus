@@ -107,6 +107,16 @@ export interface Goal {
 
 export type RelationshipStatus = 'pending' | 'active' | 'ended';
 
+export type ClientFeatureKey = 'workout_studio' | 'nutrition_studio' | 'exercise_library';
+
+export type ClientFeatureAccess = Record<ClientFeatureKey, boolean>;
+
+export const DEFAULT_FEATURE_ACCESS: ClientFeatureAccess = {
+  workout_studio: false,
+  nutrition_studio: false,
+  exercise_library: false,
+};
+
 export interface CoachingRelationship {
   id: string;
   trainerId: string;
@@ -115,6 +125,7 @@ export interface CoachingRelationship {
   status: RelationshipStatus;
   startedAt: string;
   endedAt?: string;
+  featureAccess?: ClientFeatureAccess;
 }
 
 export type InviteStatus = 'active' | 'redeemed' | 'expired' | 'revoked';

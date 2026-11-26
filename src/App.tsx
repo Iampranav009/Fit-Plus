@@ -2,7 +2,8 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { MotionConfig } from 'motion/react';
 import { AppProvider, useApp } from './context/AppContext';
-import type { UserRole } from './types/domain';
+import type { ClientFeatureKey, UserRole } from './types/domain';
+import { DEFAULT_FEATURE_ACCESS } from './types/domain';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { GlassButton } from './components/ui/GlassButton';
 import { BrandMark } from './components/ui/BrandMark';
@@ -247,6 +248,36 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
+const FeatureGatedRoute: React.FC<{
+  featureKey: ClientFeatureKey;
+  children: React.ReactNode;
+}> = ({ featureKey, children }) => {
+  const { getClientFeatureAccess, activeClient, activeRelationship } = useApp();
+  const navigate = useNavigate();
+
+  if (!activeClient || !activeRelationship) {
+    return <>{children}</>;
+  }
+
+  const access = getClientFeatureAccess(activeClient.id);
+  if (!access[featureKey]) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-6 text-center gap-4">
+        <div className="w-14 h-14 rounded-full bg-white/[0.06] flex items-center justify-center">
+          <BrandMark />
+        </div>
+        <h1 className="text-[22px] font-semibold text-[#F5F5F7]">Feature not enabled</h1>
+        <p className="text-[14px] text-[#A2A8B5] max-w-sm">
+          Your trainer has not enabled this feature for you yet. Contact your trainer to request access.
+        </p>
+        <GlassButton onClick={() => navigate('/app/home')}>Back to home</GlassButton>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+};
+
 const OnboardingGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { store, isAuthReady, firebaseUser, accountLoadError, isCloudSynced, isDemoSandbox } = useApp();
   const location = useLocation();
@@ -403,7 +434,9 @@ export default function App() {
               path="/app/workout"
               element={
                 <ProtectedRoute allowedRoles={['client']}>
-                  <LiveWorkoutPage />
+                  <FeatureGatedRoute featureKey="workout_studio">
+                    <LiveWorkoutPage />
+                  </FeatureGatedRoute>
                 </ProtectedRoute>
               }
             />
@@ -411,7 +444,9 @@ export default function App() {
               path="/app/workout/:dayIndex"
               element={
                 <ProtectedRoute allowedRoles={['client']}>
-                  <LiveWorkoutPage />
+                  <FeatureGatedRoute featureKey="workout_studio">
+                    <LiveWorkoutPage />
+                  </FeatureGatedRoute>
                 </ProtectedRoute>
               }
             />
@@ -419,7 +454,9 @@ export default function App() {
               path="/app/exercises"
               element={
                 <ProtectedRoute allowedRoles={['client']}>
-                  <ExerciseLibraryPage />
+                  <FeatureGatedRoute featureKey="exercise_library">
+                    <ExerciseLibraryPage />
+                  </FeatureGatedRoute>
                 </ProtectedRoute>
               }
             />
@@ -427,7 +464,9 @@ export default function App() {
               path="/app/exercises/:exerciseId"
               element={
                 <ProtectedRoute allowedRoles={['client']}>
-                  <ExerciseDetailPage />
+                  <FeatureGatedRoute featureKey="exercise_library">
+                    <ExerciseDetailPage />
+                  </FeatureGatedRoute>
                 </ProtectedRoute>
               }
             />
@@ -435,7 +474,9 @@ export default function App() {
               path="/app/nutrition"
               element={
                 <ProtectedRoute allowedRoles={['client']}>
-                  <NutritionDiaryPage />
+                  <FeatureGatedRoute featureKey="nutrition_studio">
+                    <NutritionDiaryPage />
+                  </FeatureGatedRoute>
                 </ProtectedRoute>
               }
             />

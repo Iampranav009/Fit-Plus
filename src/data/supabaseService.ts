@@ -117,6 +117,7 @@ import type {
   AchievementBadgeId,
   RelationshipStatus,
   BookingStatus,
+  ClientFeatureAccess,
 } from '../types/domain';
 
 // Supabase Auth is the identity provider.
@@ -223,6 +224,10 @@ export function mapPackage(row: Database['public']['Tables']['coaching_packages'
 }
 
 export function mapRelationship(row: Database['public']['Tables']['coaching_relationships']['Row']): CoachingRelationship {
+  const raw = (row as Record<string, unknown>).feature_access;
+  const featureAccess = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? raw as ClientFeatureAccess
+    : undefined;
   return {
     id: row.id,
     trainerId: row.trainer_id,
@@ -231,6 +236,7 @@ export function mapRelationship(row: Database['public']['Tables']['coaching_rela
     status: row.status as RelationshipStatus,
     startedAt: row.started_at,
     endedAt: row.ended_at || undefined,
+    featureAccess,
   };
 }
 
@@ -1474,6 +1480,24 @@ export async function disconnectCoachInFirestore(params: {
     .from('client_profiles')
     .update({ active_trainer_user_id: null })
     .eq('id', params.clientId);
+}
+
+export async function updateClientFeatureAccessDoc(
+  relationshipId: string,
+  featureAccess: ClientFeatureAccess,
+): Promise<void> {
+  // feature_access is a jsonb column added after type generation
+  await (supabase as unknown as { from(t: string): { update(v: Record<string, unknown>): { eq(c: string, v: string): Promise<unknown> } } })
+    .from('coaching_relationships')
+    .update({ feature_access: featureAccess })
+    .eq('id', relationshipId);
+}
+
+export async function cancelSubscriptionDoc(subscriptionId: string): Promise<void> {
+  await supabase
+    .from('subscriptions')
+    .update({ status: 'cancelled' as const, updated_at: new Date().toISOString() })
+    .eq('id', subscriptionId);
 }
 
 export async function bookSlotInFirestore(params: {

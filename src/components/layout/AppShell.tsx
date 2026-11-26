@@ -49,6 +49,8 @@ export const AppShell: React.FC<AppShellProps> = ({
     newlyUnlockedAchievement,
     dismissUnlockedAchievement,
     unreadMessagesCount,
+    getClientFeatureAccess,
+    activeClient,
   } = useApp();
   const location = useLocation();
 
@@ -58,13 +60,15 @@ export const AppShell: React.FC<AppShellProps> = ({
     (n) => n.recipientUserId === activeUser.id && !n.read,
   ).length;
 
+  const fa = activeClient ? getClientFeatureAccess(activeClient.id) : null;
+
   const clientDesktopNav: NavItem[] = [
     { to: '/app/home', label: 'Today', icon: Home },
     { to: '/app/messages', label: 'Messages', icon: MessageSquare, badge: unreadMessagesCount },
-    { to: '/app/workout', label: 'Workout', icon: Flame },
+    ...(fa?.workout_studio ? [{ to: '/app/workout', label: 'Workout', icon: Flame }] : []),
     { to: '/app/plan', label: 'Plan', icon: Dumbbell },
-    { to: '/app/nutrition', label: 'Nutrition', icon: Apple },
-    { to: '/app/exercises', label: 'Exercises', icon: BookOpen },
+    ...(fa?.nutrition_studio ? [{ to: '/app/nutrition', label: 'Nutrition', icon: Apple }] : []),
+    ...(fa?.exercise_library ? [{ to: '/app/exercises', label: 'Exercises', icon: BookOpen }] : []),
     { to: '/app/progress', label: 'Progress', icon: TrendingUp },
     { to: '/app/check-in', label: 'Check-in', icon: ClipboardCheck },
     { to: '/app/coach', label: 'Coach', icon: Compass },
@@ -74,7 +78,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   const clientMobileNav: NavItem[] = [
     { to: '/app/home', label: 'Today', icon: Home },
     { to: '/app/messages', label: 'Chat', icon: MessageSquare, badge: unreadMessagesCount },
-    { to: '/app/workout', label: 'Workout', icon: Flame, accent: true },
+    ...(fa?.workout_studio ? [{ to: '/app/workout', label: 'Workout', icon: Flame, accent: true }] : []),
     { to: '/app/progress', label: 'Progress', icon: TrendingUp },
     { to: '/app/profile', label: 'You', icon: User },
   ];

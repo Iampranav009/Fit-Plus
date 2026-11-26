@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Check, ClipboardCheck, Dumbbell, MessageSquare, Plus, Sparkles, UtensilsCrossed } from 'lucide-react';
+import { ArrowLeft, Ban, Check, ClipboardCheck, Dumbbell, MessageSquare, Pencil, Plus, Shield, Sparkles, UtensilsCrossed } from 'lucide-react';
 import { COPY } from '../../data/copy';
 import { useApp } from '../../context/AppContext';
 import * as supabaseService from '../../data/supabaseService';
@@ -8,7 +8,9 @@ import { formatIndiaDate } from '../../lib/date';
 import { computeClientAdherencePercent, computeStreakSummary } from '../../lib/streak';
 import { AppShell } from '../../components/layout/AppShell';
 import { GlassButton } from '../../components/ui/GlassButton';
-import { TextAreaField } from '../../components/ui/InputField';
+import { InputField, TextAreaField } from '../../components/ui/InputField';
+import type { ClientFeatureAccess, ClientFeatureKey } from '../../types/domain';
+import { DEFAULT_FEATURE_ACCESS } from '../../types/domain';
 import { TrendChart } from '../../components/ui/TrendChart';
 import { ActivityRing } from '../../components/ui/ActivityRing';
 
@@ -27,6 +29,10 @@ export const StudioClientDetailPage: React.FC = () => {
     toggleClientRecoveryDay,
     isClientLinkedToActiveTrainer,
     updateClientCoachNotes,
+    updateClientFeatureAccess,
+    cancelClientSubscription,
+    subscriptions,
+    pushToast,
     workoutSessions,
     nutritionLogs,
     weeklyCheckIns,
@@ -44,6 +50,9 @@ export const StudioClientDetailPage: React.FC = () => {
   const [nutriFeedbackText, setNutriFeedbackText] = useState('');
   const [editingCheckInId, setEditingCheckInId] = useState<string | null>(null);
   const [checkInFeedbackText, setCheckInFeedbackText] = useState('');
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailsDraft, setDetailsDraft] = useState({ age: '', weightKg: '', targetWeightKg: '', healthLimitations: '' });
+  const [confirmCancelSubId, setConfirmCancelSubId] = useState<string | null>(null);
 
   useEffect(() => {
     setNotes(client?.coachNotes || '');
@@ -79,6 +88,18 @@ export const StudioClientDetailPage: React.FC = () => {
   const goal = useMemo(
     () => store.goals.find((g) => g.clientId === id),
     [store.goals, id],
+  );
+
+  const activeRelationship = useMemo(
+    () => store.relationships.find((r) => r.clientId === id && r.status === 'active'),
+    [store.relationships, id],
+  );
+
+  const featureAccess: ClientFeatureAccess = activeRelationship?.featureAccess ?? { ...DEFAULT_FEATURE_ACCESS };
+
+  const clientSubscriptions = useMemo(
+    () => subscriptions.filter((s) => s.clientId === id),
+    [subscriptions, id],
   );
 
   const clientWorkoutSessions = useMemo(
@@ -167,6 +188,33 @@ export const StudioClientDetailPage: React.FC = () => {
     120,
     approvedRecoveryDates,
   );
+
+  const handleToggleFeature = (key: ClientFeatureKey) => {
+    if (!activeRelationship) return;
+    const next = { ...featureAccess, [key]: !featureAccess[key] };
+    updateClientFeatureAccess(activeRelationship.id, next);
+  };
+
+  const handleSaveDetails = () => {
+    if (!client) return;
+    const updates: Partial<typeof client> = {};
+    const ageNum = parseInt(detailsDraft.age, 10);
+    if (!isNaN(ageNum) && ageNum > 0 && ageNum !== client.age) updates.age = ageNum;
+    const wNum = parseFloat(detailsDraft.weightKg);
+    if (!isNaN(wNum) && wNum > 0 && wNum !== client.weightKg) updates.weightKg = wNum;
+    const twNum = parseFloat(detailsDraft.targetWeightKg);
+    if (!isNaN(twNum) && twNum > 0 && twNum !== client.targetWeightKg) updates.targetWeightKg = twNum;
+    if (detailsDraft.healthLimitations !== (client.healthLimitations ?? '')) {
+      updates.healthLimitations = detailsDraft.healthLimitations || undefined;
+    }
+    if (Object.keys(updates).length > 0) {
+      if (isCloudSynced) {
+        void supabaseService.updateClientProfileDoc(client.id, updates);
+      }
+      pushToast('Client details saved.');
+    }
+    setEditingDetails(false);
+  };
 
   const handleToggleRecovery = async () => {
     setRecoveryBusy(true);
@@ -305,6 +353,145 @@ export const StudioClientDetailPage: React.FC = () => {
               </div>
             )}
           </div>
+        </section>
+
+        {/* Feature Access Control */}
+        {activeRelationship && (
+          <section className="surface-card rounded-[22px] p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-[#70C8ED]" />
+              <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Feature access</h2>
+            </div>
+            <p className="text-[13px] text-[#7C8393]">
+              Toggle which premium features this client can use. Changes apply immediately.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                { key: 'workout_studio' as ClientFeatureKey, label: 'Workout Studio', desc: 'Live workout tracking & logging' },
+                { key: 'nutrition_studio' as ClientFeatureKey, label: 'Nutrition Studio', desc: 'Nutrition diary & meal logging' },
+                { key: 'exercise_library' as ClientFeatureKey, label: 'Exercise Library', desc: 'Full exercise database & guides' },
+              ]).map(({ key, label, desc }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleToggleFeature(key)}
+                  className={`p-4 rounded-[16px] border text-left transition-colors cursor-pointer ${
+                    featureAccess[key]
+                      ? 'bg-[#FF803E]/12 border-[#FF803E]/40'
+                      : 'bg-[#101218] border-white/[0.08] hover:border-white/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className={`text-[14px] font-semibold ${featureAccess[key] ? 'text-[#FFB06B]' : 'text-[#A2A8B5]'}`}>
+                      {label}
+                    </span>
+                    <div className={`w-9 h-5 rounded-full flex items-center transition-colors ${featureAccess[key] ? 'bg-[#FF803E] justify-end' : 'bg-white/10 justify-start'}`}>
+                      <div className="w-4 h-4 rounded-full bg-white mx-0.5" />
+                    </div>
+                  </div>
+                  <p className="text-[12px] text-[#7C8393]">{desc}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Subscription Management */}
+        {clientSubscriptions.length > 0 && (
+          <section className="surface-card rounded-[22px] p-5 space-y-3">
+            <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Subscriptions</h2>
+            {clientSubscriptions.map((sub) => (
+              <div key={sub.id} className="rounded-[16px] surface-elevated p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-[14px] font-semibold text-[#F5F5F7]">{sub.packageName}</p>
+                  <p className="text-[12px] text-[#A2A8B5] tabular-nums">
+                    ₹{sub.priceInr} / {sub.cadence} ·{' '}
+                    <span className={sub.status === 'active' ? 'text-[#B8E66C]' : 'text-[#FF6B70]'}>
+                      {sub.status}
+                    </span>
+                    {sub.currentPeriodEnd ? ` · Ends ${formatIndiaDate(sub.currentPeriodEnd.slice(0, 10), 'short')}` : ''}
+                  </p>
+                </div>
+                {sub.status === 'active' && (
+                  <div className="flex gap-2">
+                    {confirmCancelSubId === sub.id ? (
+                      <>
+                        <GlassButton size="sm" variant="secondary" onClick={() => setConfirmCancelSubId(null)}>
+                          Keep
+                        </GlassButton>
+                        <GlassButton
+                          size="sm"
+                          onClick={() => {
+                            cancelClientSubscription(sub.id);
+                            setConfirmCancelSubId(null);
+                          }}
+                        >
+                          <Ban className="w-3.5 h-3.5" /> Confirm cancel
+                        </GlassButton>
+                      </>
+                    ) : (
+                      <GlassButton size="sm" variant="secondary" onClick={() => setConfirmCancelSubId(sub.id)}>
+                        <Ban className="w-3.5 h-3.5" /> Cancel subscription
+                      </GlassButton>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
+
+        {/* Edit Client Details */}
+        <section className="surface-card rounded-[22px] p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[18px] font-semibold text-[#F5F5F7]">Client details</h2>
+            {!editingDetails && (
+              <GlassButton
+                size="sm"
+                variant="glass"
+                onClick={() => {
+                  setDetailsDraft({
+                    age: String(client.age ?? ''),
+                    weightKg: String(client.weightKg ?? ''),
+                    targetWeightKg: String(client.targetWeightKg ?? ''),
+                    healthLimitations: client.healthLimitations ?? '',
+                  });
+                  setEditingDetails(true);
+                }}
+              >
+                <Pencil className="w-3.5 h-3.5" /> Edit
+              </GlassButton>
+            )}
+          </div>
+          {editingDetails ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <InputField label="Age" type="number" value={detailsDraft.age} onChange={(e) => setDetailsDraft((d) => ({ ...d, age: e.target.value }))} />
+                <InputField label="Weight (kg)" type="number" value={detailsDraft.weightKg} onChange={(e) => setDetailsDraft((d) => ({ ...d, weightKg: e.target.value }))} />
+                <InputField label="Target weight (kg)" type="number" value={detailsDraft.targetWeightKg} onChange={(e) => setDetailsDraft((d) => ({ ...d, targetWeightKg: e.target.value }))} />
+              </div>
+              <TextAreaField
+                label="Health limitations"
+                value={detailsDraft.healthLimitations}
+                onChange={(e) => setDetailsDraft((d) => ({ ...d, healthLimitations: e.target.value }))}
+                placeholder="Injuries, conditions, or movement restrictions."
+              />
+              <div className="flex gap-2">
+                <GlassButton size="sm" onClick={handleSaveDetails}>
+                  <Check className="w-4 h-4" /> Save changes
+                </GlassButton>
+                <GlassButton size="sm" variant="secondary" onClick={() => setEditingDetails(false)}>
+                  Cancel
+                </GlassButton>
+              </div>
+            </div>
+          ) : (
+            <div className="text-[13px] text-[#A2A8B5] space-y-1.5">
+              <p>Age: {client.age ?? 'Not set'} · Weight: {client.weightKg ? `${client.weightKg} kg` : 'Not set'}{client.targetWeightKg ? ` → Target ${client.targetWeightKg} kg` : ''}</p>
+              <p className="capitalize">Goal: {client.primaryGoal.replaceAll('_', ' ')} · Level: {client.experienceLevel} · {client.daysPerWeek} days/week</p>
+              {client.healthLimitations && <p>Limitations: {client.healthLimitations}</p>}
+            </div>
+          )}
         </section>
 
         {/* Assigned Tasks */}

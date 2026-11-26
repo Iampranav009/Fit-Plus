@@ -58,7 +58,9 @@ import type {
   WorkoutProgramTemplate,
   NutritionProgramTemplate,
   ScheduledReminder,
+  ClientFeatureAccess,
 } from '../types/domain';
+import { DEFAULT_FEATURE_ACCESS } from '../types/domain';
 import { mergeExerciseCatalog } from '../data/exerciseLibrary';
 import { evaluateAchievementsState, ACHIEVEMENT_CATALOG } from '../lib/achievementsEngine';
 import { findEligibleReviewRelationship } from '../lib/commerce';
@@ -295,6 +297,9 @@ interface AppContextValue {
     meetingLink: string;
   }) => void;
   updateClientCoachNotes: (clientId: string, notes: string) => void;
+  updateClientFeatureAccess: (relationshipId: string, featureAccess: ClientFeatureAccess) => void;
+  cancelClientSubscription: (subscriptionId: string) => void;
+  getClientFeatureAccess: (clientId: string) => ClientFeatureAccess;
   markNotificationRead: (notificationId: string) => void;
   markAllNotificationsRead: () => void;
 
@@ -3057,6 +3062,45 @@ function purgeSensitiveLocalStorage(): void {
     [isClientLinkedToActiveTrainer, persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
   );
 
+  const updateClientFeatureAccess = useCallback(
+    (relationshipId: string, featureAccess: ClientFeatureAccess) => {
+      persist((prev) => ({
+        ...prev,
+        relationships: prev.relationships.map((r) =>
+          r.id === relationshipId ? { ...r, featureAccess } : r,
+        ),
+      }));
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.updateClientFeatureAccessDoc(relationshipId, featureAccess));
+      }
+      pushToast('Feature access updated.');
+    },
+    [persist, isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const cancelClientSubscription = useCallback(
+    (subscriptionId: string) => {
+      setSubscriptions((prev) =>
+        prev.map((s) => (s.id === subscriptionId ? { ...s, status: 'canceled' } : s)),
+      );
+      if (isCloudSynced && firebaseUser) {
+        runCloudWrite(fsService.cancelSubscriptionDoc(subscriptionId));
+      }
+      pushToast('Subscription cancelled.');
+    },
+    [isCloudSynced, firebaseUser, runCloudWrite, pushToast],
+  );
+
+  const getClientFeatureAccess = useCallback(
+    (clientId: string): ClientFeatureAccess => {
+      const rel = store.relationships.find(
+        (r) => r.clientId === clientId && r.status === 'active',
+      );
+      return rel?.featureAccess ?? { ...DEFAULT_FEATURE_ACCESS };
+    },
+    [store.relationships],
+  );
+
   const markNotificationRead = useCallback(
     (notificationId: string) => {
       persist((prev) => ({
@@ -4068,6 +4112,9 @@ function purgeSensitiveLocalStorage(): void {
     markBookingCompleted,
     updateConsultationMeetingLink,
     updateClientCoachNotes,
+    updateClientFeatureAccess,
+    cancelClientSubscription,
+    getClientFeatureAccess,
     markNotificationRead,
     markAllNotificationsRead,
     createPackageOrder,
