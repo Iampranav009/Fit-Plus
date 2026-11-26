@@ -7,7 +7,9 @@ import { CoachCard } from '../../components/ui/CoachCard';
 import { CoachComparisonModal } from '../../components/ui/CoachComparisonModal';
 import { CompareDock } from '../../components/ui/CompareDock';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
+import { Breadcrumb } from '../../components/marketing/Breadcrumb';
 import { CTA } from '../../components/marketing/links';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 
 export const DiscoverPage: React.FC = () => {
   const { store, reviews, isDemoSandbox, publicDirectory } = useApp();
@@ -72,8 +74,22 @@ export const DiscoverPage: React.FC = () => {
 
   return (
     <MarketingLayout>
+      <SEOHelmet
+        title="Find a fitness coach in India — FitPlus Trainer Directory"
+        description="Browse independent personal trainers by goal, city or name. Compare profiles, check INR packages and book a consultation — all on FitPlus."
+        path="/discover"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fitplus-kappa.vercel.app/' },
+            { '@type': 'ListItem', position: 2, name: 'Trainer Directory' },
+          ],
+        }}
+      />
       <div className="mkt-container pt-8 pb-24 lg:pt-12">
-        <header>
+        <Breadcrumb items={[{ label: 'Find a Trainer' }]} />
+        <header className="mt-3">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="mkt-display text-[clamp(2.25rem,1.7rem+2.2vw,3.25rem)] leading-none">
               {COPY.discovery.heading}

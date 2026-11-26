@@ -4,5 +4,8 @@ Disallow: /app/
 Disallow: /studio/
 Disallow: /onboarding/
 Disallow: /admin
+Disallow: /demo
+Disallow: /join/
+Disallow: /payments/
 
 Sitemap: https://fitplus-kappa.vercel.app/sitemap.xml

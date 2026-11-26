@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { MarketingLayout } from '../../components/marketing/MarketingLayout';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { InputField } from '../../components/ui/InputField';
+import { SEOHelmet } from '../../components/seo/SEOHelmet';
 
 type EmailAuthMode = 'signin' | 'signup' | 'reset';
 
@@ -152,6 +153,12 @@ export const AuthPage: React.FC = () => {
 
   return (
     <MarketingLayout compactFooter>
+      <SEOHelmet
+        title="Sign in — FitPlus"
+        description="Sign in or create your FitPlus account."
+        path="/auth"
+        noindex
+      />
       <div className="relative flex-1 flex items-center justify-center px-4 py-10 sm:py-14">
         <div
           aria-hidden="true"
